@@ -7,7 +7,7 @@ mod generator;
 use std::{collections::HashMap, error::Error, fs, path::PathBuf};
 use clap::{Parser, ValueEnum};
 use generator::{
-    casing::Casing, gen_c::GeneratorC, gen_common::{GeneratorBaseSetting, Privacy}, gen_html::GeneratorHtml, gen_sv::GeneratorSv
+    casing::Casing, gen_c::GeneratorC, gen_common::{GeneratorBaseSetting, Privacy}, gen_html::GeneratorHtml, gen_latex::GeneratorLatex, gen_mif::GeneratorMif, gen_sv::GeneratorSv, trait_doc::GeneratorDoc
 };
 use parser::parser_expr::ParamValues;
 use rifgen::SuffixInfo;
@@ -40,7 +40,7 @@ struct RifGenArgs{
     /// Output path for documentation output (HTML, latex, ...)
     #[arg(long, default_value_t = String::from("doc"))]
     output_doc: String,
-    /// Output path for documentation output (HTML, latex, ...)
+    /// Output path for hardware output (SV, VHDL)
     #[arg(long, default_value_t = String::from("rtl"))]
     output_rtl: String,
     /// Public documentation (hide all private registers/fields)
@@ -57,7 +57,24 @@ struct RifGenArgs{
 
 #[derive(ValueEnum, Debug, Clone)]
 enum RifGenTargets {
-    Sv, Vhdl, C, Html, Py, Svd, Json
+    /// SystemVerilog
+    Sv,
+    /// VHDL
+    Vhdl,
+    /// C Header
+    C,
+    /// Python Class
+    Py,
+    /// HTML documentation
+    Html,
+    /// Latex documentation
+    Latex,
+    /// Framemaker documentation
+    Mif,
+    /// SVD (System View Description)
+    Svd,
+    /// JSON
+    Json
 }
 
 /// Parse a single key-value pair
@@ -141,6 +158,21 @@ fn main() {
                                     let mut gen = GeneratorHtml::new(setting.clone());
                                     if let Err(e) = gen.gen(o) {
                                         println!(" -> HTML generation failed: {}", e)
+                                    }
+                                }
+                                RifGenTargets::Mif => {
+                                    setting.path = args.output_doc.clone();
+                                    // TODO: support customization of paragraph style
+                                    let mut gen = GeneratorMif::new(setting.clone());
+                                    if let Err(e) = gen.gen(o) {
+                                        println!(" -> Mif generation failed: {}", e)
+                                    }
+                                }
+                                RifGenTargets::Latex => {
+                                    setting.path = args.output_doc.clone();
+                                    let mut gen = GeneratorLatex::new(setting.clone());
+                                    if let Err(e) = gen.gen(o) {
+                                        println!(" -> Latex generation failed: {}", e)
                                     }
                                 }
                                 RifGenTargets::Sv => {

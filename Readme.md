@@ -27,16 +27,16 @@ The objectives when designing the language were:
 # TODO
 
 ## Generators
- - [ ] Implement base generator for documentation (from html) :
+ - [x] Implement base generator for documentation (from html) :
    - [ ] html: view with a sidebar showing the hierarchy.
    		Could be the basis for a GUI ?
-   - [ ] latex
-   - [ ] mif
+   - [x] latex
+   - [x] mif
    - [ ] json : both flat (muli file) and hierarchical
    - [ ] svd
    - [ ] IP-XACT
  - [ ] Implement base generator for software (from C) :
-   - [ ] python: single file flat (from rifgen)
+   - [ ] python: single file flat
    - [ ] python: hierarchical
  - [ ] Implement base generator for hardware (from SV):
    - [ ] VHDL
