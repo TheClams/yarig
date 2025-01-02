@@ -86,6 +86,12 @@ td.mapv {
     -webkit-transform: rotate(180deg) scaleY(1.1);
     -moz-transform:  rotate(180deg) scaleY(1.15) translateX(25%);
 }
+td.enum-name {
+    width: 1%;
+    border: 0px solid red;
+    white-space: nowrap;
+    margin-bottom: 5px;
+}
 td.rsvd{
     background-color: #EEEEEE;
 }
