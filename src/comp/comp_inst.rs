@@ -153,6 +153,7 @@ impl InstAddr {
 
 /// Group instances with a common offset under a common name prefix
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct RifmuxGroupInst {
     /// Name of the RIF instance
     pub name: String,
@@ -201,6 +202,7 @@ impl<'a> RifsInfo<'a>  {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct RifInst {
     /// Instance name
@@ -397,6 +399,7 @@ impl RifPageInst {
                 }
             }
         }
+        p.regs.sort_by_key(|r| r.addr);
         Ok(p)
     }
 
@@ -557,6 +560,7 @@ pub enum RegInstArgs {
 
 /// Register instance
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct RifRegInst {
     pub reg_type: String,
     pub reg_name: String,
@@ -577,6 +581,7 @@ pub struct RifRegInst {
     pub visibility: Visibility,
 }
 
+#[allow(dead_code)]
 impl RifRegInst {
     pub fn new(
         def: &RegDef,
@@ -620,6 +625,7 @@ impl RifRegInst {
         } else {
             def.description.to_owned()
         };
+        let intr_kind = intr_info.0.to_owned();
         let mut r = RifRegInst {
             reg_type: def.name.to_owned(),
             reg_name,
@@ -650,7 +656,7 @@ impl RifRegInst {
                         if r.array.dim()>0 && r.array.is_def() {Some(ArrayIdx::Def(i,offset))}
                         else {Some(ArrayIdx::Inst(i,offset))}
                     } else { None };
-                let fi = RifFieldInst::new(f, &mut next_lsb, &rifs.params, arr_idx);
+                let fi = RifFieldInst::new(f, intr_kind, &mut next_lsb, &rifs.params, arr_idx);
                 r.fields.push(fi);
             }
         }
@@ -675,8 +681,11 @@ impl RifRegInst {
                     } else {
                         ResetVal::Unsigned(val)
                     };
-                    if kind.is_pending() {
-                        f.sw_kind = FieldSwKind::ReadOnly;
+                    match kind {
+                        InterruptRegKind::Enable |
+                        InterruptRegKind::Mask   => f.sw_kind = FieldSwKind::ReadWrite,
+                        InterruptRegKind::Pending => f.sw_kind = FieldSwKind::ReadOnly,
+                        _ => {},
                     }
                     f.hw_kind.clear();
                 }
@@ -781,7 +790,7 @@ impl RifRegInst {
     /// Return the register type with interrupt suffix when register is a derived interrupt
     pub fn expanded_type_name(&self) -> String {
         if self.intr_info.0.is_derived() {
-            format!("{}{}{}", self.reg_type, self.intr_info.1, self.intr_info.0.get_suffix())
+            format!("{}{}", self.reg_type, self.intr_info.0.get_suffix())
         } else {
             self.reg_type.to_owned()
         }
@@ -818,6 +827,10 @@ impl RifRegInst {
             self.group_name.to_owned()
         }
     }
+
+    pub fn get_desc_short(&self) -> &str {
+        self.description.get_short()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -841,6 +854,7 @@ impl RifFieldInst {
 
     pub fn new(
         field: &Field,
+        intr_kind: InterruptRegKind,
         next_lsb: &mut u8,
         params: &ParamValues,
         array: Option<ArrayIdx>,
@@ -875,7 +889,17 @@ impl RifFieldInst {
             desc = field.description.interpolate(i);
         } else {
             idx = ArrayIdx::Def(0,0);
-            desc = field.description.to_owned();
+            desc = if let Some(intr_desc) = &field.intr_desc {
+                let desc_ = match intr_kind {
+                    InterruptRegKind::Enable  => &intr_desc.enable,
+                    InterruptRegKind::Mask    => &intr_desc.mask,
+                    InterruptRegKind::Pending => &intr_desc.pending,
+                    _ => &field.description
+                };
+                if desc_.is_empty() {&field.description} else {desc_}
+            } else {
+                &field.description
+            }.to_owned();
         }
         if let ResetVal::Param(p) = reset {
             let v = params.get(&p).expect("Undefined parameter in reset value");
@@ -1163,7 +1187,7 @@ impl Comp {
         match self {
             Comp::Rifmux(r)   => &r.type_name,
             Comp::Rif(r)      => &r.type_name,
-            Comp::External(_) => "",
+            Comp::External(_) => "Memory",
         }
     }
 

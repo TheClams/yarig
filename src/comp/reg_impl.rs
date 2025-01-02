@@ -177,7 +177,7 @@ pub fn get_attr_name<'a>(hw_kind: &'a FieldHwKind, regname: &str) -> (Option<&'a
     }
 }
 
-///
+/// Register port direction
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum RegPortKind {
     /// Input port only (i.e. driven by hardware)

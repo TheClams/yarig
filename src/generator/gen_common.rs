@@ -1,8 +1,10 @@
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
-use crate::{comp::comp_inst::{Comp, RifInst, RifmuxInst}, rifgen::SuffixInfo};
+use crate::{comp::comp_inst::{Comp, RifFieldInst, RifInst, RifRegInst, RifmuxInst}, rifgen::SuffixInfo};
 
-use super::casing::Casing;
+use super::casing::{Casing, ToCasing};
+
+pub type InstDict = HashMap<String,Vec<u16>>;
 
 pub struct RifList<'a>(Vec<&'a RifInst>);
 
@@ -52,6 +54,7 @@ impl Privacy {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct GeneratorBaseSetting {
     /// Output directory path
@@ -71,46 +74,67 @@ pub struct GeneratorBaseSetting {
 }
 
 #[derive(Clone, Debug)]
-pub struct GeneratorBase {
+pub struct GeneratorCore {
     /// Basic settings
     pub setting: GeneratorBaseSetting,
     /// Main text buffer
     pub txt: String,
     /// Secondary buffer
-    pub stash: String,
+    pub stash: [String; 2],
 }
 
 #[allow(dead_code)]
-impl GeneratorBase {
+impl GeneratorCore {
 
     pub fn new(setting: GeneratorBaseSetting) -> Self {
-        GeneratorBase {
+        GeneratorCore {
             setting,
             txt: String::with_capacity(10000),
-            stash: String::with_capacity(1000)
+            stash: [String::with_capacity(1000), String::with_capacity(1000)],
         }
     }
 
-    fn write(&mut self, string: &str) {
+    pub fn write(&mut self, string: &str) {
         self.txt.push_str(string);
     }
 
-    fn push_stash(&mut self, string: &str) {
-        self.stash.push_str(string);
+    pub fn push_stash(&mut self, idx: usize, string: &str) {
+        self.stash[idx].push_str(string);
     }
 
-    fn pop_stash(&mut self) {
-        self.txt.push_str(&self.stash);
-        self.stash.clear();
+    pub fn pop_stash(&mut self, idx: usize) {
+        self.txt.push_str(&self.stash[idx]);
+        self.stash[idx].clear();
     }
 
-    fn save(&self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn stash_is_empty(&self, idx: usize) -> bool {
+        self.stash[idx].is_empty()
+    }
+
+    pub fn save(&mut self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
         let path : PathBuf = [
             self.setting.path.clone(),
             filename.into()
         ].iter().collect();
         std::fs::write(path, self.txt.as_bytes())?;
+        self.txt.clear();
+        self.stash[0].clear();
+        self.stash[1].clear();
         Ok(())
     }
+
+
+    pub fn get_field_name(&self, r: &RifRegInst, f: &RifFieldInst) -> String {
+        // println!("[get_field_name] {}.{} : rsvd={}, field array = {:?}, reg array={:?}",
+        //     r.reg_name, f.name, f.is_reserved(), f.array, r.array);
+        if f.is_reserved() && self.setting.privacy.is_public() {
+            format!("rsvd{}",f.lsb)
+        } else if f.array.dim() > 1 || r.array.dim()==0 || r.array.is_inst() {
+            f.name_flat().to_casing(self.setting.casing)
+        } else {
+            f.name.to_casing(self.setting.casing)
+        }
+    }
+
 
 }

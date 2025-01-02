@@ -177,7 +177,7 @@ pub struct RifmuxGroup {
 }
 
 pub type RifmuxGroupTuple<'a> = (&'a str, AddressKind, AddressOffset, Option<&'a str>);
-impl<'a> From<RifmuxGroupTuple<'a>> for RifmuxGroup {
+impl From<RifmuxGroupTuple<'_>> for RifmuxGroup {
     fn from(info: RifmuxGroupTuple) -> RifmuxGroup {
         RifmuxGroup {
             name: info.0.to_owned(),

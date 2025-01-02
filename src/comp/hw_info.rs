@@ -3,6 +3,7 @@ use crate::{generator::casing::{Casing, ToCasing}, rifgen::{ClkEn, Interface, Ri
 use super::{comp_inst::RifPageInst, reg_impl::{HwRegs, RegImplDict}};
 
 
+#[allow(dead_code)]
 pub struct SignalInfo {
     pub name: String,
     pub width: u8,

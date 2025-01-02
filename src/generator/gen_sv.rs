@@ -1537,6 +1537,9 @@ impl GeneratorSv {
             self.write(prefix);
         }
         self.write(&port.name.to_casing(Snake));
+        if port.dim > 0 {
+            self.write(&format!("[{}]", port.dim));
+        }
         // Write separator
         self.write(if is_last {" "} else {","});
         // Write comment if any
@@ -1574,7 +1577,7 @@ impl GeneratorSv {
             (Some(f),None) if !f.is_empty() => format!("{group_name}.{f}"),
             (Some(r),Some(f)) if r == group_type || r == "this" || r == "self" => format!("{group_name}.{f}"),
             // Format ".name" : input port
-            (Some(r),Some(n)) if r.is_empty() =>n.to_owned(),
+            (Some(""),Some(n)) =>n.to_owned(),
             // Esternal field
             (Some(r),Some(f)) => format!("{r}.{f}"),
             // No name provided: use default naming
@@ -1821,7 +1824,7 @@ impl GeneratorSv {
         self.save(&format!("{}.sv", rifmux.type_name))
     }
 
-    pub fn add_mux_if(&mut self, comps: &Vec<CompInst>, name: &str, len: usize, err_val: &str) {
+    pub fn add_mux_if(&mut self, comps: &[CompInst], name: &str, len: usize, err_val: &str) {
         let suffix = if name.ends_with("_next") {"_next"} else {""};
         self.write(&format!("   assign if_rif.{name} = addr_invalid{suffix} ? {err_val} :\n"));
         let pad = "";

@@ -298,6 +298,21 @@ impl FieldSwKind {
     pub fn is_wo(&self) -> bool {
         matches!(self, FieldSwKind::WriteOnly | FieldSwKind::W1Pulse(_,true) | FieldSwKind::Password(_))
     }
+
+    pub fn access_str(&self) -> &str {
+        match self {
+            FieldSwKind::ReadWrite   => "RW",
+            FieldSwKind::ReadOnly    => "RO",
+            FieldSwKind::WriteOnly   => "WO",
+            FieldSwKind::ReadClr     => "RCLR",
+            FieldSwKind::W1Clr       => "W1CLR",
+            FieldSwKind::W0Clr       => "W0CLR",
+            FieldSwKind::W1Set       => "W1SET",
+            FieldSwKind::W1Tgl       => "W1TGL",
+            FieldSwKind::W1Pulse(_,_) => "Pulse",
+            FieldSwKind::Password(_) => "WO",
+        }
+    }
 }
 
 

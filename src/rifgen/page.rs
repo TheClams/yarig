@@ -64,7 +64,7 @@ impl RifPage {
                 RegDefOrIncl::Def(d) => {
                     if d.name == name {
                         let kind = if d.interrupt.is_empty() {InterruptRegKind::None} else {InterruptRegKind::Base};
-                        return Some((&d,kind,0));
+                        return Some((d,kind,0));
                     }
                     // Check interrupt register
                     else if !d.interrupt.is_empty() && name.starts_with(&d.name) {
@@ -73,15 +73,15 @@ impl RifPage {
                             let intr_name = if info.name.is_empty() {"".to_owned()} else {format!("_{}",info.name)};
                             // Check if enable interrupt is enabled
                             if info.enable.is_some() && name_suffix == format!("{}_en",intr_name) {
-                                return Some((&d,InterruptRegKind::Enable,idx));
+                                return Some((d,InterruptRegKind::Enable,idx));
                             }
                             // Check if mask interrupt is enabled
                             if info.mask.is_some() && name_suffix == format!("{}_mask",intr_name) {
-                                return Some((&d,InterruptRegKind::Mask,idx));
+                                return Some((d,InterruptRegKind::Mask,idx));
                             }
                             // Check if mask interrupt is enabled
                             if info.pending && name_suffix == format!("{}_pending",intr_name) {
-                                return Some((&d,InterruptRegKind::Pending,idx));
+                                return Some((d,InterruptRegKind::Pending,idx));
                             }
                         }
                     }
@@ -200,7 +200,7 @@ pub struct RegInst {
     pub reg_override : RegOverrideDict,
 }
 
-impl<'a> From<RegInstTuple<'a>> for RegInst {
+impl From<RegInstTuple<'_>> for RegInst {
     fn from(info:RegInstTuple) -> RegInst {
         let addr_info = info.4.unwrap_or((AddressKind::RelativeSet,0));
         let default_group = if info.2.is_some() {info.0} else {""};
@@ -276,23 +276,17 @@ impl RegInst {
 
     pub fn set_reset(&mut self, idx: &OverrideIndex, v: ResetVal) {
         let reg = self.reg_override.entry(idx.0).or_default();
-        match &idx.1 {
-            Some(name) => {
-                let field = Self::get_field_ovr(reg, name, idx.2);
-                field.reset = ResetValOverride::Reset(v);
-            },
-            None => {},
+        if let Some(name) = &idx.1 {
+            let field = Self::get_field_ovr(reg, name, idx.2);
+            field.reset = ResetValOverride::Reset(v);
         }
     }
 
     pub fn set_limit(&mut self, idx: &OverrideIndex, limit: Limit) {
         let reg = self.reg_override.entry(idx.0).or_default();
-        match &idx.1 {
-            Some(name) => {
-                let field = Self::get_field_ovr(reg, name, idx.2);
-                field.limit = Some(limit);
-            },
-            None => {},
+        if let Some(name) = &idx.1 {
+            let field = Self::get_field_ovr(reg, name, idx.2);
+            field.limit = Some(limit);
         }
     }
 

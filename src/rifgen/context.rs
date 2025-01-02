@@ -37,12 +37,16 @@ pub enum Context {
     Generics,
     /// Page properties started by an item name `- page_name : "description"`
     Page,
-    ///
+    /// Register definition section
     Registers,
+    /// Register declaration
     RegDecl,
+    /// Field declaration
     Field,
+    /// Enum definition
     Enum,
-    Instances, RegInst,
+    Instances,
+    RegInst,
     Info,
     AddrWidth,
     DataWidth,
@@ -68,7 +72,9 @@ pub enum Context {
     /// Generic item : format is `- identifier`
     Item(String),
     PathStart(String),
+    /// Register index used to override register array instances default properties
     RegIndex(u16),
+    /// Field index used to override field array instance default properties
     FieldIndex((String,u16)),
 }
 
