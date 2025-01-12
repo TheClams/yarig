@@ -329,17 +329,17 @@ impl GeneratorC {
         };
         // println!("Groups of {} = {:#?}", rifmux.inst_name, rifmux.groups);
         for comp in rifmux.components.iter() {
-            let mut base_addr_name = self.base_addr_name.clone();
-            if !comp.group.is_empty() && prefix.is_empty() {
-                base_addr_name.push('_');
-                base_addr_name.push_str(&comp.group);
-            }
             match &comp.inst {
                 Comp::Rifmux(r) => {
                     let comp_name = format!("{prefix}{}",r.inst_name.to_casing(Casing::Pascal));
                     self.add_ptr_rifmux(r, &comp_name, offset + comp.addr)
                 }
                 Comp::Rif(r) => {
+                    let mut base_addr_name = self.base_addr_name.clone();
+                    if !comp.group.is_empty() && prefix.is_empty() {
+                        base_addr_name.push('_');
+                        base_addr_name.push_str(&comp.group);
+                    }
                     let rif_inst_name = remove_rif(&r.inst_name).replace('_', "");
                     for page in r.pages.iter() {
                         let mut page_name = format!("{prefix}{rif_inst_name}");

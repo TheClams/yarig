@@ -6,6 +6,7 @@ pub mod gen_html;
 pub mod gen_latex;
 pub mod gen_mif;
 // Software generators
+pub mod trait_sw;
 pub mod gen_c;
 // Hardware Generators
 pub mod gen_sv;

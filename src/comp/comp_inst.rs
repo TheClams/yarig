@@ -552,6 +552,12 @@ impl std::fmt::Display for ArrayIdx {
     }
 }
 
+impl Default for ArrayIdx {
+    fn default() -> Self {
+        ArrayIdx::Def(0,0)
+    }
+}
+
 pub enum RegInstArgs {
     Intr(InterruptRegKind,usize,bool),
     Arr(ArrayIdx),
@@ -926,6 +932,22 @@ impl RifFieldInst {
             lsb,
             width,
             array: idx,
+        }
+    }
+
+    pub fn new_rsvd(lsb: u8, width: u8) -> Self {
+        RifFieldInst {
+            name: format!("rsvd{lsb}"), lsb, width,
+            base_description: "Reserved".into(),
+            description: "Reserved".into(),
+            reset: ResetVal::Unsigned(0),
+            sw_kind: FieldSwKind::ReadOnly,
+            hw_kind: Vec::new(),
+            visibility: Visibility::Reserved,
+            enum_kind: EnumKind::None,
+            partial: (None, 0),
+            array: ArrayIdx::default(),
+            limit: Limit::default(),
         }
     }
 

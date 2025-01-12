@@ -7,6 +7,9 @@ This allows to have one common source to describes registers for all the differe
  - Software: for interacting with the register such a C header, UVM RAL, python classes, ...
  - Documentation: for readable description (HTML/Latex/...)
 
+More details on targets are available in [hardware targets](doc/package.md)
+and [other targets](doc/targets.md).
+
 ## Description Language
 YARIG uses its own file format named `.rif` to describe the registers.
 
@@ -16,11 +19,38 @@ The objectives when designing the language were:
  - Offers fine control on the generated hardware
  - Allow re-use and hierarchical description
 
+Complete details are available in the [syntax page](doc/syntax.md)
+
 ### Syntax example
 
+Here is a simple RIF definition:
+```
+rif: test_rif
+  addrWidth: 8
+  dataWidth: 16
+  - Main:
+    registers:
+      - ctrl: "Basic control register"
+        - en      = 0    0:0        "Block enable"
+        - start   = 0    0:0  pulse "Start block"
+        - version = 0x12 15:8 ro    "Block version"
+          hw na
+      - interrupt: "Interrupt register"
+        interrupt rising en=0x13 mask=0x37 pending w1clr
+        enable.description "Enable interrupt"
+        mask.description "Mask interrupt"
+        pending.description "Pending interrupt"
+        - gen   = 0 7:0 rw "Generic Events"
+        - busy  = 0 8:8 "Busy"
+        - ready = 0 9:9 "Ready"
+      - status: "Status register"
+        - state  3:0 "Current state"
+        - success 4:4 "Last operation succeed"
+        - failed  5:5 "Last operation failed"
+    instances: auto
+```
 
----
-# Syntax
+Highlighting for SublimeText is available on [github](https://github.com/TheClams/rif).
 
 
 ---
@@ -29,15 +59,13 @@ The objectives when designing the language were:
 ## Generators
  - [x] Implement base generator for documentation (from html) :
    - [ ] html: view with a sidebar showing the hierarchy.
-   		Could be the basis for a GUI ?
    - [x] latex
    - [x] mif
-   - [ ] json : both flat (muli file) and hierarchical
+ - [ ] Implement base generator for software (from C) :
+   - [ ] json : both flat (multi file) and hierarchical
    - [ ] svd
    - [ ] IP-XACT
- - [ ] Implement base generator for software (from C) :
-   - [ ] python: single file flat
-   - [ ] python: hierarchical
+   - [ ] python
  - [ ] Implement base generator for hardware (from SV):
    - [ ] VHDL
 
