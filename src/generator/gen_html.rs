@@ -14,7 +14,7 @@ pub struct GeneratorHtml {
 
 #[allow(dead_code)]
 impl GeneratorHtml {
-    const DEFAULT_CSS : &str = include_str!("resources/style.css");
+    const DEFAULT_CSS : &'static str = include_str!("resources/style.css");
 
     pub fn new(setting: GeneratorBaseSetting) -> Self {
         GeneratorHtml {
