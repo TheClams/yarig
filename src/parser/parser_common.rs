@@ -28,7 +28,7 @@ pub fn identifier<'a>(input: &mut &'a str) -> Res<'a, &'a str> {
         alt((alpha1, "_")),
         repeat::<_, _, Vec<&str>, _, _>(0.., alt((alphanumeric1, "_"))),
     )
-        .recognize()
+        .take()
         .parse_next(input)
 }
 
@@ -47,14 +47,14 @@ pub fn scoped_identifier<'a>(input: &mut &'a str) -> Res<'a,(Option<&'a str>,&'a
 // check : https://stackoverflow.com/questions/74159691/parse-eof-or-a-character-in-winnow
 pub fn signal_name<'a>(input: &mut &'a str) -> Res<'a, &'a str> {
     alt((
-        preceded(".", identifier).recognize(),
-        (identifier, opt(preceded(".", identifier))).recognize()
+        preceded(".", identifier).take(),
+        (identifier, opt(preceded(".", identifier))).take()
     )).parse_next(input)
 }
 
 pub fn path_name<'a>(input: &mut &'a str) -> Res<'a, &'a str> {
     (identifier, repeat::<_, _, (), _, _>(0..,preceded(".", identifier)))
-        .recognize()
+        .take()
         .parse_next(input)
 }
 
@@ -65,7 +65,7 @@ pub fn signal_name_last(input: &str) -> ResF<&str> {
 
 pub fn logic_expr<'a>(input: &mut &'a str) -> Res<'a, &'a str> {
     (ws("("), take_until_unbalanced('(', ')'), ws(")"))
-        .recognize()
+        .take()
         .parse_next(input)
 }
 
@@ -150,7 +150,7 @@ pub fn quoted_string<'a>(input: &mut &'a str) -> Res<'a, &'a str> {
 }
 
 pub fn unquoted_string<'a>(input: &mut &'a str) -> Res<'a, &'a str> {
-    ws( repeat_till::<_, _, Vec<char>, _, _, _, _>(0..,any,eof).recognize()).parse_next(input)
+    ws( repeat_till::<_, _, Vec<char>, _, _, _, _>(0..,any,eof).take()).parse_next(input)
     // ws(take_until(0..,'\n')).parse_next(input)
 }
 
@@ -162,7 +162,7 @@ pub fn desc(input: &str) -> ResF<&str> {
 /// parse a comment starting by // or # or just spaces
 pub fn comment(input: &str) -> ResF<()> {
     alt((
-       (alt((ws("//"), ws("#"))), repeat_till::<_, _, Vec<char>, _, _, _, _>(0..,any,eof)).recognize(),
+       (alt((ws("//"), ws("#"))), repeat_till::<_, _, Vec<char>, _, _, _, _>(0..,any,eof)).take(),
         space0,
     ))
     .value(())
@@ -273,7 +273,7 @@ pub fn val_i128<'a>(input: &mut &'a str) -> Res<'a, i128> {
         preceded((digit0, "'h"), hex_digit1).try_map(|v| i128::from_str_radix(v, 16)),
         preceded("0x", hex_digit1).try_map(|v| i128::from_str_radix(v, 16)),
         (opt(alt(("+", "-"))), digit1)
-            .recognize()
+            .take()
             .try_map(|v| i128::from_str_radix(v, 10)),
     ))
     .parse_next(input)
@@ -288,7 +288,7 @@ pub fn val_isize<'a>(input: &mut &'a str) -> Res<'a, isize> {
         preceded((digit0, "'h"), hex_digit1).try_map(|v| isize::from_str_radix(v, 16)),
         preceded("0x", hex_digit1).try_map(|v| isize::from_str_radix(v, 16)),
         (opt(alt(("+", "-"))), digit1)
-            .recognize()
+            .take()
             .try_map(|v| isize::from_str_radix(v, 10)),
     ))
     .parse_next(input)

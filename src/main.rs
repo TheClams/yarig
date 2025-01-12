@@ -1,18 +1,21 @@
-mod error;
-mod parser;
-mod rifgen;
-mod comp;
-mod generator;
 
 use std::{collections::HashMap, error::Error, fs, path::PathBuf};
 use clap::{Parser, ValueEnum};
-use generator::{
-    casing::Casing, gen_c::GeneratorC, gen_common::{GeneratorBaseSetting, Privacy}, gen_html::GeneratorHtml, gen_latex::GeneratorLatex, gen_mif::GeneratorMif, gen_sv::GeneratorSv, trait_doc::GeneratorDoc
+use yarig::{
+    generator::{
+        trait_doc::GeneratorDoc,
+        casing::Casing,
+        gen_c::GeneratorC,
+        gen_common::{GeneratorBaseSetting, Privacy},
+        gen_html::GeneratorHtml,
+        gen_latex::GeneratorLatex,
+        gen_mif::GeneratorMif,
+        gen_sv::GeneratorSv,
+    },
+    parser::{RifGenSrc, parser_expr::ParamValues},
+    rifgen::SuffixInfo,
+    comp::comp_inst::Comp,
 };
-use parser::parser_expr::ParamValues;
-use rifgen::SuffixInfo;
-
-use comp::comp_inst::Comp;
 
 // use crate::comp::comp_inst::RifmuxMap;
 
@@ -135,7 +138,7 @@ fn main() {
     let mut fail_cnt = 0;
     for f in &filelist {
         println!("Parsing of {:?}", f.as_path());
-        let p = parser::RifGenSrc::from_file(f);
+        let p = RifGenSrc::from_file(f);
         match p {
             Ok(rif_src) => {
                 println!(" -> Parsing Successful");

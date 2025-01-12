@@ -139,7 +139,7 @@ pub fn field_sw_kind<'a>(input: &mut &'a str) -> Res<'a, FieldSwKind> {
 pub fn enum_kind<'a>(input: &mut &'a str) -> Res<'a, &'a str> {
     opt((ws(identifier),
         opt(preceded("::",identifier))
-    )).recognize()
+    )).take()
     .parse_next(input)
 }
 
