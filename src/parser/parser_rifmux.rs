@@ -1,5 +1,5 @@
 use winnow::{
-  combinator::{alt, delimited, opt, preceded, terminated}, error::ErrorKind, Parser
+  combinator::{alt, delimited, opt, preceded, terminated}, error::{ErrorKind, StrContext}, Parser
 };
 
 use crate::rifgen::{AddressKind, AddressOffset, Context, RifmuxItem, RifType, RifmuxGroup, SuffixInfo};
@@ -24,21 +24,24 @@ pub fn rifmux_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
       ws("top"        ).value(Context::RifmuxTop  ),
     )),
     ws(":")
-  ).parse_next(input)
+  ).context(StrContext::Label("rifmux property"))
+  .parse_next(input)
 }
 
 pub fn rifmux_map<'a>(input: &mut &'a str) -> Res<'a, Context> {
   alt((
     (ws("group"),opt(":")).value(Context::RifmuxGroup),
     ws("-").value(Context::Item("".to_owned()))
-  )).parse_next(input)
+  )).context(StrContext::Label("rifmux element"))
+  .parse_next(input)
 }
 
 pub fn address_offset<'a>(input: &mut &'a str) -> Res<'a, AddressOffset> {
     alt((
       val_u64.try_map(|v| -> Result<AddressOffset, ErrorKind> {Ok( AddressOffset::Value(v))}),
       ws(param).try_map(|v| -> Result<AddressOffset, ErrorKind> {Ok(AddressOffset::Param(v.to_owned()))}),
-    )).parse_next(input)
+    )).context(StrContext::Label("address offset"))
+    .parse_next(input)
 }
 
 // - <rif_name> = <rif_type> @ <regAddr> "description"
@@ -59,7 +62,8 @@ pub fn rif_inst<'a>(input: &'a str, group: &'a str) -> ResF<'a, RifmuxItem> {
         address_offset
     )),
     opt(quoted_string)
-  ).parse(input).map(|v| RifmuxItem::new(v, group))
+  ).context(StrContext::Label("rif instance"))
+  .parse(input).map(|v| RifmuxItem::new(v, group))
 }
 
 pub fn rif_inst_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
@@ -71,7 +75,8 @@ pub fn rif_inst_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
       ws("suffix"     ).value(Context::Suffix     ),
     )),
     ws(":")
-  ).parse_next(input)
+  ).context(StrContext::Label("rifinstance property"))
+  .parse_next(input)
 }
 
 pub fn suffix_info_l<'a>(input: &mut &'a str) -> Res<'a, SuffixInfo> {
@@ -86,7 +91,8 @@ pub fn suffix_info_l<'a>(input: &mut &'a str) -> Res<'a, SuffixInfo> {
         )),
       ')')
     )
-  ).parse_next(input)
+  ).context(StrContext::Label("suffix definition"))
+  .parse_next(input)
   .map(|v|
     SuffixInfo::new(
       v.0.to_owned(),
@@ -116,7 +122,8 @@ pub fn rifmux_group(input: &str) -> ResF<RifmuxGroup> {
     )),
     address_offset,
     opt(quoted_string)
-  ).parse(input)
+  ).context(StrContext::Label("rifmux group definition"))
+  .parse(input)
   .map(|v| v.into())
 }
 

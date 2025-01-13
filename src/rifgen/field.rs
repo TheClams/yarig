@@ -748,12 +748,7 @@ impl Field {
                 _ => false,
             };
             if !ok {
-                return
-                    Err(RifError {
-                        kind: crate::error::RifErrorKind::FieldKind,
-                        line_num: 0, // TODO
-                        txt: format!("{:?} and {:?}", self.hw_kind, kind),
-                    });
+                return Err(RifError::field_kind(&kind, &self.hw_kind));
             }
         }
         self.hw_kind.push(kind);
@@ -766,11 +761,7 @@ impl Field {
             FieldSwKind::W1Pulse(_,_) => {
                 self.hw_acc = Access::RO;
                 if !self.hw_kind.is_empty() {
-                    return Err(RifError {
-                        kind: crate::error::RifErrorKind::FieldKind,
-                        line_num: 0, // TODO
-                        txt: format!("{:?} and {:?}", self.hw_kind, kind),
-                    });
+                    return Err(RifError::field_kind(&kind, &self.hw_kind));
                 }
             }
             // Reset value for password field is 1 since it corresponds to the locked signal

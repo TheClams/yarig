@@ -3,9 +3,7 @@ use crate::rifgen::{
 };
 
 use winnow::{
-    ascii::{space0, Caseless},
-    combinator::{alt, delimited, opt, permutation, preceded, terminated},
-    Parser
+    ascii::{space0, Caseless}, combinator::{alt, delimited, opt, permutation, preceded, terminated}, error::StrContext, Parser
 };
 
 use super::{identifier, scoped_identifier, item_start, quoted_string, reset_val, val_u8_or_param, ws, Res, ResF};
@@ -32,7 +30,8 @@ pub fn reg_incl_or_decl<'a>(input: &mut &'a str) -> Res<'a, Context> {
     alt((
         preceded(opt("-"), ws("include")).value(Context::Include),
         ws("-").value(Context::Registers),
-    )).parse_next(input)
+    )).context(StrContext::Label("register declaration"))
+    .parse_next(input)
 }
 
 pub fn reg_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
@@ -62,6 +61,7 @@ pub fn reg_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
         )),
         opt(alt((ws(":"), ws("="), space0))),
     )
+    .context(StrContext::Label("register property"))
     .parse_next(input)
 }
 
@@ -77,6 +77,7 @@ pub fn intr_desc<'a>(input: &mut &'a str) -> Res<'a, Context> {
         )),
         opt(alt((ws(":"), ws("="), space0))),
     )
+    .context(StrContext::Label("interrupt description"))
     .parse_next(input)
 }
 
@@ -95,7 +96,9 @@ pub fn reg_interrupt_trigger<'a>(input: &mut &'a str) -> Res<'a, InterruptTrigge
         ws("rising").value(InterruptTrigger::Rising),
         ws("falling").value(InterruptTrigger::Falling),
         ws("edge").value(InterruptTrigger::Edge),
-    )).parse_next(input)
+    ))
+    .context(StrContext::Label("register interrupt trigger"))
+    .parse_next(input)
 }
 
 pub fn reg_interrupt_clr<'a>(input: &mut &'a str) -> Res<'a, InterruptClr> {
@@ -106,16 +109,21 @@ pub fn reg_interrupt_clr<'a>(input: &mut &'a str) -> Res<'a, InterruptClr> {
         ws("w0clr").value(InterruptClr::Write0),
         ws("hwclr").value(InterruptClr::Hw),
         ws("hwclr").value(InterruptClr::Read),
-    )).parse_next(input)
+    ))
+    .context(StrContext::Label("register interrupt clear"))
+    .parse_next(input)
 }
 
 pub fn reg_interrupt_en<'a>(input: &mut &'a str) -> Res<'a, ResetVal> {
-    alt(("enable", "en")).parse_next(input)?;
-    preceded("=", reset_val).parse_next(input).or_else(|_| Ok(ResetVal::Unsigned(0)))
+    alt(("enable", "en"))
+        .context(StrContext::Label("register interrupt enable"))
+        .parse_next(input)?;
+    preceded("=", reset_val)
+        .parse_next(input).or_else(|_| Ok(ResetVal::Unsigned(0)))
 }
 
 pub fn reg_interrupt_mask<'a>(input: &mut &'a str) -> Res<'a, ResetVal> {
-    "mask".parse_next(input)?;
+    "mask".context(StrContext::Label("register interrupt mask")).parse_next(input)?;
     preceded("=", reset_val).parse_next(input).or_else(|_| Ok(ResetVal::Unsigned(0)))
 }
 
@@ -126,7 +134,9 @@ pub fn reg_interrupt_perm<'a>(input: &mut &'a str) -> Res<'a, InterruptPropTuple
         opt(ws(reg_interrupt_en)),
         opt(ws(reg_interrupt_mask)),
         opt(ws("pending").value(true)),
-    )).parse_next(input)
+    ))
+    .context(StrContext::Label("register interrupt property"))
+    .parse_next(input)
 }
 
 pub fn reg_interrupt<'a>(input: &mut &'a str, name: &str ) -> Res<'a, InterruptInfo> {
@@ -170,6 +180,7 @@ pub fn reg_pulse_info<'a>(input: &mut &'a str, reg_clk: &str, init: bool) -> Res
         ws("comb").value(false),
         space0.value(init),
     ))
+    .context(StrContext::Label("register pulse (reg/comb)"))
     .parse_next(input)?;
     if let Some(name) = opt(identifier).parse_next(input)? {
         Ok(name.to_owned())

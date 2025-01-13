@@ -1,8 +1,11 @@
 use crate::rifgen::{Context, Width};
 
 use winnow::{
-    ascii::{alpha1, alphanumeric1, digit0, digit1, hex_digit1, multispace0, space0, Caseless}, combinator::{alt, delimited, eof, opt, preceded, repeat, repeat_till, separated_pair, terminated}, error::{self, ContextError, ErrMode, ErrorKind, ParseError},
-    stream::{AsChar, Stream, StreamIsPartial}, token::{any, take_until}, PResult, Parser
+    ascii::{alpha1, alphanumeric1, digit0, digit1, hex_digit1, multispace0, space0, Caseless},
+    combinator::{alt, delimited, eof, opt, preceded, repeat, repeat_till, separated_pair, terminated},
+    error::{self, ContextError, ErrMode, ErrorKind, ParseError, StrContext},
+    stream::{AsChar, Stream, StreamIsPartial},
+    token::{any, take_until}, PResult, Parser
 };
 
 //--------------------------------
@@ -29,6 +32,7 @@ pub fn identifier<'a>(input: &mut &'a str) -> Res<'a, &'a str> {
         repeat::<_, _, Vec<&str>, _, _>(0.., alt((alphanumeric1, "_"))),
     )
         .take()
+        .context(StrContext::Label("identifier"))
         .parse_next(input)
 }
 
@@ -40,7 +44,7 @@ pub fn scoped_identifier<'a>(input: &mut &'a str) -> Res<'a,(Option<&'a str>,&'a
     (
         opt(terminated(identifier,"::")),
         identifier
-    ).parse_next(input)
+    ).context(StrContext::Label("scoped identifier")).parse_next(input)
 }
 
 // TODO: find a way to ensure the identifier is not followed by a non space character
@@ -49,12 +53,13 @@ pub fn signal_name<'a>(input: &mut &'a str) -> Res<'a, &'a str> {
     alt((
         preceded(".", identifier).take(),
         (identifier, opt(preceded(".", identifier))).take()
-    )).parse_next(input)
+    )).context(StrContext::Label("signal name")).parse_next(input)
 }
 
 pub fn path_name<'a>(input: &mut &'a str) -> Res<'a, &'a str> {
     (identifier, repeat::<_, _, (), _, _>(0..,preceded(".", identifier)))
         .take()
+        .context(StrContext::Label("path name"))
         .parse_next(input)
 }
 
@@ -66,6 +71,7 @@ pub fn signal_name_last(input: &str) -> ResF<&str> {
 pub fn logic_expr<'a>(input: &mut &'a str) -> Res<'a, &'a str> {
     (ws("("), take_until_unbalanced('(', ')'), ws(")"))
         .take()
+        .context(StrContext::Label("logic expression"))
         .parse_next(input)
 }
 
@@ -135,6 +141,7 @@ pub fn parse_bool<'a>(input: &mut &'a str) -> Res<'a, bool> {
         ws("1").value(true),
         ws("0").value(false),
     ))
+    .context(StrContext::Label("boolean"))
     .parse_next(input)
 }
 
@@ -146,16 +153,20 @@ pub fn bool_or_default(input: &str, def: bool) -> ResF<bool> {
 }
 
 pub fn quoted_string<'a>(input: &mut &'a str) -> Res<'a, &'a str> {
-    delimited(ws('\"'), take_until(0..,'"'), ws('"')).parse_next(input)
+    delimited(ws('\"'), take_until(0..,'"'), ws('"'))
+        .context(StrContext::Label("quoted string"))
+        .parse_next(input)
 }
 
 pub fn unquoted_string<'a>(input: &mut &'a str) -> Res<'a, &'a str> {
-    ws( repeat_till::<_, _, Vec<char>, _, _, _, _>(0..,any,eof).take()).parse_next(input)
-    // ws(take_until(0..,'\n')).parse_next(input)
+    ws( repeat_till::<_, _, Vec<char>, _, _, _, _>(0..,any,eof).take())
+        .context(StrContext::Label("unquoted string"))
+        .parse_next(input)
 }
 
 pub fn desc(input: &str) -> ResF<&str> {
     alt((quoted_string, unquoted_string))
+        .context(StrContext::Label("description"))
         .parse(input)
 }
 
@@ -170,7 +181,9 @@ pub fn comment(input: &str) -> ResF<()> {
 }
 
 pub fn item<'a>(input: &mut &'a str) -> Res<'a, &'a str> {
-    preceded("-", terminated(ws(identifier), opt(ws(":")))).parse_next(input)
+    preceded("-", terminated(ws(identifier), opt(ws(":"))))
+        .context(StrContext::Label("item"))
+        .parse_next(input)
 }
 
 pub fn vec_id(input: &str) -> ResF<Vec<&str>> {
@@ -184,6 +197,7 @@ pub fn item_cntxt<'a>(input: &mut &'a str) -> Res<'a, Context> {
 pub fn item_start<'a>(input: &mut &'a str) -> Res<'a, Context> {
     ws("-")
         .value(Context::Item("".to_owned()))
+        .context(StrContext::Label("item start (-)"))
         .parse_next(input)
 }
 
@@ -192,6 +206,7 @@ pub fn key_val(input: &str) -> ResF<(&str, &str)> {
         "-",
         separated_pair(ws(identifier), opt(alt(("=", ":"))), unquoted_string),
     )
+    .context(StrContext::Label("key/value pair"))
     .parse(input)
 }
 
@@ -200,6 +215,7 @@ pub fn path_val(input: &str) -> ResF<(&str, &str)> {
         "-",
         separated_pair(ws(path_name), opt(alt(("=", ":"))), unquoted_string),
     )
+    .context(StrContext::Label("path value"))
     .parse(input)
 }
 
@@ -213,6 +229,7 @@ pub fn val_u8<'a>(input: &mut &'a str) -> Res<'a, u8> {
         preceded("0x", hex_digit1).try_map(|v| u8::from_str_radix(v, 16)),
         digit1.try_map(str::parse),
     ))
+    .context(StrContext::Label("unsigned 8b"))
     .parse_next(input)
 }
 
@@ -226,6 +243,7 @@ pub fn val_u16<'a>(input: &mut &'a str) -> Res<'a, u16> {
         preceded("0x", hex_digit1).try_map(|v| u16::from_str_radix(v, 16)),
         digit1.try_map(str::parse),
     ))
+    .context(StrContext::Label("unsigned 16b"))
     .parse_next(input)
 }
 
@@ -240,6 +258,7 @@ pub fn val_u8_or_param<'a>(input: &mut &'a str) -> Res<'a, Width> {
         val_u8.try_map(|v| -> Result<Width, ErrorKind> { Ok(Width::Value(v)) }),
         param.try_map(|v| -> Result<Width, ErrorKind> { Ok(Width::Param(v.to_owned())) }),
     ))
+    .context(StrContext::Label("unsigned 8b or parameter"))
     .parse_next(input)
 }
 
@@ -248,6 +267,7 @@ pub fn val_u64<'a>(input: &mut &'a str) -> Res<'a, u64> {
         preceded("0x", hex_digit1).try_map(|v| u64::from_str_radix(v, 16)),
         digit1.try_map(str::parse),
     ))
+    .context(StrContext::Label("unsigned 64b"))
     .parse_next(input)
 }
 
@@ -261,6 +281,7 @@ pub fn val_u128<'a>(input: &mut &'a str) -> Res<'a, u128> {
         preceded("0x", hex_digit1).try_map(|v| u128::from_str_radix(v, 16)),
         digit1.try_map(str::parse),
     ))
+    .context(StrContext::Label("unsigned 128b"))
     .parse_next(input)
 }
 
@@ -276,6 +297,7 @@ pub fn val_i128<'a>(input: &mut &'a str) -> Res<'a, i128> {
             .take()
             .try_map(|v| i128::from_str_radix(v, 10)),
     ))
+    .context(StrContext::Label("signed 128b"))
     .parse_next(input)
 }
 
@@ -291,11 +313,12 @@ pub fn val_isize<'a>(input: &mut &'a str) -> Res<'a, isize> {
             .take()
             .try_map(|v| isize::from_str_radix(v, 10)),
     ))
+    .context(StrContext::Label("signed 128b"))
     .parse_next(input)
 }
 
 pub fn val_f64<'a>(i: &mut &'a str) -> Res<'a, f64> {
-    winnow::ascii::float.parse_next(i)
+    winnow::ascii::float.context(StrContext::Label("floating value")).parse_next(i)
 }
 
 #[cfg(test)]

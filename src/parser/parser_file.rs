@@ -114,6 +114,9 @@ impl RifGenSrc {
         P: AsRef<Path>,
     {
         let mut refs = HashSet::new();
+        if let Some(file_path) = filename.as_ref().file_name() {
+            err_set_name!(file_path.to_string_lossy().to_string());
+        }
         let mut lines = read_lines(filename)?;
         let mut context_stack: ContextStack = vec![(Context::Top, 0)];
         let mut line_num = 0;
@@ -141,7 +144,7 @@ impl RifGenSrc {
                 }
             }
             let cntxt = context_stack.last().expect("Context Stack Empty !");
-            err_context_set!(line_num, cntxt.0.to_owned());
+            err_set_context!(line_num, cntxt.0.to_owned());
             // Call parsers based on context
             match cntxt.0 {
                 // Parse Top level declaration: either Rif or Rifmux

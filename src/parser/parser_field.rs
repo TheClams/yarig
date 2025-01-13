@@ -3,7 +3,10 @@ use crate::rifgen::{
 };
 
 use winnow::{
-    ascii::{multispace0, space0, Caseless}, combinator::{alt, delimited, opt, permutation, preceded, repeat_till, separated, separated_pair, terminated}, error::{ContextError, ErrMode, ErrorKind}, Parser
+    ascii::{multispace0, space0, Caseless},
+    combinator::{alt, delimited, opt, permutation, preceded, repeat_till, separated, separated_pair, terminated},
+    error::{ErrorKind, StrContext},
+    Parser
 };
 
 use super::{
@@ -22,7 +25,9 @@ pub fn reset_val<'a>(input: &mut &'a str) -> Res<'a, ResetVal> {
 }
 
 pub fn reset_val_arr<'a>(input: &mut &'a str) -> Res<'a, Vec<ResetVal>> {
-    delimited("{", separated(1..,reset_val, ws(",")), "}").parse_next(input)
+    delimited("{", separated(1..,reset_val, ws(",")), "}")
+        .context(StrContext::Label("reset array values"))
+        .parse_next(input)
 }
 
 /// Parse possible field position format:
@@ -33,7 +38,9 @@ pub fn field_pos<'a>(input: &mut &'a str) -> Res<'a, FieldPos> {
         separated_pair(ws(val_u8_or_param), ws("+:"), val_u8_or_param).try_map(|v| -> Result<FieldPos, ErrorKind> { Ok(FieldPos::LsbSize((v.0, v.1))) }),
         delimited(multispace0, val_u8, "b").try_map( |v| -> Result<FieldPos, ErrorKind> { Ok(FieldPos::Size(v.into())) }),
         ws(param).try_map(|v| -> Result<FieldPos, ErrorKind> {Ok(FieldPos::Size(v.into()))}),
-    )).parse_next(input)
+    ))
+    .context(StrContext::Label("field position"))
+    .parse_next(input)
 }
 
 // Field declaration format is the following
@@ -48,7 +55,9 @@ pub fn field_decl<'a>(input: &mut &'a str) -> Res<'a, Field> {
             reset_val.try_map(|v: ResetVal| -> Result<Vec<ResetVal>, ErrorKind> { Ok(vec![v]) }),
             reset_val_arr,
         )),
-    )).parse_next(input)?;
+    ))
+    .context(StrContext::Label("field position"))
+    .parse_next(input)?;
     let pos = field_pos(input)?;
     let kind = opt(field_sw_kind).parse_next(input)?;
     let desc = opt(ws(quoted_string)).parse_next(input)?;
@@ -107,44 +116,54 @@ pub fn field_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
             )),
         )),
         opt(alt((ws(":"), space0))),
-    ).parse_next(input)
+    )
+    .context(StrContext::Label("field properties"))
+    .parse_next(input)
 }
 
 pub fn field_acc<'a>(input: &mut &'a str) -> Res<'a, Access> {
-    ws(identifier).parse_next(input).and_then(|id| match id.to_lowercase().as_str() {
-        "na" => Ok(Access::NA),
-        "rw" => Ok(Access::RW),
-        "r" | "ro" => Ok(Access::RO),
-        "w" | "wo" => Ok(Access::WO),
-        _ => Err(ErrMode::Backtrack(ContextError::new())),
-    })
+    alt((
+        ws(Caseless("na")).value(Access::NA),
+        ws(Caseless("rw")).value(Access::RW),
+        ws(Caseless("ro")).value(Access::RO),
+        ws(Caseless("wo")).value(Access::WO),
+        ws(Caseless("r")).value(Access::RO),
+        ws(Caseless("w")).value(Access::WO),
+    ))
+    .context(StrContext::Label("field access"))
+    .parse_next(input)
 }
 
 pub fn field_sw_kind<'a>(input: &mut &'a str) -> Res<'a, FieldSwKind> {
-    ws(identifier).parse_next(input).and_then(|id| match id.to_lowercase().as_str() {
-        "r" | "ro" => Ok(FieldSwKind::ReadOnly),
-        "rw" => Ok(FieldSwKind::ReadWrite),
-        "rclr" => Ok(FieldSwKind::ReadClr),
-        "wclr" | "w1clr" => Ok(FieldSwKind::W1Clr),
-        "w0clr" => Ok(FieldSwKind::W0Clr),
-        "w1set" => Ok(FieldSwKind::W1Set),
-        "w" | "wo" => Ok(FieldSwKind::WriteOnly),
-        "pulse" => Ok(FieldSwKind::W1Pulse(false, false)),
-        "pulsereg" => Ok(FieldSwKind::W1Pulse(true, false)),
-        "toggle" => Ok(FieldSwKind::W1Tgl),
-        _ => Err(ErrMode::Backtrack(ContextError::new())),
-    })
+    alt((
+        ws(Caseless("ro")).value(FieldSwKind::ReadOnly),
+        ws(Caseless("rw")).value(FieldSwKind::ReadWrite),
+        ws(Caseless("rclr")).value(FieldSwKind::ReadClr),
+        ws(Caseless("wclr")).value(FieldSwKind::W1Clr),
+        ws(Caseless("w1clr")).value(FieldSwKind::W1Clr),
+        ws(Caseless("w0clr")).value(FieldSwKind::W0Clr),
+        ws(Caseless("w1set")).value(FieldSwKind::W1Set),
+        ws(Caseless("wo")).value(FieldSwKind::WriteOnly),
+        ws(Caseless("pulse")).value(FieldSwKind::W1Pulse(false, false)),
+        ws(Caseless("pulsereg")).value(FieldSwKind::W1Pulse(true, false)),
+        ws(Caseless("toggle")).value(FieldSwKind::W1Tgl),
+        ws(Caseless("r")).value(FieldSwKind::ReadOnly),
+        ws(Caseless("w")).value(FieldSwKind::WriteOnly),
+    ))
+    .context(StrContext::Label("field kind"))
+    .parse_next(input)
 }
 
 pub fn enum_kind<'a>(input: &mut &'a str) -> Res<'a, &'a str> {
     opt((ws(identifier),
         opt(preceded("::",identifier))
     )).take()
+    .context(StrContext::Label("enum kind"))
     .parse_next(input)
 }
 
 pub fn clk_en(input: &str) -> ResF<ClkEn> {
-    let name = identifier.parse(input)?;
+    let name = identifier.context(StrContext::Label("clock enable")).parse(input)?;
     if name.to_lowercase() == "false" {
         Ok(ClkEn::None)
     } else {
@@ -159,8 +178,8 @@ pub fn enum_entry(input: &str) -> ResF<EnumEntry> {
         preceded(ws("-"), identifier),
         preceded(ws("="), val_u8),
         quoted_string,
-    )
-        .parse(input)?;
+    ).context(StrContext::Label("enum entry"))
+    .parse(input)?;
     Ok(EnumEntry {
         name: info.0.to_owned(),
         value: info.1,
@@ -170,9 +189,13 @@ pub fn enum_entry(input: &str) -> ResF<EnumEntry> {
 
 pub fn field_interrupt<'a>(input: &mut &'a str) -> Res<'a, InterruptInfoField> {
     let mut info =
-        permutation((opt(ws(reg_interrupt_trigger)), opt(ws(reg_interrupt_clr)))).parse_next(input)?;
+        permutation((
+            opt(ws(reg_interrupt_trigger)),
+            opt(ws(reg_interrupt_clr))
+        )).context(StrContext::Label("interrupt info"))
+        .parse_next(input)?;
     if info.1.is_some() && info.0.is_none() {
-        let info_tmp = opt(ws(reg_interrupt_trigger)).parse_next(input)?;
+        let info_tmp = opt(ws(reg_interrupt_trigger)).context(StrContext::Label("interrupt trigger")).parse_next(input)?;
         if info_tmp.is_some() {
             info.0 = info_tmp;
         }
@@ -192,6 +215,7 @@ pub fn pulse_kind(input: &str) -> ResF<bool> {
         ws("comb").value(false),
         space0.value(true),
     ))
+    .context(StrContext::Label("pulse kind"))
     .parse(input)
 }
 
@@ -201,7 +225,8 @@ pub fn counter_dir<'a>(input: &mut &'a str) -> Res<'a, CounterKind> {
         ws("down").value(CounterKind::Down),
         ws("updown").value(CounterKind::UpDown),
         ws("up").value(CounterKind::Up),
-    )).parse_next(input)
+    )).context(StrContext::Label("counter direction"))
+    .parse_next(input)
 }
 
 // up|down|updown [incrVal[=width]] [decrVal[=width]] [sat] [event] [clr]
@@ -217,12 +242,15 @@ pub fn counter_def_<'a>(input: &mut &'a str) -> Res<'a, CounterInfo> {
             ws("decrVal"),
             opt(preceded(opt("="), val_u8)),
         )),
-    )).parse_next(input)?;
+    )).context(StrContext::Label("counter incr/decr"))
+    .parse_next(input)?;
+    //
     if val.1.is_some() && val.0.is_none() {
         val.0 = opt(preceded(
             ws("incrVal"),
             opt(preceded("=", val_u8)),
-        )).parse_next(input)?;
+        )).context(StrContext::Label("counter increment value"))
+        .parse_next(input)?;
     }
     // Extract sat/event/clr (any order)
     let sig = if input.is_empty() {
@@ -235,7 +263,8 @@ pub fn counter_def_<'a>(input: &mut &'a str) -> Res<'a, CounterInfo> {
                 ws("clr").value(2),
             ))),
             winnow::combinator::eof,
-        ).parse_next(input)?
+        ).context(StrContext::Label("counter sat/event/clr"))
+        .parse_next(input)?
     };
     let mut c = CounterInfo {
         kind,
@@ -274,7 +303,7 @@ pub fn limit_def(input: &str) -> ResF<Limit> {
             ws("enum").value(LimitValue::Enum),
         )),
         opt(ws(signal_name)),
-    )
+    ).context(StrContext::Label("limit definition"))
         .parse(input)
         .map(|v| Limit {
             value: v.0,
@@ -284,11 +313,17 @@ pub fn limit_def(input: &str) -> ResF<Limit> {
 
 // password [once=<val>] [hold=<val>] [protect]
 fn password_info_l<'a>(input: &mut &'a str) -> Res<'a,PasswordInfo> {
-    let mut once = opt(preceded(ws("once="),reset_val)).parse_next(input)?;
-    let hold = opt(preceded(ws("hold="),reset_val)).parse_next(input)?;
+    let mut once = opt(preceded(ws("once="),reset_val))
+        .context(StrContext::Label("once password"))
+        .parse_next(input)?;
+    let hold = opt(preceded(ws("hold="),reset_val))
+        .context(StrContext::Label("hold password"))
+        .parse_next(input)?;
     // Try again to parse "once" to handle permutation of both properties
     if once.is_none() {
-        once = opt(preceded(ws("once="),reset_val)).parse_next(input)?;
+        once = opt(preceded(ws("once="),reset_val))
+            .context(StrContext::Label("once password"))
+            .parse_next(input)?;
     }
     let protect = opt(ws("protect")).parse_next(input)?;
     let info = PasswordInfo { once, hold, protect: protect.is_some()};

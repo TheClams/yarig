@@ -1,7 +1,7 @@
 use crate::rifgen::{Context, Interface, ResetDef, GenericRange};
 
 use winnow::{
-  ascii::Caseless, combinator::{alt, opt, repeat, preceded, separated_pair, terminated}, Parser
+  ascii::Caseless, combinator::{alt, opt, preceded, repeat, separated_pair, terminated}, error::StrContext, Parser
 };
 
 use super::{Res, identifier, ResF, ws, item_cntxt, val_u8};
@@ -52,7 +52,8 @@ pub fn rif_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
     	item_cntxt,
   	)),
     ws(":")
-  ).parse_next(input)
+  ).context(StrContext::Label("rif property"))
+  .parse_next(input)
 }
 
 pub fn rif_properties_or_item<'a>(input: &mut &'a str) -> Res<'a, Context> {
@@ -75,7 +76,8 @@ pub fn reset_def(input: &str) -> ResF<ResetDef> {
     		alt((ws(Caseless("Low")),ws(Caseless("High"))))
     	)),
     opt(alt((ws("async"),ws("sync")))),
-  ).parse(input)
+  ).context(StrContext::Label("reset definition"))
+  .parse(input)
   .map(|info| ResetDef{
       name: info.0.to_owned(),
       active_high: info.1 == Some("High") || info.1 == Some("high"),
@@ -84,7 +86,9 @@ pub fn reset_def(input: &str) -> ResF<ResetDef> {
 }
 
 pub fn generic_range<'a>(input: &mut &'a str) -> Res<'a, GenericRange> {
-  repeat(1..=3, terminated(ws(val_u8), opt(":"))).parse_next(input).map(|v : Vec<u8>| v.into())
+  repeat(1..=3, terminated(ws(val_u8), opt(":")))
+    .context(StrContext::Label("range"))
+    .parse_next(input).map(|v : Vec<u8>| v.into())
 }
 
 
@@ -96,7 +100,8 @@ pub fn generic_def(input: &str) -> ResF<(&str, GenericRange)> {
             opt(alt(("=", ":"))),
             generic_range,
         ),
-    ).parse(input)
+    ).context(StrContext::Label("generic definition"))
+    .parse(input)
 }
 
 //--------------------------------

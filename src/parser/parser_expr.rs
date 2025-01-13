@@ -1,6 +1,6 @@
 use std::{fmt::Display, ops::{Deref, DerefMut}};
 
-use winnow::{ascii::{space0, Caseless}, combinator::{alt, delimited}, Parser};
+use winnow::{ascii::{space0, Caseless}, combinator::{alt, delimited}, error::StrContext, Parser};
 
 use crate::{error::RifError, rifgen::order_dict::OrderDict};
 use super::{identifier, val_f64, val_isize, ws, Res};
@@ -229,12 +229,12 @@ pub fn parse_expr(input: &str) -> Result<ExprTokens,RifError> {
     while !s.is_empty() {
 
         let token = match state {
-            ExprState::Operand => alt((parenl,variable,idx,number,func_call, not)).parse_next(&mut s)?,
+            ExprState::Operand => alt((parenl,variable,idx,number,func_call, not)).context(StrContext::Label("operand")).parse_next(&mut s)?,
             ExprState::Operator => match cntxt.last() {
                 None => operator(&mut s)?,
                 Some(ExprContext::SubExpr) |
-                Some(ExprContext::FuncCall(0)) => alt((operator,parenr)).parse_next(&mut s)?,
-                Some(ExprContext::FuncCall(_)) => alt((operator,comma)).parse_next(&mut s)?,
+                Some(ExprContext::FuncCall(0)) => alt((operator,parenr)).context(StrContext::Label("function call / Sub expression")).parse_next(&mut s)?,
+                Some(ExprContext::FuncCall(_)) => alt((operator,comma)).context(StrContext::Label("function call")).parse_next(&mut s)?,
             }
         };
 

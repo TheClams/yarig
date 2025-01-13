@@ -1,7 +1,7 @@
 use crate::rifgen::{AddressKind, Context, RegInst};
 
 use winnow::{
-    ascii::space0, combinator::{alt, delimited, opt, preceded, terminated}, error::ErrorKind, token::take_until, Parser
+    ascii::space0, combinator::{alt, delimited, opt, preceded, terminated}, error::{ErrorKind, StrContext}, token::take_until, Parser
 };
 
 use super::{identifier, parser_expr::{parse_expr, ExprTokens}, val_u64, val_u16, ws, Res, ResF};
@@ -24,7 +24,8 @@ pub fn page_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
             ws("include").value(Context::Include),
         )),
         opt(ws(":")),
-    ).parse_next(input)
+    ).context(StrContext::Label("page property"))
+    .parse_next(input)
 }
 
 //--------------------------------
@@ -58,7 +59,8 @@ pub fn reg_inst(input: &str) -> ResF<RegInst> {
             )),
             ws(val_u64),
         )),
-    ).parse(input)
+    ).context(StrContext::Label("register instance"))
+    .parse(input)
     .map(|v| v.into())
 }
 
@@ -78,7 +80,8 @@ pub fn reg_inst_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
             reg_inst_field_array,
         )),
         opt(alt((ws(":"),ws("=")))),
-    ).parse_next(input)
+    ).context(StrContext::Label("register instance property"))
+    .parse_next(input)
 }
 
 pub fn reg_inst_array_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
@@ -94,7 +97,8 @@ pub fn reg_inst_array_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
             terminated(identifier, ".").try_map(|v| -> Result<Context, ErrorKind> {Ok(Context::Item(v.into()))}),
         )),
         opt(alt((ws(":"),ws("=")))),
-    ).parse_next(input)
+    ).context(StrContext::Label("register instance array property"))
+    .parse_next(input)
 }
 
 pub fn reg_inst_field_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
@@ -110,7 +114,8 @@ pub fn reg_inst_field_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
             ws("limit").value(Context::Limit),
         )),
         opt(alt((ws(":"),ws("=")))),
-    ).parse_next(input)
+    ).context(StrContext::Label("register field property"))
+    .parse_next(input)
 }
 
 pub fn reg_inst_field_array<'a>(input: &mut &'a str) -> Res<'a, Context> {
@@ -118,6 +123,7 @@ pub fn reg_inst_field_array<'a>(input: &mut &'a str) -> Res<'a, Context> {
         identifier,
         delimited(ws("["), val_u16, ws("].")),
     ).try_map(|v| -> Result<Context, ErrorKind> {Ok(Context::FieldIndex((v.0.to_owned(),v.1)))})
+    .context(StrContext::Label("register field array"))
     .parse_next(input)
 }
 
