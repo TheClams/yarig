@@ -2,7 +2,7 @@ use std::{collections::{BTreeMap, HashMap}, str::FromStr};
 
 use crate::parser::{parser_expr::{ExprTokens, ParamValues}, suffix_info};
 
-use super::{order_dict::OrderDict, AddressKind, ClockingInfo, Description, Interface};
+use super::{order_dict::OrderDict, AddressKind, ClockingInfo, DataWidth, Description, Interface};
 
 #[derive(Clone, Debug)]
 pub struct Rifmux {
@@ -11,7 +11,7 @@ pub struct Rifmux {
     /// Address bus width
     pub addr_width: u8,
     /// Data bus width
-    pub data_width: u8,
+    pub data_width: DataWidth,
     /// Software clocking defintion (clock, reset, enable)
     pub sw_clocking: ClockingInfo,
     /// Hardware Interface
@@ -35,7 +35,7 @@ impl Rifmux {
         Rifmux {
             name: name.into(),
             addr_width: 16,
-            data_width: 32,
+            data_width: DataWidth::default(),
             interface: Interface::Default,
             sw_clocking: ClockingInfo::default(),
             items: vec![],

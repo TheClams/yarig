@@ -5,13 +5,18 @@ use std::path::{Path, PathBuf};
 
 use winnow::Parser;
 
-use crate::error::{RifError, ERROR_CONTEXT};
+use crate::error::{RifError, RifErrorKind, ERROR_CONTEXT};
 use crate::parser::parser_expr::parse_expr;
 use crate::parser::{
-    bool_or_default, clk_en, enum_kind, generic_def, intr_desc, limit_def, password_info, path_val, reg_incl_or_decl, reg_inst_array_properties, reg_inst_properties, reg_pulse_info, rif_inst_suffix, rifmux_group, rifmux_map, signal_or_expr, val_u16
+    bool_or_default, clk_en, enum_kind, generic_def, intr_desc, limit_def,
+    password_info, path_val, reg_incl_or_decl, reg_inst_array_properties, reg_inst_properties,
+    reg_pulse_info, rif_inst_suffix, rifmux_group, rifmux_map, signal_or_expr, val_u16
 };
 use crate::rifgen::{
-    Access, ClockingInfo, Context, EnumDef, EnumKind, ExternalKind, Field, FieldHwKind, FieldSwKind, Interface, Lock, OverrideIndex, RegDef, RegDefOrIncl, RegInst, RegPulseKind, ResetDef, Rif, RifPage, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility
+    Access, ClockingInfo, Context, DataWidth, EnumDef, EnumKind, ExternalKind,
+    Field, FieldHwKind, FieldSwKind, Interface, Lock, OverrideIndex,
+    RegDef, RegDefOrIncl, RegInst, RegPulseKind, ResetDef,
+    Rif, RifPage, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility
 };
 
 use super::{
@@ -36,6 +41,7 @@ pub struct RifGenSrc {
     pub top: RifGenTop,
     pub rifs: HashMap<String, Rif>,
     pub rifmux: HashMap<String, Rifmux>,
+    last_data_width: DataWidth,
     last_obj: String,
     last_group: String,
 }
@@ -62,6 +68,7 @@ impl RifGenSrc {
             top: RifGenTop::None,
             rifs: HashMap::new(),
             rifmux: HashMap::new(),
+            last_data_width: DataWidth::default(),
             last_obj: "".to_owned(),
             last_group: "".to_owned(),
         }
@@ -75,7 +82,6 @@ impl RifGenSrc {
         let mut refs = src.parse_file(&filename)?;
         if !refs.is_empty() {
             // find all rifs file in current directory and import directories
-            println!("  Reference to {:?} ", refs);
             let flist: HashMap<String, PathBuf> = if let Some(cwd) = filename.as_ref().parent() {
                 fs::read_dir(cwd)
                     .unwrap()
@@ -110,6 +116,7 @@ impl RifGenSrc {
                 refs = refs_next;
                 ref_done = refs.is_empty();
             }
+            println!("  Reference to {:?} ", refs);
         }
         Ok(src)
     }
@@ -159,7 +166,9 @@ impl RifGenSrc {
                             self.top = RifGenTop::Rif(name.to_owned());
                         }
                         self.last_obj = name.to_owned();
-                        self.rifs.insert(name.to_owned(), Rif::new(name));
+                        let rif = Rif::new(name);
+                        self.rifs.insert(name.to_owned(), rif);
+                        self.last_data_width = DataWidth::default();
                         context_stack.push((Context::Rif, ilvl));
                     }
                     (Context::Rifmux, name) => {
@@ -167,7 +176,9 @@ impl RifGenSrc {
                             self.top = RifGenTop::Rifmux(name.to_owned());
                         }
                         self.last_obj = name.to_owned();
-                        self.rifmux.insert(name.to_owned(), Rifmux::new(name));
+                        let rifmux = Rifmux::new(name);
+                        self.rifmux.insert(name.to_owned(), rifmux);
+                        self.last_data_width = DataWidth::default();
                         context_stack.push((Context::Rifmux, ilvl));
                     }
                     (info, _) => {
@@ -196,7 +207,11 @@ impl RifGenSrc {
                             self.last_rif().interface = intf;
                         }
                         Context::AddrWidth => self.last_rif().addr_width = val_u8(&mut l)?,
-                        Context::DataWidth => self.last_rif().data_width = val_u8(&mut l)?,
+                        Context::DataWidth => {
+                            let w = val_u8(&mut l)?.try_into()?;
+                            self.last_rif().data_width = w;
+                            self.last_data_width = w;
+                        }
                         Context::SwClock => {
                             sw_clk_defined.0 = true;
                             self.last_rif().sw_clocking.clk = identifier_last(l)?.to_owned()
@@ -544,6 +559,9 @@ impl RifGenSrc {
                 // Instances
                 Context::Instances => {
                     let inst = reg_inst(l)?;
+                    if inst.addr & self.last_data_width.addr_mask() != 0 {
+                        return Err(RifErrorKind::AddrUnaligned.into())
+                    }
                     self.last_page_mut().instances.push(inst);
                     context_stack.push((Context::RegInst, ilvl + 1));
                 }
@@ -568,7 +586,11 @@ impl RifGenSrc {
                             self.last_rifmux().interface = intf;
                         }
                         Context::AddrWidth => self.last_rifmux().addr_width = val_u8(&mut l)?,
-                        Context::DataWidth => self.last_rifmux().data_width = val_u8(&mut l)?,
+                        Context::DataWidth => {
+                            let w = val_u8(&mut l)?.try_into()?;
+                            self.last_rifmux().data_width = w;
+                            self.last_data_width = w;
+                        }
                         Context::Parameters => context_stack.push((Context::Parameters, ilvl + 1)),
                         Context::SwClock => {
                             sw_clk_defined.0 = true;

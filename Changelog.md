@@ -1,10 +1,17 @@
 # Changelog
 
-## [0.3.2] - 2025-01-15
 
+## [0.3.3] - 2025-01-19
 ### Added
- - trait_sw: software trait to use as basis for generator having software access (C, python, ...)
+  - trait_sw: software trait to use as basis for generator having software access (C, python, ...)
+    * C generator now based on this trait
 
+### Changed
+  - Parser:
+    * Use enum for address width: ensure width is supported, and centralize some feature such as nb_byte, address mask, ...
+    * check address alignment vs data width
+
+## [0.3.2] - 2025-01-15
 ### Changed
   - Error message improved:
     * now contains current file name

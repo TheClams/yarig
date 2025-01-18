@@ -3,6 +3,7 @@ use std::str::FromStr;
 
 use crate::parser::parser_expr::ExprTokens;
 
+use super::DataWidth;
 use super::{order_dict::OrderDict, Description, EnumDef, RifPage};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -118,7 +119,7 @@ pub struct Rif {
     /// Address bus width
     pub addr_width: u8,
     /// Data bus width
-    pub data_width: u8,
+    pub data_width: DataWidth,
     /// Top description
     pub description: Description,
     /// Software interface
@@ -145,7 +146,7 @@ impl Rif {
         Rif {
             name:name.into(),
             addr_width: 16,
-            data_width: 32,
+            data_width: DataWidth::default(),
             description: "".into(),
             suffix_pkg: false,
             interface: Interface::Default,

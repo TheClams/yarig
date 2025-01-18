@@ -243,7 +243,7 @@ pub struct RifInst {
 
 impl RifInst {
     pub fn new(name: &str, rif: &Rif, top_params: &ParamValues, rifs: &HashMap<String, Rif>, description: Description, suffix: Option<SuffixInfo>) -> Result<Self, String> {
-        let addr_incr = rif.data_width >> 3; // Address align in byte
+        let addr_incr = rif.data_width.nb_byte(); // Address align in byte
         let mut params = top_params.clone();
         params.compile(rif.parameters.items())?;
         // if !params.is_empty() {println!("{} : {}", rif.name, params);}
@@ -287,7 +287,7 @@ impl RifInst {
             inst_name: name.to_owned(),
             type_name: rif.name.to_owned(),
             addr_width: rif.addr_width,
-            data_width: rif.data_width,
+            data_width: rif.data_width.value(),
             enum_defs,
             description: if description.is_empty() {rif.description.clone()} else {description},
             base_description: rif.description.clone(),
@@ -1120,7 +1120,7 @@ impl RifmuxInst {
             inst_name,
             type_name: rifmux.name.clone(),
             addr_width: rifmux.addr_width,
-            data_width: rifmux.data_width,
+            data_width: rifmux.data_width.value(),
             sw_clocking: rifmux.sw_clocking.clone(),
             interface: rifmux.interface.clone(),
             description: rifmux.description.clone(),
