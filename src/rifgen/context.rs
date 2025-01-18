@@ -1,6 +1,6 @@
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 /// Parsing context
-pub enum Context {
+pub enum Context { #[default]
 	/// Top level context (i.e. default context before any non-comment has been parsed)
 	Top,
 	/// RIF context started with keyword `rif` inside Top context

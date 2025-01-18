@@ -126,6 +126,11 @@ impl EnumDef {
         self.values.len()
     }
 
+    #[allow(dead_code)]
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+
     pub fn iter(&self) -> impl Iterator<Item=&EnumEntry> {
         self.values.iter()
     }
@@ -167,6 +172,7 @@ pub enum Visibility {#[default]
     Hidden,
     Reserved,
     Disabled,
+    Unused,
 }
 
 impl Visibility {
@@ -180,6 +186,10 @@ impl Visibility {
     #[allow(dead_code)]
     pub fn is_disabled(&self) -> bool {
         self == &Visibility::Disabled
+    }
+
+    pub fn is_unused(&self) -> bool {
+        self == &Visibility::Unused
     }
 }
 

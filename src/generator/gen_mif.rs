@@ -45,7 +45,7 @@ impl GeneratorMif {
         pgf_name.insert(PgfKind::TableHeading, "CellHeading".to_owned());
         pgf_name.insert(PgfKind::TableCell   , "CellBodyLeft".to_owned());
         GeneratorMif {
-            core: GeneratorCore::new(setting),
+            core: GeneratorCore::new(1,setting),
             is_rifmux: false,
             multipage: false,
             tbl_idx: 1,

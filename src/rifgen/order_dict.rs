@@ -37,6 +37,11 @@ impl<K,V> OrderDict<K,V>
         self.values.len()
     }
 
+    #[allow(dead_code)]
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
+
     pub fn get(&self, k: &K) -> Option<&V> {
         let i = self.keys.get(k)?;
         Some(&self.values[*i])
@@ -84,6 +89,13 @@ impl<K,V> OrderDict<K,V>
     }
 
 }
+
+impl<K,V> Default for OrderDict<K,V> where K: Eq + Hash {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 
 //-----------------------------------------------------------------------------
 // Implement iterator on value only

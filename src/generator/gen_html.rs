@@ -18,7 +18,7 @@ impl GeneratorHtml {
 
     pub fn new(setting: GeneratorBaseSetting) -> Self {
         GeneratorHtml {
-            core: GeneratorCore::new(setting),
+            core: GeneratorCore::new(0,setting),
             nb_col: 1,
             multipage: false
         }

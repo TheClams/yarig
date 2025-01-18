@@ -23,8 +23,8 @@ use super::{
     val_intf, val_u64, val_u8, vec_id
 };
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum RifGenTop {
+#[derive(Clone, Debug, PartialEq, Default)]
+pub enum RifGenTop {#[default]
     None,
     Rifmux(String),
     Rif(String),
@@ -50,6 +50,11 @@ where
 
 type ContextStack = Vec<(Context, usize)>;
 
+impl Default for RifGenSrc {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl RifGenSrc {
     pub fn new() -> RifGenSrc {

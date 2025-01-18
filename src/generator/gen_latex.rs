@@ -19,7 +19,7 @@ impl GeneratorLatex {
 
     pub fn new(setting: GeneratorBaseSetting) -> Self {
         GeneratorLatex {
-            core: GeneratorCore::new(setting),
+            core: GeneratorCore::new(0,setting),
             first_col: true,
             is_rifmux: false,
             multipage: false,

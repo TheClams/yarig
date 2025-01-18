@@ -424,6 +424,8 @@ impl From<ExprError> for String {
 #[derive(Clone, Debug)]
 pub struct ParamValues(OrderDict<String,isize>);
 
+
+
 impl ParamValues {
 
     pub fn new() -> Self {
@@ -436,7 +438,7 @@ impl ParamValues {
         params
     }
 
-    pub fn from_iter<'a, I>(dict: I) -> Result<Self,String>
+    pub fn from_items<'a, I>(dict: I) -> Result<Self,String>
     where I: Iterator<Item = (&'a String,&'a ExprTokens)> {
         let mut params = ParamValues(OrderDict::new());
         for (name,expr) in dict.into_iter() {
@@ -480,6 +482,12 @@ impl ParamValues {
     #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.0.len()==0
+    }
+}
+
+impl Default for ParamValues {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

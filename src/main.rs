@@ -2,19 +2,19 @@
 use std::{collections::HashMap, error::Error, fs, path::PathBuf};
 use clap::{Parser, ValueEnum};
 use yarig::{
-    generator::{
-        trait_doc::GeneratorDoc,
+    comp::comp_inst::Comp, generator::{
         casing::Casing,
-        gen_c::GeneratorC,
         gen_common::{GeneratorBaseSetting, Privacy},
+        trait_doc::GeneratorDoc,
+        trait_sw::GeneratorSw,
+        gen_c::GeneratorC,
         gen_html::GeneratorHtml,
         gen_latex::GeneratorLatex,
         gen_mif::GeneratorMif,
         gen_sv::GeneratorSv,
     },
-    parser::{RifGenSrc, parser_expr::ParamValues},
-    rifgen::SuffixInfo,
-    comp::comp_inst::Comp,
+    parser::{parser_expr::ParamValues, RifGenSrc},
+    rifgen::SuffixInfo
 };
 
 // use crate::comp::comp_inst::RifmuxMap;

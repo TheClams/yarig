@@ -4,6 +4,7 @@ use std::{error::Error, fmt::{Debug, Display}};
 
 use crate::rifgen::{context::Context, FieldHwKind};
 
+#[derive(Clone, Debug, Default)]
 pub struct ErrorContext {
     pub name: String,
     pub line_num: usize,

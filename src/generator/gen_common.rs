@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use crate::{comp::comp_inst::{Comp, RifFieldInst, RifInst, RifRegInst, RifmuxInst}, rifgen::SuffixInfo};
+use crate::{comp::comp_inst::{Comp, RifFieldInst, RifInst, RifRegInst, RifmuxInst}, parser::remove_rif, rifgen::SuffixInfo};
 
 use super::casing::{Casing, ToCasing};
 
@@ -73,6 +73,13 @@ pub struct GeneratorBaseSetting {
     pub gen_inc: Vec<String>,
 }
 
+impl GeneratorBaseSetting {
+    pub fn is_gen_inc(&self, rif: &RifInst) -> bool {
+        let names = [&rif.inst_name, &rif.type_name, &remove_rif(&rif.type_name).to_owned()];
+        names.iter().any(|n| self.gen_inc.contains(n))
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct GeneratorCore {
     /// Basic settings
@@ -80,37 +87,63 @@ pub struct GeneratorCore {
     /// Main text buffer
     pub txt: String,
     /// Secondary buffer
-    pub stash: [String; 2],
+    pub stash: Vec<String>,
 }
 
 #[allow(dead_code)]
 impl GeneratorCore {
 
-    pub fn new(setting: GeneratorBaseSetting) -> Self {
+    /// Create the core generator structure
+    pub fn new(stash_size: usize, setting: GeneratorBaseSetting) -> Self {
+        let mut stash = Vec::with_capacity(stash_size);
+        // Allocate a small buffer for each stash
+        for _ in 0..stash_size {
+            stash.push(String::with_capacity(1000));
+        }
         GeneratorCore {
             setting,
             txt: String::with_capacity(10000),
-            stash: [String::with_capacity(1000), String::with_capacity(1000)],
+            stash,
         }
     }
 
+    /// Write srting on the main text
     pub fn write(&mut self, string: &str) {
         self.txt.push_str(string);
     }
 
+    /// Push string to a stash
     pub fn push_stash(&mut self, idx: usize, string: &str) {
         self.stash[idx].push_str(string);
     }
 
+    /// Pop the content of a stash to the main text
     pub fn pop_stash(&mut self, idx: usize) {
         self.txt.push_str(&self.stash[idx]);
         self.stash[idx].clear();
     }
 
+    /// Pop the content of a stash to another stash
+    pub fn pop_stash_to(&mut self, from: usize, to: usize) {
+        let mut stash_iter = self.stash.iter_mut();
+        let (stash_from, stash_to);
+        if from > to {
+            stash_to = stash_iter.nth(to).unwrap();
+            stash_from = stash_iter.nth(from - to - 1).unwrap();
+        } else {
+            stash_from = stash_iter.nth(from).unwrap();
+            stash_to = stash_iter.nth(to - from - 1).unwrap();
+        }
+        stash_to.push_str(stash_from);
+        stash_from.clear();
+    }
+
+    /// Flag when a stash is empty
     pub fn stash_is_empty(&self, idx: usize) -> bool {
         self.stash[idx].is_empty()
     }
 
+    /// Save the main text to a file
     pub fn save(&mut self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
         let path : PathBuf = [
             self.setting.path.clone(),
@@ -118,12 +151,13 @@ impl GeneratorCore {
         ].iter().collect();
         std::fs::write(path, self.txt.as_bytes())?;
         self.txt.clear();
-        self.stash[0].clear();
-        self.stash[1].clear();
+        for s in self.stash.iter_mut() {
+            s.clear();
+        }
         Ok(())
     }
 
-
+    /// Get a field name with proper casing
     pub fn get_field_name(&self, r: &RifRegInst, f: &RifFieldInst) -> String {
         // println!("[get_field_name] {}.{} : rsvd={}, field array = {:?}, reg array={:?}",
         //     r.reg_name, f.name, f.is_reserved(), f.array, r.array);

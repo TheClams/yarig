@@ -935,7 +935,8 @@ impl RifFieldInst {
         }
     }
 
-    pub fn new_rsvd(lsb: u8, width: u8) -> Self {
+    /// Generate an unused field (used as padding inside a register)
+    pub fn new_unused(lsb: u8, width: u8) -> Self {
         RifFieldInst {
             name: format!("rsvd{lsb}"), lsb, width,
             base_description: "Reserved".into(),
@@ -943,7 +944,7 @@ impl RifFieldInst {
             reset: ResetVal::Unsigned(0),
             sw_kind: FieldSwKind::ReadOnly,
             hw_kind: Vec::new(),
-            visibility: Visibility::Reserved,
+            visibility: Visibility::Unused,
             enum_kind: EnumKind::None,
             partial: (None, 0),
             array: ArrayIdx::default(),
@@ -1080,7 +1081,7 @@ impl PartialFieldInfos {
 
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct PartialFieldDict(BTreeMap<String, PartialFieldInfos>);
 
 impl PartialFieldDict {
@@ -1131,7 +1132,7 @@ impl RifmuxInst {
 
     pub fn build(src: &RifGenSrc, inst_name: &str, rifmux: &Rifmux, top_params: &ParamValues, suffixes: &HashMap<String,SuffixInfo>) -> Result<Self, String> {
         // println!("RIF Mux = {s} -> \n{def:?}");
-        let params = ParamValues::from_iter(rifmux.parameters.items())?;
+        let params = ParamValues::from_items(rifmux.parameters.items())?;
         let groups = RifmuxGroupInst::from(&rifmux.groups, &params);
         let mut rm = RifmuxInst::new(inst_name.to_owned(), rifmux, groups);
         let mut inst_addr = InstAddr::new(0);
