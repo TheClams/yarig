@@ -7,16 +7,14 @@ use crate::{
 
 use super::{
     casing::{Casing, ToCasing},
-    gen_common::{GeneratorBaseSetting, GeneratorCore, RifList}
+    gen_common::{GeneratorBase, RifList}
 };
 
 /// Trait to implement generator for software control (C, python, ...)
 /// 
 #[allow(dead_code)]
-pub trait GeneratorSw {
+pub trait GeneratorSw : GeneratorBase {
 
-    /// File extension
-    const EXT : &'static str;
     /// Declare enum type
     const HAS_ENUM : bool = false;
     /// Generate a single file for the rifmux and all its RIF definition
@@ -25,52 +23,6 @@ pub trait GeneratorSw {
     const HAS_UNUSED : bool = false;
     /// Create one structure per page instead of grouping all register and ignoring the page structure
     const INST_BY_PAGE : bool = false;
-
-    /// Get reference to the core generator
-    fn core(&self) -> &GeneratorCore;
-
-    /// Get reference to the core generator
-    fn core_mut(&mut self) -> &mut GeneratorCore;
-
-    /// Get reference to the core generator
-    fn setting(&self) -> &GeneratorBaseSetting {
-        &self.core().setting
-    }
-
-    /// Write a string in main buffer
-    fn write(&mut self, txt: &str) {
-        self.core_mut().write(txt);
-    }
-
-    /// Save a string in one of the two stash
-    fn push_stash(&mut self, idx: usize, txt: &str) {
-        self.core_mut().push_stash(idx, txt);
-    }
-
-    /// Write a stash content into main buffer and clear the stash
-    fn pop_stash(&mut self, idx: usize) {
-        self.core_mut().pop_stash(idx);
-    }
-
-    /// Write a stash content into main buffer and clear the stash
-    fn pop_stash_to(&mut self, from: usize, to: usize) {
-        self.core_mut().pop_stash_to(from, to);
-    }
-
-    /// Write a stash content into main buffer and clear the stash
-    fn stash_is_empty(&mut self, idx: usize) -> bool {
-        self.core().stash_is_empty(idx)
-    }
-
-    /// Save the main buffer into a file and clear buffer and stash
-    fn save(&mut self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
-        self.core_mut().save(filename)
-    }
-
-    /// Write a string in main buffer
-    fn casing(&mut self, txt: &str) -> String {
-        txt.to_casing(self.setting().casing)
-    }
 
     /// Main generator function
     fn gen(&mut self, obj: &Comp) -> Result<(), Box<dyn std::error::Error>> {
@@ -191,7 +143,7 @@ pub trait GeneratorSw {
         self.write_rif_footer();
         // Write file if top or one file per component
         if !Self::SINGLE_FILE || is_top {
-            self.save(&format!("{}.{}", rif.name(false), Self::EXT))?;
+            self.save(&self.filename_rif(rif))?;
         }
         Ok(())
     }
@@ -272,7 +224,7 @@ pub trait GeneratorSw {
         self.write_rifmux_header(&rifmux.inst_name, rif_list);
         self.scan_rifmux(rifmux, "", 0)?;
         self.write_rifmux_footer(&rifmux.inst_name);
-        self.save(&format!("{}.{}", &rifmux.inst_name, Self::EXT))
+        self.save(&self.filename_rifmux(rifmux))
     }
 
     /// Scan rifmux components

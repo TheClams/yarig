@@ -1,6 +1,6 @@
 use crate::{generator::casing::ToCasing, rifgen::EnumDef};
 
-use super::{casing::Casing, gen_common::{GeneratorBaseSetting, GeneratorCore}, trait_doc::{CellKind, GeneratorDoc, TableKind}};
+use super::{casing::Casing, gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore}, trait_doc::{CellKind, GeneratorDoc, TableKind}};
 
 #[allow(dead_code)]
 pub struct GeneratorLatex {
@@ -27,17 +27,26 @@ impl GeneratorLatex {
     }
 }
 
-impl GeneratorDoc for GeneratorLatex {
+impl GeneratorBase for GeneratorLatex {
+
     const EXT : &'static str = "tex";
+
+    fn core(&self) -> &GeneratorCore {
+        &self.core
+    }
+
+    fn core_mut(&mut self) -> &mut GeneratorCore {
+        &mut self.core
+    }
+
+}
+
+impl GeneratorDoc for GeneratorLatex {
     const HAS_LAYOUT : bool = false;
     const SHOW_TYPE  : bool = false;
     const SHOW_RESET : bool = false;
     const SHOW_SINGLE_REG : bool = false;
     const SHOW_UNUSED : bool = true;
-
-    fn core(&mut self) -> &mut GeneratorCore {
-        &mut self.core
-    }
 
     fn set_rif_info(&mut self, _addr_w: u8, _data_w: u8, nb_page: usize) {
         self.multipage = nb_page > 1;
@@ -233,8 +242,8 @@ impl GeneratorDoc for GeneratorLatex {
     }
 
     fn write_info(&mut self, info: &str) {
-        self.core().write(info);
-        self.core().write("\n");
+        self.write(info);
+        self.write("\n");
     }
 
 }

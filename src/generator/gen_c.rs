@@ -6,7 +6,7 @@ use crate::{
 
 use super::{
     casing::{Casing, ToCasing},
-    gen_common::{GeneratorBaseSetting, GeneratorCore, RifList},
+    gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore, RifList},
     trait_sw::GeneratorSw
 };
 
@@ -52,12 +52,9 @@ impl GeneratorC {
     }
 }
 
-impl GeneratorSw for GeneratorC {
+impl GeneratorBase for GeneratorC {
+
     const EXT : &'static str = "h";
-    const HAS_ENUM     : bool = true;
-    const SINGLE_FILE  : bool = false;
-    const HAS_UNUSED   : bool = true;
-    const INST_BY_PAGE : bool = true;
 
     fn core(&self) -> &GeneratorCore {
         &self.core
@@ -66,6 +63,15 @@ impl GeneratorSw for GeneratorC {
     fn core_mut(&mut self) -> &mut GeneratorCore {
         &mut self.core
     }
+
+}
+
+impl GeneratorSw for GeneratorC {
+    const HAS_ENUM     : bool = true;
+    const SINGLE_FILE  : bool = false;
+    const HAS_UNUSED   : bool = true;
+    const INST_BY_PAGE : bool = true;
+
 
     //-------- Save some state variables --------//
     /// Set the width of address/data for current RIF

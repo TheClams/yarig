@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::{generator::casing::{Casing, ToCasing}, rifgen::{EnumDef, FieldSwKind}};
 
 use super::{
-    gen_common::{GeneratorBaseSetting, GeneratorCore},
+    gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore},
     trait_doc::{CellKind, GeneratorDoc, TableKind}
 };
 
@@ -99,21 +99,30 @@ impl GeneratorMif {
         }
     }
 
+}
 
+
+impl GeneratorBase for GeneratorMif {
+
+    const EXT : &'static str = "mif";
+
+    fn core(&self) -> &GeneratorCore {
+        &self.core
+    }
+
+    fn core_mut(&mut self) -> &mut GeneratorCore {
+        &mut self.core
+    }
 
 }
 
+
 impl GeneratorDoc for GeneratorMif {
-    const EXT : &'static str = "mif";
     const HAS_LAYOUT : bool = false;
     const SHOW_TYPE  : bool = false;
     const SHOW_RESET : bool = false;
     const SHOW_SINGLE_REG : bool = false;
     const SHOW_UNUSED : bool = true;
-
-    fn core(&mut self) -> &mut GeneratorCore {
-        &mut self.core
-    }
 
     fn set_rif_info(&mut self, _addr_w: u8, _data_w: u8, nb_page: usize) {
         self.multipage = nb_page > 1;

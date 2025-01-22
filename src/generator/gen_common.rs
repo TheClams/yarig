@@ -170,5 +170,65 @@ impl GeneratorCore {
         }
     }
 
+}
 
+
+pub trait GeneratorBase {
+
+    /// File extension
+    const EXT : &'static str;
+
+    /// Get reference to the core generator
+    fn core(&self) -> &GeneratorCore;
+
+    /// Get reference to the core generator
+    fn core_mut(&mut self) -> &mut GeneratorCore;
+
+    /// Get reference to the core generator
+    fn setting(&self) -> &GeneratorBaseSetting {
+        &self.core().setting
+    }
+
+    /// Write a string in main buffer
+    fn write(&mut self, txt: &str) {
+        self.core_mut().write(txt);
+    }
+
+    /// Save a string in one of the two stash
+    fn push_stash(&mut self, idx: usize, txt: &str) {
+        self.core_mut().push_stash(idx, txt);
+    }
+
+    /// Write a stash content into main buffer and clear the stash
+    fn pop_stash(&mut self, idx: usize) {
+        self.core_mut().pop_stash(idx);
+    }
+
+    /// Write a stash content into main buffer and clear the stash
+    fn pop_stash_to(&mut self, from: usize, to: usize) {
+        self.core_mut().pop_stash_to(from, to);
+    }
+
+    /// Write a stash content into main buffer and clear the stash
+    fn stash_is_empty(&mut self, idx: usize) -> bool {
+        self.core().stash_is_empty(idx)
+    }
+
+    /// Save the main buffer into a file and clear buffer and stash
+    fn save(&mut self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
+        self.core_mut().save(filename)
+    }
+
+    /// Write a string in main buffer
+    fn casing(&mut self, txt: &str) -> String {
+        txt.to_casing(self.setting().casing)
+    }
+
+    fn filename_rif(&self, rif: &RifInst) -> String {
+        format!("{}.{}", rif.name(false), Self::EXT)
+    }
+
+    fn filename_rifmux(&self, rifmux: &RifmuxInst) -> String {
+        format!("{}.{}", &rifmux.inst_name, Self::EXT)
+    }
 }

@@ -61,11 +61,12 @@ Highlighting for SublimeText is available on [github](https://github.com/TheClam
    - [ ] html: view with a sidebar showing the hierarchy.
    - [x] latex
    - [x] mif
- - [ ] Implement base generator for software (from C) :
+ - [x] Implement base generator for software (from C) :
    - [ ] json : both flat (multi file) and hierarchical
    - [ ] svd
    - [ ] IP-XACT
    - [ ] python
+   - [ ] ral
  - [ ] Implement base generator for hardware (from SV):
    - [ ] VHDL
 
@@ -77,10 +78,10 @@ Highlighting for SublimeText is available on [github](https://github.com/TheClam
  - [ ] Support JSON config file: top entry is a target name
  - [ ] Support latex equation in description
  - [ ] Implement a TUI ? (ratatui)
- - [ ] Implement a GUI ? (HTML based)
+ - [x] Implement a GUI (ImGui Based)
  - [ ] Support overlapping register in hardware: need to check exclusive access (RO/WO)
  - [ ] Check enum size fit the field size
- - [ ] Option to add representation value for enum. Syntax could 'NAME = VAL (repr) "description"'
+ - [ ] Option to add representation value for enum. Syntax could be 'NAME = VAL (repr) "description"'. Could be usefull when enum is representing a limited set of integer or real values.
  - [ ] Option to control if clear works without clock enable or not
 
 ## Known Bugs / Edge cases

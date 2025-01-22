@@ -1,6 +1,6 @@
 use crate::rifgen::EnumDef;
 
-use super::{casing::{Casing, ToCasing}, gen_common::{GeneratorBaseSetting, GeneratorCore}, trait_doc::{CellKind, GeneratorDoc, LinkKind, TableKind}};
+use super::{casing::{Casing, ToCasing}, gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore}, trait_doc::{CellKind, GeneratorDoc, LinkKind, TableKind}};
 
 #[allow(dead_code)]
 pub struct GeneratorHtml {
@@ -25,16 +25,25 @@ impl GeneratorHtml {
     }
 }
 
-impl GeneratorDoc for GeneratorHtml {
+impl GeneratorBase for GeneratorHtml {
+
     const EXT : &'static str = "html";
+
+    fn core(&self) -> &GeneratorCore {
+        &self.core
+    }
+
+    fn core_mut(&mut self) -> &mut GeneratorCore {
+        &mut self.core
+    }
+
+}
+
+impl GeneratorDoc for GeneratorHtml {
     const HAS_LAYOUT : bool = true;
     const SHOW_RESET : bool = true;
     const SHOW_TYPE : bool = false;
     const SHOW_SINGLE_REG : bool = true;
-
-    fn core(&mut self) -> &mut GeneratorCore {
-        &mut self.core
-    }
 
     fn set_rif_info(&mut self, _addr_w: u8, data_w: u8, nb_page: usize) {
         self.nb_col = 32 / data_w as usize;

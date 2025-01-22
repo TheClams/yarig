@@ -2,7 +2,7 @@ use std::{collections::HashMap, fs::create_dir_all};
 
 use crate::{comp::comp_inst::{Comp, CompInst, RifInst, RifmuxGroupInst}, parser::remove_rif, rifgen::{EnumDef, FieldSwKind}};
 
-use super::{casing::ToCasing, gen_common::{GeneratorCore, InstDict, RifList}};
+use super::{gen_common::{GeneratorBase, InstDict, RifList}};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[allow(dead_code)]
@@ -62,10 +62,8 @@ impl std::fmt::Display for LinkKind {
 ///   * Second table showing the register layout (field position),
 ///     followed by a description of all fields
 #[allow(dead_code)]
-pub trait GeneratorDoc {
+pub trait GeneratorDoc : GeneratorBase {
 
-    /// File extensions
-    const EXT : &'static str;
     /// Display register layout table
     const HAS_LAYOUT : bool = false;
     /// Show register reset in top summary
@@ -77,58 +75,25 @@ pub trait GeneratorDoc {
     /// Show unused part of a register
     const SHOW_UNUSED : bool = false;
 
-    /// Get reference to the core generator
-    fn core(&mut self) -> &mut GeneratorCore;
-
-    /// Write a string in main buffer
-    fn write(&mut self, txt: &str) {
-        self.core().write(txt);
-    }
-
-    /// Save a string in one of the two stash
-    fn push_stash(&mut self, idx: usize, txt: &str) {
-        self.core().push_stash(idx, txt);
-    }
-
-    /// Write a stash content into main buffer and clear the stash
-    fn pop_stash(&mut self, idx: usize) {
-        self.core().pop_stash(idx);
-    }
-
-    /// Write a stash content into main buffer and clear the stash
-    fn stash_is_empty(&mut self, idx: usize) -> bool {
-        self.core().stash_is_empty(idx)
-    }
-
-    /// Save the main buffer into a file and clear buffer and stash
-    fn save(&mut self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
-        self.core().save(filename)
-    }
-
-    /// Write a string in main buffer
-    fn casing(&mut self, txt: &str) -> String {
-        txt.to_casing(self.core().setting.casing)
-    }
-
     /// Main generator function
     fn gen(&mut self, obj: &Comp) -> Result<(), Box<dyn std::error::Error>> {
         // Create output directory if it does not exist
         create_dir_all(self.core().setting.path.clone())?;
         //
         self.write_header(remove_rif(obj.get_name()));
-        let top_name : &str;
+        let filename;
         match obj {
-            Comp::Rifmux(r) => {
-                top_name = &r.inst_name;
-                let name = remove_rif(top_name);
-                let desc = r.description.get_split();
+            Comp::Rifmux(rifmux) => {
+                filename = self.filename_rifmux(rifmux);
+                let name = remove_rif(&rifmux.inst_name);
+                let desc = rifmux.description.get_split();
                 self.write_rif_title((name,0), desc.0);
                 if let Some(desc_detail) = desc.1 {
                     let desc_detail = self.sanitize(desc_detail);
                     self.write_info(&desc_detail);
                 }
                 // Table with all RIF instances
-                let w = ((r.addr_width+3) >> 2) as usize;
+                let w = ((rifmux.addr_width+3) >> 2) as usize;
                 self.write_table_title(TableKind::Rifmux, "Summary", "rifSummary");
                 self.write_table_row_top_header(TableKind::Rifmux);
                 for k in [CellKind::Addr, CellKind::RifType, CellKind::Inst, CellKind::Desc] {
@@ -136,26 +101,26 @@ pub trait GeneratorDoc {
                     self.write_table_cell_top((TableKind::Rifmux, k), 0, k.label(), "");
                 }
                 self.write_table_row_top_footer();
-                for c in r.components.iter() {
-                    self.add_rifmux_entry(c, w,  0, None, &r.groups);
+                for c in rifmux.components.iter() {
+                    self.add_rifmux_entry(c, w,  0, None, &rifmux.groups);
                 }
                 self.write_table_footer(TableKind::Rifmux);
                 // Add description of all rif types
-                let rif_list = RifList::new(r);
+                let rif_list = RifList::new(rifmux);
                 for (i,rif) in rif_list.iter().enumerate() {
                     self.add_rif(rif, i+1, true)?;
                 }
             }
-            Comp::Rif(r) => {
-                top_name = &r.type_name; // TODO: apply suffix
-                self.add_rif(r, 1, false)?;
+            Comp::Rif(rif) => {
+                filename = self.filename_rif(rif);
+                self.add_rif(rif, 1, false)?;
             },
             // Nothing todo for external RIF
             Comp::External(_) => return Ok(()),
         }
         self.write_footer(obj.get_name());
         // Write file
-        self.save(&format!("{top_name}.{}", Self::EXT))
+        self.save(&filename)
     }
 
     /// Add rifmux row in a table composed of 4 column:
@@ -485,7 +450,7 @@ pub trait GeneratorDoc {
 
     /// Write component/page information
     fn write_info(&mut self, info: &str) {
-        self.core().write(info)
+        self.core_mut().write(info)
     }
 
     /// Write a table header
