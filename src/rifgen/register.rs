@@ -228,6 +228,7 @@ impl RegDefOrIncl {
 
 }
 
+#[derive(Debug)]
 pub struct RegIncludePath<'a> {
     pub rif : &'a str,
     pub page: &'a str,

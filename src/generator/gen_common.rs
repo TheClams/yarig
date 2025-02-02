@@ -1,25 +1,62 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, ops::Deref, path::PathBuf};
 
-use crate::{comp::comp_inst::{Comp, RifFieldInst, RifInst, RifRegInst, RifmuxInst}, parser::remove_rif, rifgen::SuffixInfo};
+use crate::{
+    comp::comp_inst::{Comp, RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxInst},
+    parser::remove_rif,
+    rifgen::SuffixInfo
+};
 
 use super::casing::{Casing, ToCasing};
 
-pub type InstDict = HashMap<String,Vec<u16>>;
+pub struct InstDict(HashMap<String,Vec<u16>>);
+
+impl InstDict {
+    pub fn new(pages: &[RifPageInst], is_public: bool) -> Self {
+        let mut dict : HashMap<String,Vec<u16>> = HashMap::new();
+        for page in pages.iter() {
+            for (idx,reg) in page.regs.iter().filter(|r| !(is_public && r.visibility.is_hidden())).enumerate() {
+                let n = reg.expanded_type_name();
+                dict.entry(n).or_default().push(idx as u16);
+            }
+        }
+        InstDict(dict)
+    }
+
+    pub fn first_inst<'a>(&self, page: &'a RifPageInst, reg: &RifRegInst) -> &'a RifRegInst {
+        let reg_decl_idx = self
+            .get(&reg.expanded_type_name())
+            .expect("all register type should be collected !")
+            .first().expect("register instance list should not be empty !");
+        page.regs
+            .get(*reg_decl_idx as usize)
+            .expect("register index should exist in the page !")
+    }
+}
+
+impl Deref for InstDict {
+    type Target = HashMap<String,Vec<u16>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 pub struct RifList<'a>(Vec<&'a RifInst>);
 
 impl<'a> RifList<'a> {
 
-    pub fn new(rifmux: &'a RifmuxInst) -> Self {
+    pub fn new(rifmux: &'a RifmuxInst, deep: bool) -> Self {
         let mut rd = RifList(Vec::with_capacity(rifmux.components.len()));
-        rd.scan(rifmux);
+        rd.scan(rifmux, deep);
         rd
     }
 
-    pub fn scan(&mut self, rifmux: &'a RifmuxInst) {
+    pub fn scan(&mut self, rifmux: &'a RifmuxInst, deep: bool) {
         for comp in rifmux.components.iter() {
             match &comp.inst {
-                Comp::Rifmux(c) => self.scan(c),
+                Comp::Rifmux(c) => if deep {
+                    self.scan(c, true)
+                },
                 Comp::Rif(c) =>
                     if !self.0.iter().any(|x| x.type_name==c.type_name) {
                         self.0.push(c);
@@ -158,15 +195,15 @@ impl GeneratorCore {
     }
 
     /// Get a field name with proper casing
-    pub fn get_field_name(&self, r: &RifRegInst, f: &RifFieldInst) -> String {
+    pub fn get_field_name(&self, r: &RifRegInst, field: &RifFieldInst) -> String {
         // println!("[get_field_name] {}.{} : rsvd={}, field array = {:?}, reg array={:?}",
         //     r.reg_name, f.name, f.is_reserved(), f.array, r.array);
-        if f.is_reserved() && self.setting.privacy.is_public() {
-            format!("rsvd{}",f.lsb)
-        } else if f.array.dim() > 1 || r.array.dim()==0 || r.array.is_inst() {
-            f.name_flat().to_casing(self.setting.casing)
+        if field.is_reserved() && self.setting.privacy.is_public() {
+            format!("rsvd{}",field.lsb)
+        } else if field.array.dim() > 1 || r.array.dim()==0 || r.array.is_inst() {
+            field.name_flat().to_casing(self.setting.casing)
         } else {
-            f.name.to_casing(self.setting.casing)
+            field.name.to_casing(self.setting.casing)
         }
     }
 

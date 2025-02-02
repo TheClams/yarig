@@ -1,8 +1,12 @@
-use std::{collections::HashMap, fs::create_dir_all};
+use std::fs::create_dir_all;
 
-use crate::{comp::comp_inst::{Comp, CompInst, RifInst, RifmuxGroupInst}, parser::remove_rif, rifgen::{EnumDef, FieldSwKind}};
+use crate::{
+    comp::comp_inst::{Comp, CompInst, RifInst, RifmuxGroupInst},
+    parser::remove_rif,
+    rifgen::{EnumDef, FieldSwKind}
+};
 
-use super::{gen_common::{GeneratorBase, InstDict, RifList}};
+use super::gen_common::{GeneratorBase, InstDict, RifList};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[allow(dead_code)]
@@ -106,7 +110,7 @@ pub trait GeneratorDoc : GeneratorBase {
                 }
                 self.write_table_footer(TableKind::Rifmux);
                 // Add description of all rif types
-                let rif_list = RifList::new(rifmux);
+                let rif_list = RifList::new(rifmux, true);
                 for (i,rif) in rif_list.iter().enumerate() {
                     self.add_rif(rif, i+1, true)?;
                 }
@@ -166,19 +170,18 @@ pub trait GeneratorDoc : GeneratorBase {
             let desc_detail = self.sanitize(desc_detail);
             self.write_info(&desc_detail);
         }
-        let inst_dict = self.add_reg_summary(rif);
+        self.add_reg_summary(rif);
         if has_top {
             self.add_link(LinkKind::Top, "rifSummary");
         }
-        self.add_reg_detail(rif, &inst_dict, idx)
+        self.add_reg_detail(rif, idx)
     }
 
     /// Add register summary and build disctionnary of instance (TBC if still needed)
-    fn add_reg_summary(&mut self, rif: &RifInst) -> InstDict {
+    fn add_reg_summary(&mut self, rif: &RifInst) {
         let rif_name = remove_rif(&rif.type_name);
         let addr_w = ((rif.addr_width+3)>>2) as usize;
         let data_w = ((rif.data_width+3)>>2) as usize;
-        let mut dict : InstDict = HashMap::new();
         let is_public = self.core().setting.privacy.is_public();
         for page in rif.pages.iter() {
             // TODO: check hidden
@@ -195,7 +198,7 @@ pub trait GeneratorDoc : GeneratorBase {
                 self.write_table_cell_top((TableKind::Rifmux, k), 0, k.label(), "");
             }
             self.write_table_row_top_footer();
-            for (idx,reg) in page.regs.iter().filter(|r| !(is_public && r.visibility.is_hidden())).enumerate() {
+            for reg in page.regs.iter().filter(|r| !(is_public && r.visibility.is_hidden())) {
                 let reg_type = self.casing(&reg.expanded_type_name());
                 let reg_name = self.casing(&reg.name_i());
                 let addr = page.addr+reg.addr;
@@ -211,21 +214,20 @@ pub trait GeneratorDoc : GeneratorBase {
                 }
                 self.write_table_cell((TableKind::Page, CellKind::Desc), 0, &self.sanitize(reg.get_desc_short()), "");
                 self.write_table_row_footer();
-                dict.entry(reg_type).or_default().push(idx as u16);
             }
             self.write_table_footer(TableKind::Page);
         }
-        dict
     }
 
 
     /// Add register details: table with register instance followed by table with fields description
-    fn add_reg_detail(&mut self, rif: &RifInst, inst_dict: &InstDict, idx_c: usize)  -> Result<(),String> {
+    fn add_reg_detail(&mut self, rif: &RifInst, idx_c: usize)  -> Result<(),String> {
         let rif_name = remove_rif(&rif.type_name);
         let addr_w = ((rif.addr_width+3)>>2) as usize;
         let data_w = ((rif.data_width+3)>>2) as usize;
         let is_public = self.core().setting.privacy.is_public();
         let reg_headers = [CellKind::Addr, CellKind::Inst, CellKind::Reset, CellKind::Desc];
+        let inst_dict = InstDict::new(&rif.pages, is_public);
         for (idx_p, page) in rif.pages.iter().enumerate() {
             let page_name = &page.name;
             let mut id_page = format!("regmap.{rif_name}");
@@ -243,7 +245,7 @@ pub trait GeneratorDoc : GeneratorBase {
                     continue;
                 }
                 // Check not already defined in case of compact display
-                let reg_type = self.casing(&reg.expanded_type_name());
+                let reg_type = reg.expanded_type_name();
                 let Some(instances) = inst_dict.get(&reg_type) else {
                     return Err(format!("Unable to find register type {rif_name}.{reg_type} in instance dict: {:?}", inst_dict.keys().collect::<Vec<&String>>()))
                 };
@@ -255,6 +257,7 @@ pub trait GeneratorDoc : GeneratorBase {
                 // Title
                 idx_r += 1;
                 let desc = reg.base_description.get_split();
+                let reg_type = self.casing(&reg_type);
                 self.write_reg_title((rif_name, idx_c), (page_name, idx_p+1), (&reg_type, idx_r), &self.sanitize(desc.0));
                 if let Some(desc_detail) = desc.1 {
                     self.write_info(&self.sanitize(desc_detail));

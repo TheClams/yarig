@@ -12,6 +12,7 @@ use yarig::{
         gen_latex::GeneratorLatex,
         gen_mif::GeneratorMif,
         gen_sv::GeneratorSv,
+        gen_ral::GeneratorRal,
     },
     parser::{parser_expr::ParamValues, RifGenSrc},
     rifgen::SuffixInfo
@@ -46,6 +47,9 @@ struct RifGenArgs{
     /// Output path for hardware output (SV, VHDL)
     #[arg(long, default_value_t = String::from("rtl"))]
     output_rtl: String,
+    /// Output path for simulation output (RAL)
+    #[arg(long, default_value_t = String::from("sim"))]
+    output_sim: String,
     /// Public documentation (hide all private registers/fields)
     #[arg(long, action)]
     public: bool,
@@ -53,15 +57,22 @@ struct RifGenArgs{
     #[arg(short = 'P', value_parser = parse_key_val::<String, isize>)]
     parameters: Vec<(String, isize)>,
     /// Set suffix value
-    // #[arg(short = 'S', value_parser = parse_key_val::<String, isize>)]
     #[arg(short = 'S', long)]
     suffix: Option<SuffixInfo>,
+    /// Base class for RAL target
+    #[arg(long)]
+    ral_class: Option<String>,
+    /// Name of macro to create RAL register block
+    #[arg(long)]
+    ral_macro: Option<String>,
 }
 
 #[derive(ValueEnum, Debug, Clone)]
 enum RifGenTargets {
     /// SystemVerilog
     Sv,
+    /// Register Abstraction Layer (UVM)
+    Ral,
     /// VHDL
     Vhdl,
     /// C Header
@@ -183,6 +194,13 @@ fn main() {
                                     let mut gen = GeneratorSv::new(setting.clone());
                                     if let Err(e) = gen.gen(o) {
                                         println!(" -> SV generation failed: {}", e)
+                                    }
+                                }
+                                RifGenTargets::Ral => {
+                                    setting.path = args.output_sim.clone();
+                                    let mut gen = GeneratorRal::new(setting.clone(), args.ral_class.clone(), args.ral_macro.clone());
+                                    if let Err(e) = gen.gen(o) {
+                                        println!(" -> RAL generation failed: {}", e)
                                     }
                                 }
                                 t => println!("Target {t:?} not supported -> skipping"),

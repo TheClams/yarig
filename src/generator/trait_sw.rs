@@ -7,7 +7,7 @@ use crate::{
 
 use super::{
     casing::{Casing, ToCasing},
-    gen_common::{GeneratorBase, RifList}
+    gen_common::{GeneratorBase, InstDict, RifList}
 };
 
 /// Trait to implement generator for software control (C, python, ...)
@@ -23,6 +23,12 @@ pub trait GeneratorSw : GeneratorBase {
     const HAS_UNUSED : bool = false;
     /// Create one structure per page instead of grouping all register and ignoring the page structure
     const INST_BY_PAGE : bool = false;
+    /// Include pagename inside basename of registers
+    const INC_PAGENAME : bool = false;
+    /// Create only one register instance per array (false to create instance per element)
+    const INST_ARRAY : bool = false;
+    /// Instantiate rifmux instead of flatenning all rifs instance
+    const IS_HIERARCHICAL : bool = false;
 
     /// Main generator function
     fn gen(&mut self, obj: &Comp) -> Result<(), Box<dyn std::error::Error>> {
@@ -30,7 +36,7 @@ pub trait GeneratorSw : GeneratorBase {
         create_dir_all(self.setting().path.clone())?;
         match obj {
             Comp::Rifmux(rifmux) => {
-                let riflist = RifList::new(rifmux);
+                let riflist = RifList::new(rifmux, !Self::IS_HIERARCHICAL);
                 if !Self::SINGLE_FILE && !self.setting().gen_inc.is_empty() {
                     let gen_all = self.setting().gen_inc.first()==Some(&"*".to_owned());
                     for rif in riflist.iter() {
@@ -50,10 +56,11 @@ pub trait GeneratorSw : GeneratorBase {
 
     /// Generate structure associated to a RIF
     fn gen_rif(&mut self, rif: &RifInst, is_top: bool) -> Result<(), Box<dyn std::error::Error>> {
-        self.set_rif_info(&rif.type_name, rif.addr_width, rif.data_width, rif.pages.len());
+        self.set_rif_info(rif);
         self.write_rif_header(is_top);
         let basename = remove_rif(&rif.type_name);
         let nb_byte = (rif.data_width >> 3) as u64;
+        let is_public = self.setting().privacy.is_public();
         // Declare types for enum
         if Self::HAS_ENUM {
             for def in rif.enum_defs.iter().filter(|d| !d.name.starts_with("doc:")) {
@@ -70,20 +77,22 @@ pub trait GeneratorSw : GeneratorBase {
                 self.write_enum_footer(etn);
             }
         }
+        // Collect instances to easily get the one used in declaration
+        let inst_dict = InstDict::new(&rif.pages, is_public);
         // Declare one struct per register type
-        let mut pages = rif.pages.iter().filter(|p| !p.is_external()).peekable();
-        while let Some(page) = pages.next() {
+        for (idx, page) in rif.pages.iter().filter(|p| !p.is_external()).enumerate() {
             let pname =
-                if rif.pages.len() > 1 {format!("{}_{}", basename,page.name)}
+                if Self::INC_PAGENAME && rif.pages.len() > 1 {format!("{}_{}", basename,page.name)}
                 else {basename.to_owned()};
             for reg in page.iter_reg_type().filter(|r| r.sw_access!=Access::NA) {
                 let max_len = reg.fields.iter()
                     .map(|f| self.get_field_name(reg,f).len())
                     .max().expect("Registers should have fields");
                 self.set_max_field_name_len(max_len);
-                self.write_reg_header(&pname, &reg.reg_type, reg.base_description.get());
+                self.write_reg_header(&pname, &reg.reg_type, reg.base_description.get(), &reg.incl);
                 let mut pos_l = 0;
-                for f in reg.fields.iter() {
+                let mut fields = reg.fields.iter().filter(|f| !(f.visibility.is_hidden() && is_public)).peekable();
+                while let Some(f) = fields.next() {
                     if pos_l != f.lsb {
                         self.write_unused_field_decl(&pname, reg, pos_l, f.lsb - pos_l);
                     }
@@ -101,12 +110,18 @@ pub trait GeneratorSw : GeneratorBase {
             let len_name = page.regs.iter().map(|r| r.reg_name.len()).max().expect("Page should have registers");
             let len_type = 6+page.regs.iter().map(|r| r.reg_type.len()).max().expect("Page should have registers");
             self.set_max_reg_name_len(len_name, len_type);
-            self.write_page_header(&pname, &page.description);
+            // Call page header only once on first page if instance are not grouped by page
+            if idx==0 || Self::INST_BY_PAGE {
+                self.write_page_header(&pname, &page.description);
+            }
             let mut overlap = false;
             let mut addr = 0;
             // TODO: handle visibility ?
-            let mut regs = page.regs.iter().filter(|r| r.array.idx()==0).peekable();
+            let mut regs = page.regs.iter()
+                .filter(|r| (r.array.idx()==0 || !Self::INST_ARRAY) && !r.sw_access.is_na())
+                .peekable();
             while let Some(reg) = regs.next() {
+                // println!("Register instance: {} ({}) @ {} | {:?}", reg.reg_name, reg.reg_type, reg.addr, reg.array );
                 // Detect end of overlap
                 if overlap && reg.addr >= addr {
                     self.write_reginst_overlap_footer();
@@ -125,9 +140,8 @@ pub trait GeneratorSw : GeneratorBase {
                 if reg.addr > addr {
                     self.write_reginst_unused(&pname, addr, (reg.addr - addr) / nb_byte);
                 }
-                self.write_reginst(&pname, page.addr, reg);
-                    // &reg.reg_type, &reg.reg_name, reg.array.dim(),
-                    // reg.sw_access, reg.reset, desc);
+                let reg_1st = inst_dict.first_inst(page, reg);
+                self.write_reginst(&pname, page.addr, reg, reg_1st);
 
                 // Calculate expected next address
                 let nb = reg.array.dim().max(1);
@@ -137,7 +151,10 @@ pub trait GeneratorSw : GeneratorBase {
             if overlap {
                 self.write_reginst_overlap_footer();
             }
-            self.write_page_footer(&pname, pages.peek().is_none());
+            let is_last = idx==rif.pages.len()-1;
+            if is_last || Self::INST_BY_PAGE {
+                self.write_page_footer(&pname, is_last);
+            }
         }
         // End the RIF declaration
         self.write_rif_footer();
@@ -148,8 +165,8 @@ pub trait GeneratorSw : GeneratorBase {
         Ok(())
     }
 
-    /// Set the width of address/data for current RIF
-    fn set_rif_info(&mut self, name: &str, addr_w: u8, data_w: u8, nb_page: usize);
+    /// Save information for the current RIF
+    fn set_rif_info(&mut self, rif: &RifInst);
 
     /// Set the max length  of field name inside a register (for pretty formatting)
     fn set_max_field_name_len(&mut self, _len: usize) {}
@@ -164,39 +181,46 @@ pub trait GeneratorSw : GeneratorBase {
     fn write_rif_footer(&mut self);
 
     /// Write enum start of declaration statement
-    fn write_enum_header(&mut self, type_name: &str, desc: &str);
+    fn write_enum_header(&mut self, _type_name: &str, _desc: &str) {}
 
     /// Write enum entry
-    fn write_enum_entry(&mut self, entry: &EnumEntry , is_last: bool);
+    fn write_enum_entry(&mut self, _entry: &EnumEntry , _is_last: bool) {}
 
     /// Write enum end of declaration
-    fn write_enum_footer(&mut self, type_name: &str);
+    fn write_enum_footer(&mut self, _type_name: &str) {}
 
     /// Write register start of declaration statement
-    fn write_reg_header(&mut self, basename: &str, reg_type: &str, desc: &str);
+    fn write_reg_header(&mut self, basename: &str, reg_type: &str, desc: &str, incl: &Option<String>);
 
     /// Write register end of declaration
     fn write_reg_footer(&mut self,  basename: &str, reg_type: &str);
 
     /// Write register end of declaration
-    fn write_field_decl(&mut self, pname: &str, r: &RifRegInst, field: &RifFieldInst);
+    fn write_field_decl(&mut self, basename: &str, reg: &RifRegInst, field: &RifFieldInst);
 
-    fn get_field_name(&self, r: &RifRegInst, f: &RifFieldInst) -> String {
+    fn get_field_name(&self, reg: &RifRegInst, f: &RifFieldInst) -> String {
         if f.is_reserved() && self.setting().privacy.is_public() {
             format!("rsvd{}",f.lsb)
-        } else if f.array.dim() > 1 || r.array.dim()==0 || r.array.is_inst() {
+        } else if f.array.dim() > 1 || reg.array.dim()==0 || reg.array.is_inst() {
             f.name_flat()
         } else {
             f.name.to_owned()
         }
     }
 
+    fn get_field_iter<'a>(&self, reg: &'a RifRegInst, ) -> impl std::iter::Iterator<Item = &'a RifFieldInst> {
+        reg.fields.iter()
+            .filter(|f| {
+                !(f.visibility.is_hidden() && self.setting().privacy.is_public())
+            })
+            .peekable()
+    }
 
     /// Write register end of declaration
-    fn write_unused_field_decl(&mut self, pname: &str, reg: &RifRegInst, lsb: u8, width: u8) {
+    fn write_unused_field_decl(&mut self, basename: &str, reg: &RifRegInst, lsb: u8, width: u8) {
         if Self::HAS_UNUSED {
             let field = RifFieldInst::new_unused(lsb, width);
-            self.write_field_decl(pname, reg, &field);
+            self.write_field_decl(basename, reg, &field);
         }
     }
 
@@ -207,13 +231,13 @@ pub trait GeneratorSw : GeneratorBase {
     fn write_page_footer(&mut self, name: &str, is_last: bool);
 
     /// Write the start of register instances overlap
-    fn write_reginst_overlap_header(&mut self);
+    fn write_reginst_overlap_header(&mut self) {}
 
     /// Write the end of register instances overlap
-    fn write_reginst_overlap_footer(&mut self);
+    fn write_reginst_overlap_footer(&mut self) {}
 
     /// Write register instances
-    fn write_reginst(&mut self, basename: &str, base_addr: u64, reg: &RifRegInst);
+    fn write_reginst(&mut self, basename: &str, base_addr: u64, reg: &RifRegInst, reg_1st: &RifRegInst);
 
     /// Write unused register instances
     /// Default to nothing
@@ -221,7 +245,10 @@ pub trait GeneratorSw : GeneratorBase {
 
     /// Generate structure associated to a RIFmux
     fn gen_rifmux(&mut self, rifmux: &RifmuxInst, rif_list: &RifList, _is_top: bool) -> Result<(), Box<dyn std::error::Error>> {
-        self.write_rifmux_header(&rifmux.inst_name, rif_list);
+        let rifmux_list : Vec<&RifmuxInst> = rifmux.components.iter()
+            .filter_map(|c| if let Comp::Rifmux(m) = &c.inst {Some(m)} else {None})
+            .collect();
+        self.write_rifmux_header(&rifmux.inst_name, rif_list, &rifmux_list);
         self.scan_rifmux(rifmux, "", 0)?;
         self.write_rifmux_footer(&rifmux.inst_name);
         self.save(&self.filename_rifmux(rifmux))
@@ -235,18 +262,25 @@ pub trait GeneratorSw : GeneratorBase {
             format!("{}_",top_name)
         };
         for comp in rifmux.components.iter() {
+            let addr = offset + comp.addr;
             match &comp.inst {
                 Comp::Rifmux(r) => {
-                    let comp_name = format!("{prefix}{}",r.inst_name.to_casing(Casing::Pascal));
-                    self.scan_rifmux(r, &comp_name, offset + comp.addr)?;
+                    if Self::IS_HIERARCHICAL {
+                        self.write_rifmux_inst(r, addr)
+                    } else {
+                        let comp_name = format!("{prefix}{}",r.inst_name.to_casing(Casing::Pascal));
+                        self.scan_rifmux(r, &comp_name, addr)?;
+                    }
                 }
                 Comp::Rif(r) => {
-                    self.set_rif_info(&r.type_name, r.addr_width, r.data_width, r.pages.len());
+                    self.set_rif_info(r);
                     let mut pages = r.pages.iter().peekable();
                     while let Some(page) = pages.next() {
                         let desc = if page.description.is_empty() {&r.description} else {&page.description};
-                        let addr = page.addr + comp.addr + offset;
-                        self.write_rifinst_ref(&prefix, &comp.group, r, &page.name, addr, desc, pages.peek().is_none());
+                        self.write_rif_inst(&prefix, &comp.group, r, &page.name, page.addr + addr, desc, pages.peek().is_none());
+                        if !Self::INST_BY_PAGE {
+                            break;
+                        }
                     }
                     if Self::SINGLE_FILE {
                         self.gen_rif(r,false)?;
@@ -259,12 +293,15 @@ pub trait GeneratorSw : GeneratorBase {
     }
 
     /// Write RIF start of declaration statement
-    fn write_rifmux_header(&mut self, name: &str, rif_list: &RifList);
+    fn write_rifmux_header(&mut self, name: &str, rif_list: &RifList, rifmux_list: &[&RifmuxInst]);
 
     /// Write RIF end of declaration
     fn write_rifmux_footer(&mut self, name: &str);
 
-    /// Write RIF end of declaration
-    fn write_rifinst_ref(&mut self, prefix: &str, group: &str, rif_inst: &RifInst, page_name: &str, addr: u64, desc: &Description, is_last: bool);
+    /// Write RIF instance
+    fn write_rif_inst(&mut self, prefix: &str, group: &str, rif_inst: &RifInst, page_name: &str, addr: u64, desc: &Description, is_last: bool);
+
+    /// Write RIF mux instance
+    fn write_rifmux_inst(&mut self, _rifmux_inst: &RifmuxInst, _addr: u64) {}
 
 }

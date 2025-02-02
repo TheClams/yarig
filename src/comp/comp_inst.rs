@@ -377,7 +377,8 @@ impl RifPageInst {
                         continue;
                     }
                 }
-                if let Some((def,intr_reg_kind,idx)) = page.find_regdef(&reg.type_name,rifs.rifs ) {
+                if let Some(regdef) = page.find_regdef(&reg.type_name,rifs.rifs ) {
+                    // (regdef.def,regdef.intr_kind, regdef.intr_idx)
                     let addr = inst_addr.updt(reg.addr, reg.addr_kind);
                     // println!("Reg {} with {:?}({:04x}) -> {:04x}", reg.inst_name, reg.addr_kind, reg.addr, addr);
 
@@ -387,12 +388,14 @@ impl RifPageInst {
                         inst_addr.decr(); // Pre-decrement because address will be incremented for each array element
                         // println!("Array of size {nb} found for {} (Manual)", reg.inst_name);
                         for i in 0..nb {
-                            p.add_reg(RifRegInst::new(def, inst_addr.incr(), Some(reg), RegInstArgs::Arr(ArrayIdx::Inst(i, nb)), rifs)?);
+                            let args = RegInstArgs::Arr(ArrayIdx::Inst(i, nb));
+                            p.add_reg(RifRegInst::new(regdef.def, inst_addr.incr(), Some(reg), args, regdef.incl.to_owned(), rifs)?);
                         }
                     }
                     // For non-array simply add the register with the optional interrupt information
                     else {
-                        p.add_reg(RifRegInst::new(def, addr,  Some(reg), RegInstArgs::Intr(intr_reg_kind,idx, false), rifs)?);
+                        let args = RegInstArgs::Intr(regdef.intr_kind, regdef.intr_idx, false);
+                        p.add_reg(RifRegInst::new(regdef.def, addr,  Some(reg), args, regdef.incl, rifs)?);
                     }
                 } else {
                     return Err(format!("Missing definition for {}", reg.type_name));
@@ -400,6 +403,10 @@ impl RifPageInst {
             }
         }
         p.regs.sort_by_key(|r| r.addr);
+        // Create LUT regrouping register by type
+        for (i,r) in p.regs.iter().enumerate() {
+            p.reg_lut.entry(&r.reg_type).push(i);
+        }
         Ok(p)
     }
 
@@ -435,18 +442,18 @@ impl RifPageInst {
                     // For interrupt register create one register instance per optional property (enable/mask/pending)
                     if !d.interrupt.is_empty() {
                         for (idx, info) in d.interrupt.iter().enumerate() {
-                            self.add_reg(RifRegInst::new(d, addr, inst, RegInstArgs::Intr(InterruptRegKind::Base, idx, true), rifs)?);
+                            self.add_reg(RifRegInst::new(d, addr, inst, RegInstArgs::Intr(InterruptRegKind::Base, idx, true), None, rifs)?);
                             addr += addr_incr as u64;
                             if info.enable.is_some() {
-                                self.add_reg(RifRegInst::new(d, addr, inst, RegInstArgs::Intr(InterruptRegKind::Enable, idx, true), rifs)?);
+                                self.add_reg(RifRegInst::new(d, addr, inst, RegInstArgs::Intr(InterruptRegKind::Enable, idx, true), None, rifs)?);
                                 addr += addr_incr as u64;
                             }
                             if info.mask.is_some() {
-                                self.add_reg(RifRegInst::new(d, addr, inst, RegInstArgs::Intr(InterruptRegKind::Mask, idx, true), rifs)?);
+                                self.add_reg(RifRegInst::new(d, addr, inst, RegInstArgs::Intr(InterruptRegKind::Mask, idx, true), None, rifs)?);
                                 addr += addr_incr as u64;
                             }
                             if info.pending {
-                                self.add_reg(RifRegInst::new(d, addr, inst, RegInstArgs::Intr(InterruptRegKind::Pending, idx, true), rifs)?);
+                                self.add_reg(RifRegInst::new(d, addr, inst, RegInstArgs::Intr(InterruptRegKind::Pending, idx, true), None, rifs)?);
                                 addr += addr_incr as u64;
                             }
                         }
@@ -455,11 +462,11 @@ impl RifPageInst {
                         if nb > 1 {
                             // println!("Array of size {nb} found for {} (Auto)", d.name);
                             for i in 0..nb {
-                                self.add_reg(RifRegInst::new(d, addr, inst, RegInstArgs::Arr(ArrayIdx::Def(i, nb)), rifs)?);
+                                self.add_reg(RifRegInst::new(d, addr, inst, RegInstArgs::Arr(ArrayIdx::Def(i, nb)), None, rifs)?);
                                 addr += addr_incr as u64;
                             }
                         } else {
-                            self.add_reg(RifRegInst::new(d, addr, inst, RegInstArgs::Basic, rifs)?);
+                            self.add_reg(RifRegInst::new(d, addr, inst, RegInstArgs::Basic, None, rifs)?);
                             addr += addr_incr as u64;
                         }
                     }
@@ -470,10 +477,8 @@ impl RifPageInst {
     }
 
     /// Add a new register instance
-    /// Fill a look-up table with indexes of registers grouped by type
     pub fn add_reg(&mut self, inst: Option<RifRegInst>) {
         if let Some(inst) = inst {
-            self.reg_lut.entry(&inst.reg_type).push(self.regs.len());
             self.regs.push(inst);
         }
     }
@@ -585,6 +590,7 @@ pub struct RifRegInst {
     pub array: ArrayIdx,
     pub group_idx: usize,
     pub visibility: Visibility,
+    pub incl: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -594,6 +600,7 @@ impl RifRegInst {
         addr: u64,
         inst: Option<&RegInst>,
         args: RegInstArgs,
+        incl: Option<String>,
         rifs: &mut RifsInfo,
     ) -> Result<Option<Self>, String> {
         let inst_name: String;
@@ -650,6 +657,7 @@ impl RifRegInst {
             fields: Vec::new(),
             array : if let RegInstArgs::Arr(idx) = args {idx} else {ArrayIdx::Def(0,0)},
             visibility: def.visibility,
+            incl
         };
         let mut next_lsb = 0;
         for f in def.fields.iter() {
@@ -849,6 +857,7 @@ pub struct RifFieldInst {
     pub reset: ResetVal,
     pub sw_kind: FieldSwKind,
     pub hw_kind: Vec<FieldHwKind>,
+    pub hw_access: Access,
     pub visibility: Visibility,
     pub enum_kind: EnumKind,
     pub partial: (Option<u16>, u16),
@@ -925,6 +934,7 @@ impl RifFieldInst {
             reset,
             sw_kind: field.sw_kind.to_owned(),
             hw_kind,
+            hw_access: field.hw_acc,
             visibility: field.visibility,
             enum_kind: field.enum_kind.clone(),
             limit: field.limit.clone(),
@@ -944,6 +954,7 @@ impl RifFieldInst {
             reset: ResetVal::Unsigned(0),
             sw_kind: FieldSwKind::ReadOnly,
             hw_kind: Vec::new(),
+            hw_access: Access::RO,
             visibility: Visibility::Unused,
             enum_kind: EnumKind::None,
             partial: (None, 0),
@@ -1025,6 +1036,11 @@ impl RifFieldInst {
         } else {
             self.name.to_owned()
         }
+    }
+
+    /// return reset value on 128b
+    pub fn reset(&self) -> u128 {
+        self.reset.to_u128(self.width)
     }
 }
 

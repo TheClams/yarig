@@ -79,7 +79,7 @@ impl GeneratorSv {
                 self.gen_rifmux(rifmux)?;
                 // Generate include file
                 if !self.base_settings.gen_inc.is_empty() {
-                    let rif_list = RifList::new(rifmux);
+                    let rif_list = RifList::new(rifmux, true);
                     for rif in rif_list.iter() {
                         if !self.base_settings.gen_inc.contains(&rif.inst_name) && self.base_settings.gen_inc.first()!=Some(&"*".to_owned()) {
                             continue;

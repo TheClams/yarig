@@ -54,6 +54,11 @@ impl Access {
             Access::WO | Access::NA => false,
         }
     }
+
+    /// True if access is NA
+    pub fn is_na(&self) -> bool {
+        matches!(self, Access::NA)
+    }
 }
 
 impl From<&FieldSwKind> for Access {
@@ -303,6 +308,10 @@ impl FieldSwKind {
 
     pub fn is_pulse_comb(&self) -> bool {
         matches!(self, FieldSwKind::W1Pulse(false,_))
+    }
+
+    pub fn is_ro(&self) -> bool {
+        matches!(self, FieldSwKind::ReadOnly | FieldSwKind::ReadClr)
     }
 
     pub fn is_wo(&self) -> bool {

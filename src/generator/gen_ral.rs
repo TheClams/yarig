@@ -1,0 +1,244 @@
+use crate::{comp::comp_inst::{RifFieldInst, RifInst, RifRegInst, RifmuxInst}, parser::remove_rif, rifgen::Description};
+
+use super::{
+    gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore, RifList},
+    trait_sw::GeneratorSw,
+};
+
+
+pub struct GeneratorRal {
+    /// Base structure of all generators
+    core: GeneratorCore,
+    /// Name of the base class for register block
+    ral_class : String,
+    /// Name of macro to instantiate register block
+    ral_macro : Option<String>,
+    /// Current Component name (Rifmux or rif)
+    comp_name : String,
+    /// Current RIF data bus width
+    data_width : u8,
+    /// Flag when current register is defined in another rif
+    reg_is_incl : bool,
+}
+
+
+impl GeneratorRal {
+
+    pub fn new(setting: GeneratorBaseSetting, ral_class: Option<String>, ral_macro: Option<String>) -> Self {
+        GeneratorRal {
+            core: GeneratorCore::new(1,setting),
+            ral_class: ral_class.unwrap_or("uvm_reg_block".to_owned()),
+            ral_macro,
+            comp_name: "".to_owned(),
+            data_width: 32,
+            reg_is_incl: false,
+        }
+    }
+
+    fn field_acc(field: &RifFieldInst) -> &str {
+        if field.sw_kind.is_ro()      {"\"RO\""}
+        else if field.sw_kind.is_wo() {"\"WO\""}
+        else                          {"\"RW\""}
+    }
+
+}
+
+impl GeneratorBase for GeneratorRal {
+
+    const EXT : &'static str = "sv";
+
+    fn core(&self) -> &GeneratorCore {
+        &self.core
+    }
+
+    fn core_mut(&mut self) -> &mut GeneratorCore {
+        &mut self.core
+    }
+
+    fn filename_rif(&self, rif: &RifInst) -> String {
+        format!("ral_{}.{}", rif.name(false) , Self::EXT)
+    }
+
+    fn filename_rifmux(&self, rif: &RifmuxInst) -> String {
+        format!("ral_{}.{}", rif.type_name , Self::EXT)
+    }
+
+}
+
+impl GeneratorSw for GeneratorRal {
+    const HAS_ENUM        : bool = false;
+    const SINGLE_FILE     : bool = false;
+    const HAS_UNUSED      : bool = false;
+    const INST_BY_PAGE    : bool = false;
+    const INC_PAGENAME    : bool = false;
+    const INST_ARRAY      : bool = false;
+    const IS_HIERARCHICAL : bool = true;
+
+    // TODO: move into generatorCore, those infos will be often usefull
+    fn set_rif_info(&mut self, rif: &RifInst) {
+        self.data_width = rif.data_width;
+        self.comp_name = rif.type_name.to_owned().to_lowercase();
+    }
+
+    fn write_rif_header(&mut self, _is_top: bool) {
+        let name_uc = self.comp_name.to_uppercase();
+        self.write(&format!("`ifndef RAL_{name_uc}\n"));
+        self.write(&format!("`define RAL_{name_uc}\n"));
+        self.write("\nimport uvm_pkg::*;\n\n");
+    }
+
+    fn write_rif_footer(&mut self) {
+        self.write(&format!("`endif // RAL_{}\n", self.comp_name.to_uppercase()));
+    }
+
+    fn write_reg_header(&mut self, _basename: &str, reg_type: &str, _desc: &str, incl: &Option<String>) {
+        let reg_type = reg_type.to_lowercase();
+        let baseclass =
+            if let Some(rif) = incl {
+                self.reg_is_incl = true;
+                format!("ral_reg_{rif}_{reg_type}")
+            }
+            else {
+                self.reg_is_incl = false;
+                "uvm_reg".to_owned()
+            };
+        self.write(&format!("class ral_reg_{}_{reg_type} extends {baseclass};\n",
+            remove_rif(&self.comp_name)));
+    }
+
+    fn write_reg_footer(&mut self,  basename: &str, reg_type: &str) {
+        let reg_type = reg_type.to_lowercase();
+        self.write(&format!("\n   function new(string name = \"{basename}_{reg_type}\");\n"));
+        if self.reg_is_incl {
+            self.write("      super.new(name);\n");
+        } else {
+            self.write(&format!("      super.new(name, {}, UVM_NO_COVERAGE);\n", self.data_width));
+        }
+        self.write(         "   endfunction : new\n\n");
+        self.write(         "   virtual function void build();\n");
+        self.pop_stash(0);
+        self.write(         "   endfunction : build\n\n");
+        self.write(&format!("   `uvm_object_utils(ral_reg_{basename}_{reg_type})\n\n"));
+        self.write(&format!("endclass : ral_reg_{basename}_{reg_type}\n\n"));
+    }
+
+    fn write_field_decl(&mut self, _basename: &str, reg: &RifRegInst, field: &RifFieldInst) {
+        let fieldname = self.get_field_name(reg, field);
+        if !self.reg_is_incl {
+            let rand_s = if field.is_sw_write() {"rand "} else {""};
+            self.write(&format!("   {rand_s}uvm_reg_field {fieldname};\n", ));
+        }
+        // Push field instantiation on stash 0
+        self.push_stash(0, &format!("      this.{fieldname} = uvm_reg_field::type_id::create(\"{fieldname}\",,get_full_name());\n"));
+        self.push_stash(0, &format!("      this.{fieldname}.configure(this, {}, {}, ", field.width, field.lsb));
+        self.push_stash(0, &format!("{}, ", Self::field_acc(field)));
+        self.push_stash(0, &format!("{}, ", if field.hw_access.is_writable() {"1"} else {"0"}));
+        let rst = field.reset();
+        let w = (field.width>>2) as usize;
+        self.push_stash(0, &format!("{}'h{rst:0w$X}, ", field.width));
+        self.push_stash(0, &format!("{}, 0, 0);\n", if field.sw_kind.is_ro() {0} else {1}));
+    }
+
+    // This is called only once on first page (INST_BY_PAGE=false)
+    // All pages are merged into one to create a block of register
+    fn write_page_header(&mut self, name: &str, _desc: &Description) {
+        self.write(&format!("   class ral_block_{name} extends {};\n", self.ral_class));
+    }
+
+    // This is called only once on last page (INST_BY_PAGE=false)
+    fn write_page_footer(&mut self, name: &str, _is_last: bool) {
+        self.write(&format!("\n   function new(string name = \"{name}\");\n"));
+        self.write(         "      super.new(name, UVM_NO_COVERAGE);\n");
+        self.write(         "   endfunction : new\n\n");
+        self.write(         "   virtual function void build();\n");
+        self.write(&format!("      this.default_map = create_map(\"\", 0, {}, UVM_LITTLE_ENDIAN, 0);\n", self.data_width>>3));
+        self.pop_stash(0);
+        self.write(         "   endfunction : build\n\n");
+        self.write(&format!("   `uvm_object_utils(ral_block_{name})\n\n"));
+        self.write(&format!("endclass : ral_block_{name}\n\n"));
+    }
+
+    fn write_reginst(&mut self, _basename: &str, base_addr: u64, reg: &RifRegInst, reg_1st: &RifRegInst) {
+        let regname = reg.name().to_lowercase();
+        let regtype = format!("ral_reg_{}_{}", remove_rif(&self.comp_name), reg.reg_type.to_lowercase());
+        // Declare register instance as members of the class
+        self.write(&format!("   rand {regtype} {regname};\n"));
+
+        // Push register instance on stash 0
+        self.push_stash(0, &format!("      this.{regname} = {regtype}::type_id::create(\"{regname}\",,get_full_name());\n"));
+        self.push_stash(0, &format!("      this.{regname}.configure(this, null, \"\");\n"));
+        self.push_stash(0, &format!("      this.{regname}.build();\n"));
+        self.push_stash(0, &format!("      this.{regname}.add_hdl_path_slice(\"{regname}__read_data\", 0, {});\n", self.data_width));
+        self.push_stash(0, &format!("      this.default_map.add_reg(this.{regname}, "));
+        self.push_stash(0, &format!("`UVM_REG_ADDR_WIDTH\'h{:X}, ", base_addr + reg.addr));
+        self.push_stash(0, &format!("\"{}\", 0);\n", reg.sw_access));
+        let is_public = self.setting().privacy.is_public();
+        for (fi,field) in reg.fields.iter()
+                .filter(|f| !(f.visibility.is_hidden() && is_public))
+                .enumerate() {
+            let rand_s = if field.is_sw_write() {"rand "} else {""};
+            let fieldname = self.get_field_name(reg, field);
+            self.write(&format!("   {rand_s}uvm_reg_field {regname}_{fieldname};\n"));
+            self.push_stash(0,&format!("      this.{regname}_{fieldname} = this.{regname}.{fieldname};\n"));
+            let rst = field.reset();
+            if rst != reg_1st.fields[fi].reset() {
+                self.push_stash(0,&format!("      this.{regname}_{fieldname}.set_reset({rst});\n"));
+            }
+        }
+    }
+
+    fn write_rifmux_header(&mut self, name: &str, rif_list: &RifList, rifmux_list: &[&RifmuxInst]) {
+        let blkname = format!("ral_block_{}", name);
+        let name_uc = blkname.to_uppercase();
+        self.write(&format!("`ifndef {name_uc}\n"));
+        self.write(&format!("`define {name_uc}\n"));
+        self.write("\nimport uvm_pkg::*;\n\n");
+        if self.ral_macro.is_none() {
+            self.write("`ifndef ral_create_reg_block\n");
+            self.write("`define ral_create_reg_block(BLOCK,  BLOCK_TYPE, OFFSET=0, PREFIX=ral_block_, PARENT=this, PATH=\"\") \\");
+            self.write("   this.m_``PREFIX````BLOCK`` = ``PREFIX````BLOCK_TYPE``_rif::type_id::create(`\"``BLOCK```\", null, get_full_name()); \\");
+            self.write("   this.m_``PREFIX````BLOCK``.configure(PARENT, PATH); \\");
+            self.write("   this.m_``PREFIX````BLOCK``.build(); \\");
+            self.write("   this.default_map.add_submap(this.m_``PREFIX````BLOCK``.default_map, OFFSET);");
+            self.write("`endif\n\n");
+        }
+        for rif in rif_list.iter() {
+            self.write(&format!("`include \"ral_{}.sv\"\n", rif.name(false).to_lowercase()));
+        }
+        for rifmux in rifmux_list.iter() {
+            self.write(&format!("`include \"ral_{}.sv\"\n", rifmux.type_name.to_lowercase()));
+        }
+        self.write(&format!("\nclass {blkname} extends {};\n", self.ral_class));
+    }
+
+    fn write_rifmux_footer(&mut self, name: &str) {
+        let blkname = format!("ral_block_{}", name);
+        self.write(&format!("\n   `uvm_object_utils({blkname});\n\n"));
+        self.write(&format!("   function new(string name = \"{blkname}\");\n"));
+        self.write(         "      super.new(name, UVM_NO_COVERAGE);\n");
+        self.write(         "   endfunction : new\n\n");
+        self.write(         "   virtual function void build();\n");
+        self.write(&format!("      this.default_map = create_map(\"\", 0, 4, UVM_LITTLE_ENDIAN, 0);\n"));
+        self.pop_stash(0);
+        self.write(         "   endfunction : build\n\n");
+        self.write(&format!("endclass : {blkname}\n\n"));
+        self.write(&format!("`endif // {}\n", blkname.to_uppercase()));
+    }
+
+    fn write_rif_inst(&mut self, _prefix: &str, _group: &str, rif_inst: &RifInst, _page_name: &str, addr: u64, _desc: &Description, _is_last: bool) {
+        let instname = remove_rif(&rif_inst.inst_name);
+        let typename = &rif_inst.type_name;
+        let macroname = self.ral_macro.clone().unwrap_or("ral_create_reg_block".to_owned());
+        self.write(&format!("   ral_block_{typename} m_ral_block_{instname};\n"));
+        self.push_stash(0,&format!("      `{macroname}({instname}, {typename}, 'h{addr:08x})\n"));
+    }
+
+    fn write_rifmux_inst(&mut self, rifmux_inst: &RifmuxInst, addr: u64) {
+        let instname = remove_rif(&rifmux_inst.inst_name);
+        let typename = &rifmux_inst.type_name;
+        let macroname = self.ral_macro.clone().unwrap_or("ral_create_reg_block".to_owned());
+        self.write(&format!("   ral_block_{typename} m_ral_block_{instname};\n"));
+        self.push_stash(0,&format!("      `{macroname}({instname}, {typename}, 'h{addr:08x})\n"));
+    }
+
+}

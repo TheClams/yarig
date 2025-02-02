@@ -4,6 +4,32 @@ use crate::parser::{get_rif, parser_expr::ExprTokens};
 
 use super::{Access, ClkEn, Description, InterruptRegKind, Limit, RegDef, RegDefOrIncl, ResetVal, Rif, Visibility};
 
+/// Result of register definition search
+/// Contains the register deifntion itself, information about the interrupt kind and its RIF source if included
+pub struct RegDefMatch<'a> {
+    pub def: &'a RegDef,
+    pub incl: Option<String>,
+    pub intr_kind: InterruptRegKind,
+    pub intr_idx : usize,
+}
+
+impl<'a> RegDefMatch<'a> {
+    fn new(def: &'a RegDef) -> Self {
+        let intr_kind = if def.interrupt.is_empty() {InterruptRegKind::None} else {InterruptRegKind::Base};
+        RegDefMatch {def, incl: None, intr_kind, intr_idx: 0}
+    }
+
+    fn new_intr(def: &'a RegDef, intr_kind: InterruptRegKind, intr_idx : usize) -> Self {
+        RegDefMatch {def, incl: None, intr_kind, intr_idx}
+    }
+
+    fn with_inc(mut self, inc: &str) -> Self {
+        self.incl = Some(inc.to_owned());
+        self
+    }
+
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct RifPage{
     /// Page name
@@ -43,7 +69,7 @@ impl RifPage {
         }
     }
 
-    pub fn find_regdef<'a>(&'a self, name: &'a str, rifs: &'a HashMap<String, Rif>) -> Option<(&'a RegDef,InterruptRegKind,usize)> {
+    pub fn find_regdef<'a>(&'a self, name: &'a str, rifs: &'a HashMap<String, Rif>) -> Option<RegDefMatch<'a>> {
         for r in self.registers.iter() {
             match r {
                 RegDefOrIncl::Include(inc) => {
@@ -52,9 +78,8 @@ impl RifPage {
                         if let Some(rif_def) = get_rif(rifs,s[0]) {
                             for inc_page in rif_def.pages.iter() {
                                 if s.len()==1 || s.get(1)==Some(&inc_page.name.as_str()) {
-                                    let d = inc_page.find_regdef(name, rifs);
-                                    if d.is_some() {
-                                        return d;
+                                    if let Some(d) = inc_page.find_regdef(name, rifs){
+                                        return Some(d.with_inc(s[0]));
                                     }
                                 }
                             }
@@ -63,8 +88,7 @@ impl RifPage {
                 }
                 RegDefOrIncl::Def(d) => {
                     if d.name == name {
-                        let kind = if d.interrupt.is_empty() {InterruptRegKind::None} else {InterruptRegKind::Base};
-                        return Some((d,kind,0));
+                        return Some(RegDefMatch::new(d));
                     }
                     // Check interrupt register
                     else if !d.interrupt.is_empty() && name.starts_with(&d.name) {
@@ -73,15 +97,15 @@ impl RifPage {
                             let intr_name = if info.name.is_empty() {"".to_owned()} else {format!("_{}",info.name)};
                             // Check if enable interrupt is enabled
                             if info.enable.is_some() && name_suffix == format!("{}_en",intr_name) {
-                                return Some((d,InterruptRegKind::Enable,idx));
+                                return Some(RegDefMatch::new_intr(d,InterruptRegKind::Enable,idx));
                             }
                             // Check if mask interrupt is enabled
                             if info.mask.is_some() && name_suffix == format!("{}_mask",intr_name) {
-                                return Some((d,InterruptRegKind::Mask,idx));
+                                return Some(RegDefMatch::new_intr(d,InterruptRegKind::Mask,idx));
                             }
                             // Check if mask interrupt is enabled
                             if info.pending && name_suffix == format!("{}_pending",intr_name) {
-                                return Some((d,InterruptRegKind::Pending,idx));
+                                return Some(RegDefMatch::new_intr(d,InterruptRegKind::Pending,idx));
                             }
                         }
                     }

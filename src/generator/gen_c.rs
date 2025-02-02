@@ -1,5 +1,5 @@
 use crate::{
-    comp::comp_inst::{RifFieldInst, RifInst, RifRegInst},
+    comp::comp_inst::{RifFieldInst, RifInst, RifRegInst, RifmuxInst},
     parser::remove_rif,
     rifgen::{Description, EnumEntry}
 };
@@ -71,15 +71,17 @@ impl GeneratorSw for GeneratorC {
     const SINGLE_FILE  : bool = false;
     const HAS_UNUSED   : bool = true;
     const INST_BY_PAGE : bool = true;
+    const INC_PAGENAME : bool = true;
+    const INST_ARRAY   : bool = true;
 
 
     //-------- Save some state variables --------//
     /// Set the width of address/data for current RIF
-    fn set_rif_info(&mut self, name: &str, addr_w: u8, data_w: u8, nb_page: usize) {
-        self.comp_name = name.to_owned();
-        self.addr_width = addr_w;
-        self.data_width = data_w;
-        self.multipage = nb_page > 1;
+    fn set_rif_info(&mut self, rif: &RifInst) {
+        self.comp_name = rif.type_name.to_owned();
+        self.addr_width = rif.addr_width;
+        self.data_width = rif.data_width;
+        self.multipage = rif.pages.len() > 1;
     }
 
     /// Set the max length  of field name inside a register (for pretty formatting)
@@ -137,7 +139,7 @@ impl GeneratorSw for GeneratorC {
     }
 
     /// Write register start of declaration statement
-    fn write_reg_header(&mut self, basename: &str, reg_type: &str, desc: &str) {
+    fn write_reg_header(&mut self, basename: &str, reg_type: &str, desc: &str, _incl: &Option<String>) {
         let w = self.data_width;
 
         self.write(&format!("/// {} {} register bitfields\n", basename.to_casing(Casing::Title), reg_type.to_casing(Casing::Title)));
@@ -227,7 +229,7 @@ impl GeneratorSw for GeneratorC {
     }
 
     /// Write register instances
-    fn write_reginst(&mut self, basename: &str, base_addr: u64, reg: &RifRegInst) {
+    fn write_reginst(&mut self, basename: &str, base_addr: u64, reg: &RifRegInst, _reg_1st: &RifRegInst) {
         let dim = reg.array.dim();
         let lt = self.max_len_reg_type;
         let ln = self.max_len_reg_name;
@@ -259,7 +261,7 @@ impl GeneratorSw for GeneratorC {
 
     //-------- RIFmux functions --------//
     /// Write RIF start of declaration statement
-    fn write_rifmux_header(&mut self, name: &str, rif_list: &RifList) {
+    fn write_rifmux_header(&mut self, name: &str, rif_list: &RifList, _rifmux_list: &[&RifmuxInst]) {
         let name_uc = name.to_uppercase();
         self.write("// Register File mapping\n");
         self.write(&format!("#ifndef __{name_uc}_H__\n"));
@@ -279,7 +281,7 @@ impl GeneratorSw for GeneratorC {
     }
 
     /// Write RIF end of declaration
-    fn write_rifinst_ref(&mut self,
+    fn write_rif_inst(&mut self,
             prefix: &str,
             group: &str,
             rif_inst: &RifInst,

@@ -10,3 +10,4 @@ pub mod trait_sw;
 pub mod gen_c;
 // Hardware Generators
 pub mod gen_sv;
+pub mod gen_ral;

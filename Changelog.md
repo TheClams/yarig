@@ -1,9 +1,18 @@
 # Changelog
 
 
+## [0.4.0] - 2025-01-19
+### Added
+  - target ral: generator for systemVerilog Register Abstraction Layer
+
+### Changed
+  - Trait Sw:
+    * Add a few const to control the generator (instance per arrays or element, hierarchical or flatten)
+    * update a fw trait functions prototype to be more generic
+
 ## [0.3.3] - 2025-01-19
 ### Added
-  - trait_sw: software trait to use as basis for generator having software access (C, python, ...)
+  - Trait SW: software trait to use as basis for generator having software access (C, python, ...)
     * C generator now based on this trait
 
 ### Changed
