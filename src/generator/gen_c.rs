@@ -101,7 +101,7 @@ impl GeneratorSw for GeneratorC {
     // - 1 : Structure containing registers (one per page)
     // - 2 : Define of register Offset/reset
     /// Write RIF header start of file
-    fn write_rif_header(&mut self, _is_top: bool) {
+    fn write_rif_header(&mut self, _rif: &RifInst, _is_top: bool) {
         let rifname_uc = self.comp_name.to_uppercase();
         self.write(&format!("// Register definition for P_{rifname_uc}\n"));
         self.write(&format!("#ifndef __{rifname_uc}_H__\n"));
@@ -139,14 +139,15 @@ impl GeneratorSw for GeneratorC {
     }
 
     /// Write register start of declaration statement
-    fn write_reg_header(&mut self, basename: &str, reg_type: &str, desc: &str, _incl: &Option<String>) {
+    fn write_reg_header(&mut self, basename: &str, reg: &RifRegInst) {
         let w = self.data_width;
-
-        self.write(&format!("/// {} {} register bitfields\n", basename.to_casing(Casing::Title), reg_type.to_casing(Casing::Title)));
-        for l in desc.lines() {
+        self.write(&format!("/// {} {} register bitfields\n",
+            basename.to_casing(Casing::Title),
+            reg.reg_type.to_casing(Casing::Title)));
+        for l in reg.base_description.get().lines() {
             self.write(&format!("/// {l}\n"));
         }
-        let reg_type = reg_type.to_lowercase(); // self.casing(reg_type); //
+        let reg_type = reg.reg_type.to_lowercase(); // self.casing(reg_type); //
         self.write(&format!("typedef union {}_{reg_type}_reg {{\n", basename.to_lowercase()));
         self.write(&format!("  uint{w}_t reg{w}; //!< Direct access to the full {reg_type} register\n", ));
         self.write("  struct {\n");
@@ -177,11 +178,11 @@ impl GeneratorSw for GeneratorC {
     }
 
     /// Write register end of declaration
-    fn write_reg_footer(&mut self,  basename: &str, reg_type: &str) {
+    fn write_reg_footer(&mut self,  basename: &str, reg: &RifRegInst) {
         self.write("  } fields; //!< Access to bitfields\n");
         self.write(&format!("}} {}_{}_reg_t;\n\n",
             basename.to_lowercase(),
-            reg_type.to_lowercase()));
+            reg.reg_type.to_lowercase()));
         self.write("\n#ifndef DOXYGEN_SHOULD_SKIP_THIS\n");
         self.pop_stash(0);
         self.write("#endif /* DOXYGEN_SHOULD_SKIP_THIS */\n\n");
@@ -261,8 +262,8 @@ impl GeneratorSw for GeneratorC {
 
     //-------- RIFmux functions --------//
     /// Write RIF start of declaration statement
-    fn write_rifmux_header(&mut self, name: &str, rif_list: &RifList, _rifmux_list: &[&RifmuxInst]) {
-        let name_uc = name.to_uppercase();
+    fn write_rifmux_header(&mut self, rifmux: &RifmuxInst, rif_list: &RifList, _rifmux_list: &[&RifmuxInst]) {
+        let name_uc = rifmux.type_name.to_uppercase();
         self.write("// Register File mapping\n");
         self.write(&format!("#ifndef __{name_uc}_H__\n"));
         self.write(&format!("#define __{name_uc}_H__\n\n"));
@@ -275,9 +276,9 @@ impl GeneratorSw for GeneratorC {
     }
 
     /// Write RIF end of declaration
-    fn write_rifmux_footer(&mut self, name: &str) {
+    fn write_rifmux_footer(&mut self, rifmux: &RifmuxInst) {
         self.pop_stash(0);
-        self.write(&format!("\n#endif /* __{}_H__ */\n", &name.to_uppercase()));
+        self.write(&format!("\n#endif /* __{}_H__ */\n", rifmux.type_name.to_uppercase()));
     }
 
     /// Write RIF end of declaration

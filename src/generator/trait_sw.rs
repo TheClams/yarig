@@ -34,6 +34,9 @@ pub trait GeneratorSw : GeneratorBase {
     fn gen(&mut self, obj: &Comp) -> Result<(), Box<dyn std::error::Error>> {
         // Create output directory if it does not exist
         create_dir_all(self.setting().path.clone())?;
+        // Create resource file if needed
+        self.create_resource()?;
+        // Dispatch generator: RIF or rifmux
         match obj {
             Comp::Rifmux(rifmux) => {
                 let riflist = RifList::new(rifmux, !Self::IS_HIERARCHICAL);
@@ -54,10 +57,15 @@ pub trait GeneratorSw : GeneratorBase {
         }
     }
 
+    /// Create base resource related to the generator
+    fn create_resource(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
+    }
+
     /// Generate structure associated to a RIF
     fn gen_rif(&mut self, rif: &RifInst, is_top: bool) -> Result<(), Box<dyn std::error::Error>> {
         self.set_rif_info(rif);
-        self.write_rif_header(is_top);
+        self.write_rif_header(rif, is_top);
         let basename = remove_rif(&rif.type_name);
         let nb_byte = (rif.data_width >> 3) as u64;
         let is_public = self.setting().privacy.is_public();
@@ -89,7 +97,7 @@ pub trait GeneratorSw : GeneratorBase {
                     .map(|f| self.get_field_name(reg,f).len())
                     .max().expect("Registers should have fields");
                 self.set_max_field_name_len(max_len);
-                self.write_reg_header(&pname, &reg.reg_type, reg.base_description.get(), &reg.incl);
+                self.write_reg_header(&pname, &reg);
                 let mut pos_l = 0;
                 let mut fields = reg.fields.iter().filter(|f| !(f.visibility.is_hidden() && is_public)).peekable();
                 while let Some(f) = fields.next() {
@@ -104,7 +112,7 @@ pub trait GeneratorSw : GeneratorBase {
                     self.write_unused_field_decl(&pname, reg, pos_l, rif.data_width - pos_l);
                 }
                 // End of register declaration
-                self.write_reg_footer(&pname, &reg.reg_type);
+                self.write_reg_footer(&pname, &reg);
             }
             // Instantiate all registers
             let len_name = page.regs.iter().map(|r| r.reg_name.len()).max().expect("Page should have registers");
@@ -175,7 +183,7 @@ pub trait GeneratorSw : GeneratorBase {
     fn set_max_reg_name_len(&mut self, _name_len: usize, _type_len: usize) {}
 
     /// Write RIF start of declaration statement
-    fn write_rif_header(&mut self, is_top: bool);
+    fn write_rif_header(&mut self, rif: &RifInst, is_top: bool);
 
     /// Write RIF end of declaration
     fn write_rif_footer(&mut self);
@@ -190,10 +198,10 @@ pub trait GeneratorSw : GeneratorBase {
     fn write_enum_footer(&mut self, _type_name: &str) {}
 
     /// Write register start of declaration statement
-    fn write_reg_header(&mut self, basename: &str, reg_type: &str, desc: &str, incl: &Option<String>);
+    fn write_reg_header(&mut self, basename: &str, reg: &RifRegInst);
 
     /// Write register end of declaration
-    fn write_reg_footer(&mut self,  basename: &str, reg_type: &str);
+    fn write_reg_footer(&mut self,  basename: &str, reg: &RifRegInst);
 
     /// Write register end of declaration
     fn write_field_decl(&mut self, basename: &str, reg: &RifRegInst, field: &RifFieldInst);
@@ -248,9 +256,9 @@ pub trait GeneratorSw : GeneratorBase {
         let rifmux_list : Vec<&RifmuxInst> = rifmux.components.iter()
             .filter_map(|c| if let Comp::Rifmux(m) = &c.inst {Some(m)} else {None})
             .collect();
-        self.write_rifmux_header(&rifmux.inst_name, rif_list, &rifmux_list);
+        self.write_rifmux_header(&rifmux, rif_list, &rifmux_list);
         self.scan_rifmux(rifmux, "", 0)?;
-        self.write_rifmux_footer(&rifmux.inst_name);
+        self.write_rifmux_footer(&rifmux);
         self.save(&self.filename_rifmux(rifmux))
     }
 
@@ -293,10 +301,10 @@ pub trait GeneratorSw : GeneratorBase {
     }
 
     /// Write RIF start of declaration statement
-    fn write_rifmux_header(&mut self, name: &str, rif_list: &RifList, rifmux_list: &[&RifmuxInst]);
+    fn write_rifmux_header(&mut self, rifmux: &RifmuxInst, rif_list: &RifList, rifmux_list: &[&RifmuxInst]);
 
     /// Write RIF end of declaration
-    fn write_rifmux_footer(&mut self, name: &str);
+    fn write_rifmux_footer(&mut self, rifmux: &RifmuxInst);
 
     /// Write RIF instance
     fn write_rif_inst(&mut self, prefix: &str, group: &str, rif_inst: &RifInst, page_name: &str, addr: u64, desc: &Description, is_last: bool);

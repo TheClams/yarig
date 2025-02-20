@@ -8,6 +8,7 @@ pub mod gen_mif;
 // Software generators
 pub mod trait_sw;
 pub mod gen_c;
+pub mod gen_ral;
+pub mod gen_py;
 // Hardware Generators
 pub mod gen_sv;
-pub mod gen_ral;

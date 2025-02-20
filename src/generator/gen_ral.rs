@@ -80,7 +80,7 @@ impl GeneratorSw for GeneratorRal {
         self.comp_name = rif.type_name.to_owned().to_lowercase();
     }
 
-    fn write_rif_header(&mut self, _is_top: bool) {
+    fn write_rif_header(&mut self, _rif: &RifInst, _is_top: bool) {
         let name_uc = self.comp_name.to_uppercase();
         self.write(&format!("`ifndef RAL_{name_uc}\n"));
         self.write(&format!("`define RAL_{name_uc}\n"));
@@ -91,10 +91,10 @@ impl GeneratorSw for GeneratorRal {
         self.write(&format!("`endif // RAL_{}\n", self.comp_name.to_uppercase()));
     }
 
-    fn write_reg_header(&mut self, _basename: &str, reg_type: &str, _desc: &str, incl: &Option<String>) {
-        let reg_type = reg_type.to_lowercase();
+    fn write_reg_header(&mut self, _basename: &str, reg: &RifRegInst) {
+        let reg_type = reg.reg_type.to_lowercase();
         let baseclass =
-            if let Some(rif) = incl {
+            if let Some(rif) = &reg.incl {
                 self.reg_is_incl = true;
                 format!("ral_reg_{rif}_{reg_type}")
             }
@@ -106,8 +106,8 @@ impl GeneratorSw for GeneratorRal {
             remove_rif(&self.comp_name)));
     }
 
-    fn write_reg_footer(&mut self,  basename: &str, reg_type: &str) {
-        let reg_type = reg_type.to_lowercase();
+    fn write_reg_footer(&mut self,  basename: &str, reg: &RifRegInst) {
+        let reg_type = reg.reg_type.to_lowercase();
         self.write(&format!("\n   function new(string name = \"{basename}_{reg_type}\");\n"));
         if self.reg_is_incl {
             self.write("      super.new(name);\n");
@@ -187,8 +187,8 @@ impl GeneratorSw for GeneratorRal {
         }
     }
 
-    fn write_rifmux_header(&mut self, name: &str, rif_list: &RifList, rifmux_list: &[&RifmuxInst]) {
-        let blkname = format!("ral_block_{}", name);
+    fn write_rifmux_header(&mut self, rifmux: &RifmuxInst, rif_list: &RifList, rifmux_list: &[&RifmuxInst]) {
+        let blkname = format!("ral_block_{}", &rifmux.type_name);
         let name_uc = blkname.to_uppercase();
         self.write(&format!("`ifndef {name_uc}\n"));
         self.write(&format!("`define {name_uc}\n"));
@@ -211,8 +211,8 @@ impl GeneratorSw for GeneratorRal {
         self.write(&format!("\nclass {blkname} extends {};\n", self.ral_class));
     }
 
-    fn write_rifmux_footer(&mut self, name: &str) {
-        let blkname = format!("ral_block_{}", name);
+    fn write_rifmux_footer(&mut self, rifmux: &RifmuxInst) {
+        let blkname = format!("ral_block_{}", &rifmux.type_name);
         self.write(&format!("\n   `uvm_object_utils({blkname});\n\n"));
         self.write(&format!("   function new(string name = \"{blkname}\");\n"));
         self.write(         "      super.new(name, UVM_NO_COVERAGE);\n");

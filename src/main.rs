@@ -13,6 +13,7 @@ use yarig::{
         gen_mif::GeneratorMif,
         gen_sv::GeneratorSv,
         gen_ral::GeneratorRal,
+        gen_py::GeneratorPy,
     },
     parser::{parser_expr::ParamValues, RifGenSrc},
     rifgen::SuffixInfo
@@ -38,6 +39,9 @@ struct RifGenArgs{
     /// Output path for C header
     #[arg(long, default_value_t = String::from("c"))]
     output_c: String,
+    /// Output path for Python classes
+    #[arg(long, default_value_t = String::from("py"))]
+    output_py: String,
     /// C macro name defining the base address of the top level
     #[arg(long, default_value_t = String::from("PERIPH_BASE_ADDR"))]
     c_base_addr_name: String,
@@ -59,6 +63,9 @@ struct RifGenArgs{
     /// Set suffix value
     #[arg(short = 'S', long)]
     suffix: Option<SuffixInfo>,
+    /// Base class for python target
+    #[arg(long)]
+    py_class: Option<String>,
     /// Base class for RAL target
     #[arg(long)]
     ral_class: Option<String>,
@@ -201,6 +208,13 @@ fn main() {
                                     let mut gen = GeneratorRal::new(setting.clone(), args.ral_class.clone(), args.ral_macro.clone());
                                     if let Err(e) = gen.gen(o) {
                                         println!(" -> RAL generation failed: {}", e)
+                                    }
+                                }
+                                RifGenTargets::Py => {
+                                    setting.path = args.output_py.clone();
+                                    let mut gen = GeneratorPy::new(setting.clone(), args.py_class.clone());
+                                    if let Err(e) = gen.gen(o) {
+                                        println!(" -> Python generation failed: {}", e)
                                     }
                                 }
                                 t => println!("Target {t:?} not supported -> skipping"),

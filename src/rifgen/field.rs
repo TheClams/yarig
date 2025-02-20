@@ -306,6 +306,10 @@ impl FieldSwKind {
         matches!(self, FieldSwKind::W1Set)
     }
 
+    pub fn is_pulse(&self) -> bool {
+        matches!(self, FieldSwKind::W1Pulse(_,_))
+    }
+
     pub fn is_pulse_comb(&self) -> bool {
         matches!(self, FieldSwKind::W1Pulse(false,_))
     }
@@ -316,6 +320,11 @@ impl FieldSwKind {
 
     pub fn is_wo(&self) -> bool {
         matches!(self, FieldSwKind::WriteOnly | FieldSwKind::W1Pulse(_,true) | FieldSwKind::Password(_))
+    }
+
+    /// Return true if the field kind is not read-write, read-only or write-only
+    pub fn is_special(&self) -> bool {
+        !matches!(self, FieldSwKind::WriteOnly | FieldSwKind::ReadWrite | FieldSwKind::ReadOnly)
     }
 
     pub fn access_str(&self) -> &str {
@@ -329,7 +338,7 @@ impl FieldSwKind {
             FieldSwKind::W1Set       => "W1SET",
             FieldSwKind::W1Tgl       => "W1TGL",
             FieldSwKind::W1Pulse(_,_) => "Pulse",
-            FieldSwKind::Password(_) => "WO",
+            FieldSwKind::Password(_) => "Password",
         }
     }
 }

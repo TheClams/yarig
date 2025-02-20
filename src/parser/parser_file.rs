@@ -116,7 +116,6 @@ impl RifGenSrc {
                 refs = refs_next;
                 ref_done = refs.is_empty();
             }
-            println!("  Reference to {:?} ", refs);
         }
         Ok(src)
     }
