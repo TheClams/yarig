@@ -1,9 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    comp::comp_inst::{RifFieldInst, RifInst, RifRegInst, RifmuxInst},
-    parser::remove_rif,
-    rifgen::Description};
+    cfg::CfgPy, comp::comp_inst::{RifFieldInst, RifInst, RifRegInst, RifmuxInst}, parser::remove_rif, rifgen::Description};
 
 use super::{
     casing::{Casing, ToCasing},
@@ -31,12 +29,12 @@ pub struct GeneratorPy {
 impl GeneratorPy {
     const DEFAULT_BASECLASS : &'static str = include_str!("resources/regmap.py");
 
-    pub fn new(setting: GeneratorBaseSetting, base_module: Option<String>) -> Self {
+    pub fn new(setting: GeneratorBaseSetting, extra: CfgPy) -> Self {
         GeneratorPy {
             core: GeneratorCore::new(2,setting),
             comp_name: "".to_owned(),
             data_width: 32,
-            base_module: base_module.unwrap_or(".regmap".to_owned()),
+            base_module: extra.class.unwrap_or(".regmap".to_owned()),
             field_parent: BTreeMap::new(),
             field_array: BTreeSet::new(),
         }

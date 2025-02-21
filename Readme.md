@@ -53,6 +53,9 @@ rif: test_rif
 Highlighting for SublimeText is available on [github](https://github.com/TheClams/rif).
 
 
+## Configuration
+
+
 ## Generator Traits
 
 To streamline the developement of new output targets, the library contains three base generator traits,
@@ -77,7 +80,7 @@ The exact behavior of each traits can be tweaked with some associated constant.
    - [ ] json : both flat (multi file) and hierarchical
    - [ ] svd
    - [ ] IP-XACT
-   - [ ] python
+   - [x] python
    - [x] ral
  - [ ] Implement base generator for hardware (from SV):
    - [ ] VHDL
@@ -90,7 +93,7 @@ The exact behavior of each traits can be tweaked with some associated constant.
  - [ ] Support JSON config file: top entry is a target name
  - [ ] Support latex equation in description
  - [ ] Implement a TUI ? (ratatui)
- - [x] Implement a GUI (eGui Based)
+ - [x] Implement a GUI (eGui Based, in an external crate)
  - [ ] Support overlapping register in hardware: need to check exclusive access (RO/WO)
  - [ ] Check enum size fit the field size
  - [ ] Option to add representation value for enum. Syntax could be 'NAME = VAL (repr) "description"'. Could be usefull when enum is representing a limited set of integer or real values.

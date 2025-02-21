@@ -1,6 +1,20 @@
 # Changelog
 
 
+## [0.5.0] - 2025-02-23
+### Added
+  - target py: generator for python class
+  - configuration using toml file
+
+### Changed
+  - Trait Sw:
+    * use RegInst/RifmuxInst in many functions instead of passing some fields
+    * Add function allowing to create other file on top of the generated file (like base class in python)
+
+### Internal
+  - Update all dependencies (winnow 0.7) and switch to Rust Edition 2024
+  - Field struct now has additional helper function for checking its kind (is_pulse, is_special)
+
 ## [0.4.0] - 2025-01-19
 ### Added
   - target ral: generator for systemVerilog Register Abstraction Layer

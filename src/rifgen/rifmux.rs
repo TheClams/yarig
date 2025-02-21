@@ -1,5 +1,7 @@
 use std::{collections::{BTreeMap, HashMap}, str::FromStr};
 
+use serde_derive::Deserialize;
+
 use crate::parser::{parser_expr::{ExprTokens, ParamValues}, suffix_info};
 
 use super::{order_dict::OrderDict, AddressKind, ClockingInfo, DataWidth, Description, Interface};
@@ -71,7 +73,8 @@ pub enum RifType {Rif(String), Ext(u8)}
 /// Values are: instance name, array size, type name, group name, addressing scheme and address
 pub type RifmuxItemTuple<'a> = (&'a str, RifType, Option<(AddressKind, AddressOffset)>, Option<&'a str>);
 
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Deserialize, Clone, Debug, PartialEq, Default)]
+#[serde(default)]
 pub struct SuffixInfo {
     pub name: String,
     pub alt_pos: bool,

@@ -2,8 +2,7 @@ use std::{collections::HashMap, ops::Deref, path::PathBuf};
 
 use crate::{
     comp::comp_inst::{Comp, RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxInst},
-    parser::remove_rif,
-    rifgen::SuffixInfo
+    parser::remove_rif
 };
 
 use super::casing::{Casing, ToCasing};
@@ -81,7 +80,6 @@ pub enum Privacy {#[default]
     Public
 }
 
-#[allow(dead_code)]
 impl Privacy {
     pub fn is_public(&self) -> bool {
         *self==Privacy::Public
@@ -91,15 +89,10 @@ impl Privacy {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct GeneratorBaseSetting {
     /// Output directory path
     pub path: String,
-    /// Path to a template file for he generator
-    pub template: String,
-    /// Suffix to add on the filename
-    pub suffix: SuffixInfo,
     /// Casing used on register/field
     pub casing: Casing,
     /// Confidentality: confidential or public
@@ -127,7 +120,6 @@ pub struct GeneratorCore {
     pub stash: Vec<String>,
 }
 
-#[allow(dead_code)]
 impl GeneratorCore {
 
     /// Create the core generator structure

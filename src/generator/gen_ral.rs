@@ -1,4 +1,4 @@
-use crate::{comp::comp_inst::{RifFieldInst, RifInst, RifRegInst, RifmuxInst}, parser::remove_rif, rifgen::Description};
+use crate::{cfg::CfgRal, comp::comp_inst::{RifFieldInst, RifInst, RifRegInst, RifmuxInst}, parser::remove_rif, rifgen::Description};
 
 use super::{
     gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore, RifList},
@@ -24,11 +24,11 @@ pub struct GeneratorRal {
 
 impl GeneratorRal {
 
-    pub fn new(setting: GeneratorBaseSetting, ral_class: Option<String>, ral_macro: Option<String>) -> Self {
+    pub fn new(setting: GeneratorBaseSetting, extra: CfgRal) -> Self {
         GeneratorRal {
             core: GeneratorCore::new(1,setting),
-            ral_class: ral_class.unwrap_or("uvm_reg_block".to_owned()),
-            ral_macro,
+            ral_class: extra.class.unwrap_or("uvm_reg_block".to_owned()),
+            ral_macro: extra.macro_name,
             comp_name: "".to_owned(),
             data_width: 32,
             reg_is_incl: false,

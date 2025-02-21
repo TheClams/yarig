@@ -196,3 +196,9 @@ impl Display for RifError {
         }
     }
 }
+
+impl From<RifError> for String {
+    fn from(value: RifError) -> Self {
+        format!("{value}")
+    }
+}

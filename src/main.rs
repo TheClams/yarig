@@ -1,21 +1,8 @@
 
-use std::{collections::HashMap, error::Error, fs, path::PathBuf};
-use clap::{Parser, ValueEnum};
+use std::error::Error;
+use clap::Parser;
 use yarig::{
-    comp::comp_inst::Comp, generator::{
-        casing::Casing,
-        gen_common::{GeneratorBaseSetting, Privacy},
-        trait_doc::GeneratorDoc,
-        trait_sw::GeneratorSw,
-        gen_c::GeneratorC,
-        gen_html::GeneratorHtml,
-        gen_latex::GeneratorLatex,
-        gen_mif::GeneratorMif,
-        gen_sv::GeneratorSv,
-        gen_ral::GeneratorRal,
-        gen_py::GeneratorPy,
-    },
-    parser::{parser_expr::ParamValues, RifGenSrc},
+    cfg::{YarigCfg, RifGenTargets},
     rifgen::SuffixInfo
 };
 
@@ -26,8 +13,11 @@ use yarig::{
 /// Register Interface Generator
 struct RifGenArgs{
     /// path to the RIF file to parse
-    #[arg(short, long, default_value_t = String::from("e:/work/shared/rif_test/rif"))]
-    rif: String,
+    #[arg(short, long)]
+    rif: Option<String>,
+    /// path to a config file
+    #[arg(short, long)]
+    cfg: Option<String>,
     /// path to the RIF file to parse
     #[arg(short, long)]
     include: Vec<String>,
@@ -42,9 +32,6 @@ struct RifGenArgs{
     /// Output path for Python classes
     #[arg(long, default_value_t = String::from("py"))]
     output_py: String,
-    /// C macro name defining the base address of the top level
-    #[arg(long, default_value_t = String::from("PERIPH_BASE_ADDR"))]
-    c_base_addr_name: String,
     /// Output path for documentation output (HTML, latex, ...)
     #[arg(long, default_value_t = String::from("doc"))]
     output_doc: String,
@@ -56,13 +43,16 @@ struct RifGenArgs{
     output_sim: String,
     /// Public documentation (hide all private registers/fields)
     #[arg(long, action)]
-    public: bool,
+    public: Option<bool>,
     /// Set parameters value
     #[arg(short = 'P', value_parser = parse_key_val::<String, isize>)]
     parameters: Vec<(String, isize)>,
     /// Set suffix value
     #[arg(short = 'S', long)]
     suffix: Option<SuffixInfo>,
+    /// C macro name defining the base address of the top level
+    #[arg(long)]
+    c_base_addr_name: Option<String>,
     /// Base class for python target
     #[arg(long)]
     py_class: Option<String>,
@@ -72,30 +62,6 @@ struct RifGenArgs{
     /// Name of macro to create RAL register block
     #[arg(long)]
     ral_macro: Option<String>,
-}
-
-#[derive(ValueEnum, Debug, Clone)]
-enum RifGenTargets {
-    /// SystemVerilog
-    Sv,
-    /// Register Abstraction Layer (UVM)
-    Ral,
-    /// VHDL
-    Vhdl,
-    /// C Header
-    C,
-    /// Python Class
-    Py,
-    /// HTML documentation
-    Html,
-    /// Latex documentation
-    Latex,
-    /// Framemaker documentation
-    Mif,
-    /// SVD (System View Description)
-    Svd,
-    /// JSON
-    Json
 }
 
 /// Parse a single key-value pair
@@ -116,120 +82,33 @@ where
 fn main() {
 
     let args = RifGenArgs::parse();
-    let rif_path : PathBuf = args.rif.into();
 
-    let filelist: Vec<PathBuf> =
-        if rif_path.is_dir() {
-            fs::read_dir(rif_path)
-                .unwrap()
-                .filter(|p| p.as_ref().unwrap().path().extension().map(|s| s=="rif").unwrap_or(false))
-                .map(|p| p.unwrap().path())
-                .collect()
-        }
-        else {
-            vec![rif_path]
+    let mut cfg =
+        if let Some(cfg_path) = args.cfg {
+            match YarigCfg::from_file(cfg_path) {
+                Ok(cfg) => cfg,
+                Err(msg) => {
+                    eprintln!("{msg}");
+                    return;
+                },
+            }
+        } else {
+            YarigCfg::default()
         };
+    // println!("cfg = {cfg:#?}");
 
-    let mut setting = GeneratorBaseSetting {
-        path: "doc".to_owned(),
-        template: "".to_owned(),
-        suffix: SuffixInfo::new("".to_owned(),false,false),
-        casing: Casing::Snake,
-        privacy: if args.public {Privacy::Public} else {Privacy::Internal},
-        compact: true,
-        gen_inc: args.gen_inc
-    };
+    // Update configuration with command line arguments
+    if let Some(fname) = args.rif {cfg.filename = fname.to_owned()};
+    if !args.include.is_empty() {cfg.include.extend(args.include)};
+    if !args.gen_inc.is_empty() {cfg.gen_inc.extend(args.gen_inc)};
+    if !args.targets.is_empty() {cfg.targets = args.targets.to_owned()};
+    if let Some(public) = args.public {cfg.public = public};
+    if !args.targets.is_empty() {cfg.targets = args.targets.to_owned()};
+    if !args.parameters.is_empty() {cfg.parameters.extend(args.parameters)};
+    if let Some(suffix) = args.suffix {cfg.suffixes.insert("".to_owned(), suffix);};
 
-    // println!("{:?}", filelist);
-
-    let mut params = ParamValues::new();
-    args.parameters.iter().for_each(
-        |(k,v)| params.insert(k.to_owned(), *v)
-    );
-    if !params.is_empty() {println!("Parameters: {params}");}
-
-    let mut suffixes : HashMap<String, SuffixInfo> = HashMap::new();
-    if let Some(suffix) = args.suffix {
-        suffixes.insert("".to_owned(), suffix);
+    if let Err(e) = cfg.gen_all() {
+        eprintln!(" -> Error ! {e}");
     }
 
-    let mut fail_cnt = 0;
-    for f in &filelist {
-        println!("Parsing of {:?}", f.as_path());
-        let p = RifGenSrc::from_file(f);
-        match p {
-            Ok(rif_src) => {
-                println!(" -> Parsing Successful");
-                // println!("Rifs compiles = {:?}", rif_src.rifs.keys().join(", "));
-                let obj = Comp::compile(&rif_src, &suffixes, &params);
-                match &obj {
-                    Ok(o) => {
-                        println!("   => Compile Ok");
-                        for target in args.targets.iter() {
-                            match target {
-                                RifGenTargets::C => {
-                                    setting.path = args.output_c.clone();
-                                    let mut g = GeneratorC::new(setting.clone(), args.c_base_addr_name.to_owned());
-                                    if let Err(e) = g.gen_all(o) {
-                                        println!(" -> C generation failed: {}", e)
-                                    }
-                                },
-                                RifGenTargets::Html => {
-                                    setting.path = args.output_doc.clone();
-                                    let mut g = GeneratorHtml::new(setting.clone());
-                                    if let Err(e) = g.gen_all(o) {
-                                        println!(" -> HTML generation failed: {}", e)
-                                    }
-                                }
-                                RifGenTargets::Mif => {
-                                    setting.path = args.output_doc.clone();
-                                    // TODO: support customization of paragraph style
-                                    let mut g = GeneratorMif::new(setting.clone());
-                                    if let Err(e) = g.gen_all(o) {
-                                        println!(" -> Mif generation failed: {}", e)
-                                    }
-                                }
-                                RifGenTargets::Latex => {
-                                    setting.path = args.output_doc.clone();
-                                    let mut g = GeneratorLatex::new(setting.clone());
-                                    if let Err(e) = g.gen_all(o) {
-                                        println!(" -> Latex generation failed: {}", e)
-                                    }
-                                }
-                                RifGenTargets::Sv => {
-                                    setting.path = args.output_rtl.clone();
-                                    let mut g = GeneratorSv::new(setting.clone());
-                                    if let Err(e) = g.gen_all(o) {
-                                        println!(" -> SV generation failed: {}", e)
-                                    }
-                                }
-                                RifGenTargets::Ral => {
-                                    setting.path = args.output_sim.clone();
-                                    let mut g = GeneratorRal::new(setting.clone(), args.ral_class.clone(), args.ral_macro.clone());
-                                    if let Err(e) = g.gen_all(o) {
-                                        println!(" -> RAL generation failed: {}", e)
-                                    }
-                                }
-                                RifGenTargets::Py => {
-                                    setting.path = args.output_py.clone();
-                                    let mut g = GeneratorPy::new(setting.clone(), args.py_class.clone());
-                                    if let Err(e) = g.gen_all(o) {
-                                        println!(" -> Python generation failed: {}", e)
-                                    }
-                                }
-                                t => println!("Target {t:?} not supported -> skipping"),
-                            }
-                        }
-                        // println!(" -> Compile Ok: \n{:?}",o),
-                    }
-                    Err(e) => {fail_cnt+=1; println!(" -> Compile failed: {}", e)},
-                }
-            },
-            // Ok(r) => println!("Parsing of {f} successful :\n {:#?}",r),
-            Err(e) => {fail_cnt+=1; println!(" -> {}", e)},
-        }
-    }
-    if fail_cnt > 0 {
-        println!("Failed {}/{}",fail_cnt,filelist.len());
-    }
 }
