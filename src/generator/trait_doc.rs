@@ -80,7 +80,7 @@ pub trait GeneratorDoc : GeneratorBase {
     const SHOW_UNUSED : bool = false;
 
     /// Main generator function
-    fn gen(&mut self, obj: &Comp) -> Result<(), Box<dyn std::error::Error>> {
+    fn gen_all(&mut self, obj: &Comp) -> Result<(), Box<dyn std::error::Error>> {
         // Create output directory if it does not exist
         create_dir_all(self.core().setting.path.clone())?;
         //

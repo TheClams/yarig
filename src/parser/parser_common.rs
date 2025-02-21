@@ -3,25 +3,22 @@ use crate::rifgen::{Context, Width};
 use winnow::{
     ascii::{alpha1, alphanumeric1, digit0, digit1, hex_digit1, multispace0, space0, Caseless},
     combinator::{alt, delimited, eof, opt, preceded, repeat, repeat_till, separated_pair, terminated},
-    error::{self, ContextError, ErrMode, ErrorKind, ParseError, StrContext},
+    error::{self, ContextError, ErrMode, ParseError, StrContext},
     stream::{AsChar, Stream, StreamIsPartial},
-    token::{any, take_until}, PResult, Parser
+    token::{any, take_until}, ModalParser, ModalResult, Parser
 };
 
 //--------------------------------
 // General parsing rules
-pub type Res<'a, T> = PResult<T>;
+pub type Res<'a, T> = ModalResult<T>;
 pub type ResF<'a, T> = Result<T, ParseError<&'a str, ContextError>>;
-// pub type ResF<'a, T> = Result<T, ParseError<&'a str, ContextError>>;
-// pub type Res<'a, T> = PResult<T, error::InputError<&'a str>>;
-// pub type ResF<'a, T> = Result<T, ParseError<&'a str, error::InputError<&'a str>>>;
 
 //
-pub fn ws<I, O, E: error::ParserError<I>, F>(inner: F) -> impl Parser<I, O, E>
+pub fn ws<I, O, E: error::ParserError<I>, F>(inner: F) -> impl ModalParser<I, O, E>
 where
     I: StreamIsPartial + Stream,
     <I as Stream>::Token: AsChar + Copy,
-    F: Parser<I, O, E>,
+    F: ModalParser<I, O, E>,
 {
     delimited(multispace0, inner, multispace0)
 }
@@ -255,8 +252,8 @@ pub fn param<'a>(input: &mut &'a str) -> Res<'a, &'a str> {
 #[allow(dead_code)]
 pub fn val_u8_or_param<'a>(input: &mut &'a str) -> Res<'a, Width> {
     alt((
-        val_u8.try_map(|v| -> Result<Width, ErrorKind> { Ok(Width::Value(v)) }),
-        param.try_map(|v| -> Result<Width, ErrorKind> { Ok(Width::Param(v.to_owned())) }),
+        val_u8.map(Width::Value),
+        param.map(|v| Width::Param(v.to_owned())),
     ))
     .context(StrContext::Label("unsigned 8b or parameter"))
     .parse_next(input)
@@ -331,14 +328,7 @@ mod tests_parsing {
     fn test_comment() {
         assert_eq!(comment(&mut "# comment #"), Ok(()));
         assert_eq!(comment(&mut "  // comment //"), Ok(()));
-        assert_eq!(
-            comment(&mut "  / not a comment").is_err(), true
-            // Err(()),
-            // Err(ParseError::new("/ not a comment", 0, winnow::error::InputInputError {
-            //     input: "/ not a comment",
-            //     kind: ErrorKind::Assert
-            // }))
-        );
+        assert_eq!(comment(&mut "  / not a comment").is_err(), true);
     }
 
     #[test]

@@ -169,51 +169,51 @@ fn main() {
                             match target {
                                 RifGenTargets::C => {
                                     setting.path = args.output_c.clone();
-                                    let mut gen = GeneratorC::new(setting.clone(), args.c_base_addr_name.to_owned());
-                                    if let Err(e) = gen.gen(o) {
+                                    let mut g = GeneratorC::new(setting.clone(), args.c_base_addr_name.to_owned());
+                                    if let Err(e) = g.gen_all(o) {
                                         println!(" -> C generation failed: {}", e)
                                     }
                                 },
                                 RifGenTargets::Html => {
                                     setting.path = args.output_doc.clone();
-                                    let mut gen = GeneratorHtml::new(setting.clone());
-                                    if let Err(e) = gen.gen(o) {
+                                    let mut g = GeneratorHtml::new(setting.clone());
+                                    if let Err(e) = g.gen_all(o) {
                                         println!(" -> HTML generation failed: {}", e)
                                     }
                                 }
                                 RifGenTargets::Mif => {
                                     setting.path = args.output_doc.clone();
                                     // TODO: support customization of paragraph style
-                                    let mut gen = GeneratorMif::new(setting.clone());
-                                    if let Err(e) = gen.gen(o) {
+                                    let mut g = GeneratorMif::new(setting.clone());
+                                    if let Err(e) = g.gen_all(o) {
                                         println!(" -> Mif generation failed: {}", e)
                                     }
                                 }
                                 RifGenTargets::Latex => {
                                     setting.path = args.output_doc.clone();
-                                    let mut gen = GeneratorLatex::new(setting.clone());
-                                    if let Err(e) = gen.gen(o) {
+                                    let mut g = GeneratorLatex::new(setting.clone());
+                                    if let Err(e) = g.gen_all(o) {
                                         println!(" -> Latex generation failed: {}", e)
                                     }
                                 }
                                 RifGenTargets::Sv => {
                                     setting.path = args.output_rtl.clone();
-                                    let mut gen = GeneratorSv::new(setting.clone());
-                                    if let Err(e) = gen.gen(o) {
+                                    let mut g = GeneratorSv::new(setting.clone());
+                                    if let Err(e) = g.gen_all(o) {
                                         println!(" -> SV generation failed: {}", e)
                                     }
                                 }
                                 RifGenTargets::Ral => {
                                     setting.path = args.output_sim.clone();
-                                    let mut gen = GeneratorRal::new(setting.clone(), args.ral_class.clone(), args.ral_macro.clone());
-                                    if let Err(e) = gen.gen(o) {
+                                    let mut g = GeneratorRal::new(setting.clone(), args.ral_class.clone(), args.ral_macro.clone());
+                                    if let Err(e) = g.gen_all(o) {
                                         println!(" -> RAL generation failed: {}", e)
                                     }
                                 }
                                 RifGenTargets::Py => {
                                     setting.path = args.output_py.clone();
-                                    let mut gen = GeneratorPy::new(setting.clone(), args.py_class.clone());
-                                    if let Err(e) = gen.gen(o) {
+                                    let mut g = GeneratorPy::new(setting.clone(), args.py_class.clone());
+                                    if let Err(e) = g.gen_all(o) {
                                         println!(" -> Python generation failed: {}", e)
                                     }
                                 }

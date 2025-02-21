@@ -1,7 +1,11 @@
 use crate::rifgen::{AddressKind, Context, RegInst};
 
 use winnow::{
-    ascii::space0, combinator::{alt, delimited, opt, preceded, terminated}, error::{ErrorKind, StrContext}, token::take_until, Parser
+    ascii::space0,
+    combinator::{alt, delimited, opt, preceded, terminated},
+    error::StrContext,
+    token::take_until,
+    Parser
 };
 
 use super::{identifier, parser_expr::{parse_expr, ExprTokens}, val_u64, val_u16, ws, Res, ResF};
@@ -75,8 +79,8 @@ pub fn reg_inst_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
             alt((ws("disabled"),ws("disable"))).value(Context::Disabled),
             ws("reserved").value(Context::Reserved),
             ws("hw").value(Context::HwAccess),
-            delimited(ws("["), val_u16, ws("].")).try_map(|v| -> Result<Context, ErrorKind> {Ok(Context::RegIndex(v))}),
-            terminated(identifier, ".").try_map(|v| -> Result<Context, ErrorKind> {Ok(Context::Item(v.into()))}),
+            delimited(ws("["), val_u16, ws("].")).map(Context::RegIndex),
+            terminated(identifier, ".").map(|v| Context::Item(v.into())),
             reg_inst_field_array,
         )),
         opt(alt((ws(":"),ws("=")))),
@@ -94,7 +98,7 @@ pub fn reg_inst_array_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
             ws("reserved").value(Context::Reserved),
             alt((ws("disabled"),ws("disable"))).value(Context::Disabled),
             ws("hw").value(Context::HwAccess),
-            terminated(identifier, ".").try_map(|v| -> Result<Context, ErrorKind> {Ok(Context::Item(v.into()))}),
+            terminated(identifier, ".").map(|v| Context::Item(v.into())),
         )),
         opt(alt((ws(":"),ws("=")))),
     ).context(StrContext::Label("register instance array property"))
@@ -122,7 +126,7 @@ pub fn reg_inst_field_array<'a>(input: &mut &'a str) -> Res<'a, Context> {
     (
         identifier,
         delimited(ws("["), val_u16, ws("].")),
-    ).try_map(|v| -> Result<Context, ErrorKind> {Ok(Context::FieldIndex((v.0.to_owned(),v.1)))})
+    ).map(|v| Context::FieldIndex((v.0.to_owned(),v.1)))
     .context(StrContext::Label("register field array"))
     .parse_next(input)
 }

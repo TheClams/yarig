@@ -65,7 +65,7 @@ impl GeneratorSv {
 
     //-----------------------------
 
-    pub fn gen(&mut self, obj: &Comp) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn gen_all(&mut self, obj: &Comp) -> Result<(), Box<dyn std::error::Error>> {
         // Create output directory if it does not exist
         create_dir_all(self.base_settings.path.clone())?;
         // Call relevant generator (Rif or Rifmux)
@@ -704,14 +704,14 @@ impl GeneratorSv {
         self.write("   end\n\n");
 
         // Control the external page interface
-        for (name,addr,&width) in ext_pages.iter() {
+        for (name, addr, width) in ext_pages.iter() {
             let name = name.to_casing(Snake);
             self.write(&format!("   assign if_page_{name}.addr    = if_rif.addr   ;\n"));
             self.write(&format!("   assign if_page_{name}.rd_wrn  = if_rif.rd_wrn ;\n"));
             self.write(&format!("   assign if_page_{name}.wr_data = if_rif.wr_data;\n"));
             // self.write(&format!("   assign if_page_{}.wr_mask = if_rif.wr_mask;\n",page));
             self.write(&format!("   assign if_page_{name}.en      = if_rif.en && if_rif.addr[{}:{}]=={};\n",
-                rif.addr_width-1, width, addr >> width));
+                rif.addr_width-1, width, addr >> *width));
         }
 
         // Register Process

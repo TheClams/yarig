@@ -1,5 +1,6 @@
 use winnow::{
-  combinator::{alt, delimited, opt, preceded, terminated}, error::{ErrorKind, StrContext}, Parser
+  combinator::{alt, delimited, opt, preceded, terminated},
+  error::StrContext, Parser
 };
 
 use crate::rifgen::{AddressKind, AddressOffset, Context, RifmuxItem, RifType, RifmuxGroup, SuffixInfo};
@@ -38,8 +39,8 @@ pub fn rifmux_map<'a>(input: &mut &'a str) -> Res<'a, Context> {
 
 pub fn address_offset<'a>(input: &mut &'a str) -> Res<'a, AddressOffset> {
     alt((
-      val_u64.try_map(|v| -> Result<AddressOffset, ErrorKind> {Ok( AddressOffset::Value(v))}),
-      ws(param).try_map(|v| -> Result<AddressOffset, ErrorKind> {Ok(AddressOffset::Param(v.to_owned()))}),
+      val_u64.map(AddressOffset::Value),
+      ws(param).map(|v| AddressOffset::Param(v.to_owned())),
     )).context(StrContext::Label("address offset"))
     .parse_next(input)
 }
@@ -50,8 +51,8 @@ pub fn rif_inst<'a>(input: &'a str, group: &'a str) -> ResF<'a, RifmuxItem> {
   (
     ws(identifier),
     alt((
-      preceded(ws("="), ws(identifier)).try_map(|s| -> Result<RifType,ErrorKind> {Ok(RifType::Rif(s.to_owned()))}),
-      preceded(ws("external"),val_u8).try_map(|s| -> Result<RifType,ErrorKind> {Ok(RifType::Ext(s))}),
+      preceded(ws("="), ws(identifier)).map(|s| RifType::Rif(s.to_owned())),
+      preceded(ws("external"),val_u8).map(RifType::Ext),
     )),
     opt((
         alt((

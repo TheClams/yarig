@@ -5,7 +5,7 @@ use crate::rifgen::{
 use winnow::{
     ascii::{multispace0, space0, Caseless},
     combinator::{alt, delimited, opt, permutation, preceded, repeat_till, separated, separated_pair, terminated},
-    error::{ErrorKind, StrContext},
+    error::StrContext,
     Parser
 };
 
@@ -16,11 +16,11 @@ use super::{
 
 pub fn reset_val<'a>(input: &mut &'a str) -> Res<'a, ResetVal> {
     if input.starts_with('$') {
-        param.try_map(|v| -> Result<ResetVal, ErrorKind> {Ok(ResetVal::Param(v.to_owned()))}).parse_next(input)
+        param.map(|v| ResetVal::Param(v.to_owned())).parse_next(input)
     } else if input.starts_with('-') || input.starts_with('+') {
-        val_i128.try_map(|v| -> Result<ResetVal, ErrorKind> {Ok(ResetVal::Signed(v))}).parse_next(input)
+        val_i128.map(ResetVal::Signed).parse_next(input)
     } else {
-        val_u128.try_map(|v| -> Result<ResetVal, ErrorKind> {Ok(ResetVal::Unsigned(v))}).parse_next(input)
+        val_u128.map(ResetVal::Unsigned).parse_next(input)
     }
 }
 
@@ -34,10 +34,10 @@ pub fn reset_val_arr<'a>(input: &mut &'a str) -> Res<'a, Vec<ResetVal>> {
 /// `msb:lsb` `lsb+:width` `5b` or `$width`
 pub fn field_pos<'a>(input: &mut &'a str) -> Res<'a, FieldPos> {
     alt((
-        separated_pair(ws(val_u8_or_param), ws(":"), val_u8_or_param).try_map(|v| -> Result<FieldPos, ErrorKind> { Ok(FieldPos::MsbLsb((v.0, v.1))) }),
-        separated_pair(ws(val_u8_or_param), ws("+:"), val_u8_or_param).try_map(|v| -> Result<FieldPos, ErrorKind> { Ok(FieldPos::LsbSize((v.0, v.1))) }),
-        delimited(multispace0, val_u8, "b").try_map( |v| -> Result<FieldPos, ErrorKind> { Ok(FieldPos::Size(v.into())) }),
-        ws(param).try_map(|v| -> Result<FieldPos, ErrorKind> {Ok(FieldPos::Size(v.into()))}),
+        separated_pair(ws(val_u8_or_param), ws(":"), val_u8_or_param).map(|v| FieldPos::MsbLsb((v.0, v.1))),
+        separated_pair(ws(val_u8_or_param), ws("+:"), val_u8_or_param).map(|v| FieldPos::LsbSize((v.0, v.1))),
+        delimited(multispace0, val_u8, "b").map( |v| FieldPos::Size(v.into())),
+        ws(param).map(|v| FieldPos::Size(v.into())),
     ))
     .context(StrContext::Label("field position"))
     .parse_next(input)
@@ -52,7 +52,7 @@ pub fn field_decl<'a>(input: &mut &'a str) -> Res<'a, Field> {
     let reset_val = opt(preceded(
         ws("="),
         alt((
-            reset_val.try_map(|v: ResetVal| -> Result<Vec<ResetVal>, ErrorKind> { Ok(vec![v]) }),
+            reset_val.map(|v: ResetVal| vec![v]),
             reset_val_arr,
         )),
     ))
@@ -296,9 +296,9 @@ pub fn limit_def(input: &str) -> ResF<Limit> {
                 ws("["),
                 separated_pair(opt(reset_val), ws(":"), opt(reset_val)),
                 ws("]"),
-            ).try_map(|v| -> Result<LimitValue, ErrorKind> { Ok(v.into()) }),
+            ).map(|v| v.into()),
             // Arrays of values
-            reset_val_arr.try_map( |v| -> Result<LimitValue, ErrorKind> {Ok(LimitValue::List(v))}),
+            reset_val_arr.map(LimitValue::List),
             // Enum
             ws("enum").value(LimitValue::Enum),
         )),

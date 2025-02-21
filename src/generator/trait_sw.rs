@@ -31,7 +31,7 @@ pub trait GeneratorSw : GeneratorBase {
     const IS_HIERARCHICAL : bool = false;
 
     /// Main generator function
-    fn gen(&mut self, obj: &Comp) -> Result<(), Box<dyn std::error::Error>> {
+    fn gen_all(&mut self, obj: &Comp) -> Result<(), Box<dyn std::error::Error>> {
         // Create output directory if it does not exist
         create_dir_all(self.setting().path.clone())?;
         // Create resource file if needed
