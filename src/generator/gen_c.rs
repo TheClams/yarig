@@ -7,7 +7,7 @@ use crate::{
 use super::{
     casing::{Casing, ToCasing},
     gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore, RifList},
-    trait_sw::GeneratorSw
+    trait_sw::{GeneratorSw, RifContext}
 };
 
 
@@ -282,32 +282,25 @@ impl GeneratorSw for GeneratorC {
     }
 
     /// Write RIF end of declaration
-    fn write_rif_inst(&mut self,
-            prefix: &str,
-            group: &str,
-            rif_inst: &RifInst,
-            page_name: &str,
-            addr: u64,
-            desc: &Description,
-            is_last: bool) {
+    fn write_rif_inst(&mut self, rif_inst: &RifInst, cntxt: RifContext, desc: &Description, is_last: bool) {
         let mut base_addr_name = self.base_addr_name.clone();
-        if !group.is_empty() && prefix.is_empty() {
+        if !cntxt.group.is_empty() && cntxt.prefix.is_empty() {
             base_addr_name.push('_');
-            base_addr_name.push_str(group);
+            base_addr_name.push_str(cntxt.group);
         }
         let inst_name = remove_rif(&rif_inst.inst_name);
-        let mut name_tt = format!("{prefix}{inst_name}").to_casing(Casing::Title);
-        let mut name = format!("{prefix}{}", &inst_name.replace('_', ""));
+        let mut name_tt = format!("{}{inst_name}", cntxt.prefix).to_casing(Casing::Title);
+        let mut name = format!("{}{}", cntxt.prefix, &inst_name.replace('_', ""));
         let mut page_type = remove_rif(&rif_inst.type_name).to_lowercase();
         if self.multipage {
-            name.push_str(&page_name.replace('_', ""));
+            name.push_str(&cntxt.page.replace('_', ""));
             name_tt.push(' ');
-            name_tt.push_str(&page_name.to_casing(Casing::Title));
-            page_type.push_str(&format!("_{}",page_name.to_lowercase()));
+            name_tt.push_str(&cntxt.page.to_casing(Casing::Title));
+            page_type.push_str(&format!("_{}",cntxt.page.to_lowercase()));
         }
         let name_uc = name.to_uppercase();
         self.write(&format!("/// {name_tt} base address: {}\n", desc.get_short()));
-        self.write(&format!("#define {name_uc}_BASE_ADDR ({base_addr_name} + 0x{addr:08X})\n"));
+        self.write(&format!("#define {name_uc}_BASE_ADDR ({base_addr_name} + 0x{:08X})\n", cntxt.addr));
         self.push_stash(0, &format!("/// Pointer to {name_tt} registers\n"));
         self.push_stash(0, &format!("#define P_{name_uc} ((volatile {page_type}_regs_t* ) {name_uc}_BASE_ADDR)\n"));
         if is_last {

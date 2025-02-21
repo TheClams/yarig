@@ -97,10 +97,10 @@ pub trait GeneratorSw : GeneratorBase {
                     .map(|f| self.get_field_name(reg,f).len())
                     .max().expect("Registers should have fields");
                 self.set_max_field_name_len(max_len);
-                self.write_reg_header(&pname, &reg);
+                self.write_reg_header(&pname, reg);
                 let mut pos_l = 0;
-                let mut fields = reg.fields.iter().filter(|f| !(f.visibility.is_hidden() && is_public)).peekable();
-                while let Some(f) = fields.next() {
+                let fields = reg.fields.iter().filter(|f| !(f.visibility.is_hidden() && is_public));
+                for f in fields {
                     if pos_l != f.lsb {
                         self.write_unused_field_decl(&pname, reg, pos_l, f.lsb - pos_l);
                     }
@@ -112,7 +112,7 @@ pub trait GeneratorSw : GeneratorBase {
                     self.write_unused_field_decl(&pname, reg, pos_l, rif.data_width - pos_l);
                 }
                 // End of register declaration
-                self.write_reg_footer(&pname, &reg);
+                self.write_reg_footer(&pname, reg);
             }
             // Instantiate all registers
             let len_name = page.regs.iter().map(|r| r.reg_name.len()).max().expect("Page should have registers");
@@ -256,9 +256,9 @@ pub trait GeneratorSw : GeneratorBase {
         let rifmux_list : Vec<&RifmuxInst> = rifmux.components.iter()
             .filter_map(|c| if let Comp::Rifmux(m) = &c.inst {Some(m)} else {None})
             .collect();
-        self.write_rifmux_header(&rifmux, rif_list, &rifmux_list);
+        self.write_rifmux_header(rifmux, rif_list, &rifmux_list);
         self.scan_rifmux(rifmux, "", 0)?;
-        self.write_rifmux_footer(&rifmux);
+        self.write_rifmux_footer(rifmux);
         self.save(&self.filename_rifmux(rifmux))
     }
 
@@ -285,7 +285,8 @@ pub trait GeneratorSw : GeneratorBase {
                     let mut pages = r.pages.iter().peekable();
                     while let Some(page) = pages.next() {
                         let desc = if page.description.is_empty() {&r.description} else {&page.description};
-                        self.write_rif_inst(&prefix, &comp.group, r, &page.name, page.addr + addr, desc, pages.peek().is_none());
+                        let cntxt = RifContext::new(&prefix, &comp.group, &page.name, page.addr + addr);
+                        self.write_rif_inst(r, cntxt, desc, pages.peek().is_none());
                         if !Self::INST_BY_PAGE {
                             break;
                         }
@@ -307,9 +308,22 @@ pub trait GeneratorSw : GeneratorBase {
     fn write_rifmux_footer(&mut self, rifmux: &RifmuxInst);
 
     /// Write RIF instance
-    fn write_rif_inst(&mut self, prefix: &str, group: &str, rif_inst: &RifInst, page_name: &str, addr: u64, desc: &Description, is_last: bool);
+    fn write_rif_inst(&mut self, rif_inst: &RifInst, cntxt: RifContext, desc: &Description, is_last: bool);
 
     /// Write RIF mux instance
     fn write_rifmux_inst(&mut self, _rifmux_inst: &RifmuxInst, _addr: u64) {}
 
+}
+
+pub struct RifContext<'a> {
+    pub prefix: &'a str,
+    pub group: &'a str,
+    pub page: &'a str,
+    pub addr: u64,
+}
+
+impl RifContext<'_> {
+    pub fn new<'a>(prefix: &'a str, group: &'a str, page: &'a str, addr: u64) -> RifContext<'a> {
+        RifContext {prefix, group, page, addr}
+    }
 }

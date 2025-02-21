@@ -8,7 +8,7 @@ use crate::{
 use super::{
     casing::{Casing, ToCasing},
     gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore, RifList},
-    trait_sw::GeneratorSw
+    trait_sw::{GeneratorSw, RifContext}
 };
 
 
@@ -253,10 +253,11 @@ impl GeneratorSw for GeneratorPy {
 
     fn write_rifmux_footer(&mut self, _rifmux: &RifmuxInst) {}
 
-    fn write_rif_inst(&mut self, _prefix: &str, _group: &str, rif_inst: &RifInst, _page_name: &str, addr: u64, _desc: &Description, _is_last: bool) {
-        self.write(&format!("      self.{} = {}({addr:#x})\n",
+    fn write_rif_inst(&mut self, rif_inst: &RifInst, cntxt: RifContext, _desc: &Description, _is_last: bool) {
+        self.write(&format!("      self.{} = {}({:#x})\n",
             remove_rif(&rif_inst.inst_name).to_casing(Casing::Snake),
             remove_rif(&rif_inst.type_name).to_casing(Casing::Pascal),
+            cntxt.addr
         ));
         if let Some(desc) = self.desc_to_string(&rif_inst.description,2) {
             self.write(&desc);

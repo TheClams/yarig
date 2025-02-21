@@ -2,7 +2,7 @@ use crate::{comp::comp_inst::{RifFieldInst, RifInst, RifRegInst, RifmuxInst}, pa
 
 use super::{
     gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore, RifList},
-    trait_sw::GeneratorSw,
+    trait_sw::{GeneratorSw, RifContext},
 };
 
 
@@ -218,19 +218,19 @@ impl GeneratorSw for GeneratorRal {
         self.write(         "      super.new(name, UVM_NO_COVERAGE);\n");
         self.write(         "   endfunction : new\n\n");
         self.write(         "   virtual function void build();\n");
-        self.write(&format!("      this.default_map = create_map(\"\", 0, 4, UVM_LITTLE_ENDIAN, 0);\n"));
+        self.write(         "      this.default_map = create_map(\"\", 0, 4, UVM_LITTLE_ENDIAN, 0);\n");
         self.pop_stash(0);
         self.write(         "   endfunction : build\n\n");
         self.write(&format!("endclass : {blkname}\n\n"));
         self.write(&format!("`endif // {}\n", blkname.to_uppercase()));
     }
 
-    fn write_rif_inst(&mut self, _prefix: &str, _group: &str, rif_inst: &RifInst, _page_name: &str, addr: u64, _desc: &Description, _is_last: bool) {
+    fn write_rif_inst(&mut self, rif_inst: &RifInst, cntxt: RifContext, _desc: &Description, _is_last: bool) {
         let instname = remove_rif(&rif_inst.inst_name);
         let typename = &rif_inst.type_name;
         let macroname = self.ral_macro.clone().unwrap_or("ral_create_reg_block".to_owned());
         self.write(&format!("   ral_block_{typename} m_ral_block_{instname};\n"));
-        self.push_stash(0,&format!("      `{macroname}({instname}, {typename}, 'h{addr:08x})\n"));
+        self.push_stash(0,&format!("      `{macroname}({instname}, {typename}, 'h{:08x})\n", cntxt.addr));
     }
 
     fn write_rifmux_inst(&mut self, rifmux_inst: &RifmuxInst, addr: u64) {
