@@ -54,7 +54,28 @@ Highlighting for SublimeText is available on [github](https://github.com/TheClam
 
 
 ## Configuration
+ A configuration file allows to specify many options of the generators like the rif file, a list of target, the output path for each targets, ...
 
+Here is an example:
+```
+filename = "my_chip.rif"
+gen_inc = ["*"]
+targets = ["py", "sv", "html", "latex", "c"]
+
+[suffixes.spi]
+name = "full"
+pkg = true
+
+[outputs]
+doc = "../yarig/doc"
+c = "../yarig/c"
+py = "../yarig/py"
+rtl = "../yarig/rtl"
+sim = "../yarig/sim"
+vhdl = "../yarig/vhdl"
+```
+
+All settings from the configruation file can be overriden by command-line arguments. Run `yarig -h` to list all available options.
 
 ## Generator Traits
 

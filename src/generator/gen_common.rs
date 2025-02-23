@@ -92,7 +92,7 @@ impl Privacy {
 #[derive(Clone, Debug)]
 pub struct GeneratorBaseSetting {
     /// Output directory path
-    pub path: String,
+    pub path: PathBuf,
     /// Casing used on register/field
     pub casing: Casing,
     /// Confidentality: confidential or public

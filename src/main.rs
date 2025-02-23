@@ -43,7 +43,7 @@ struct RifGenArgs{
     output_sim: String,
     /// Public documentation (hide all private registers/fields)
     #[arg(long, action)]
-    public: Option<bool>,
+    public: bool,
     /// Set parameters value
     #[arg(short = 'P', value_parser = parse_key_val::<String, isize>)]
     parameters: Vec<(String, isize)>,
@@ -99,10 +99,10 @@ fn main() {
 
     // Update configuration with command line arguments
     if let Some(fname) = args.rif {cfg.filename = fname.to_owned()};
-    if !args.include.is_empty() {cfg.include.extend(args.include)};
-    if !args.gen_inc.is_empty() {cfg.gen_inc.extend(args.gen_inc)};
+    if !args.include.is_empty() {cfg.include = args.include.clone()};
+    if !args.gen_inc.is_empty() {cfg.gen_inc = args.gen_inc.clone()};
     if !args.targets.is_empty() {cfg.targets = args.targets.to_owned()};
-    if let Some(public) = args.public {cfg.public = public};
+    if args.public {cfg.public = true};
     if !args.targets.is_empty() {cfg.targets = args.targets.to_owned()};
     if !args.parameters.is_empty() {cfg.parameters.extend(args.parameters)};
     if let Some(suffix) = args.suffix {cfg.suffixes.insert("".to_owned(), suffix);};

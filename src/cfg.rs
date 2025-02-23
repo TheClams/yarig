@@ -40,6 +40,7 @@ pub enum RifGenTargets {
 #[serde(default)]
 pub struct YarigCfg {
 	pub filename: String,
+	pub path: Option<String>,
 	pub include: Vec<String>,
 	pub gen_inc: Vec<String>,
 	pub targets: Vec<RifGenTargets>,
@@ -92,22 +93,34 @@ impl YarigCfg {
 		let path: PathBuf = path.into();
 		let s = fs::read_to_string(&path)
 			.map_err(|e| format!("Error opening {:?} : {e:?}", path))?;
-		Self::from_str(&s)
-	}
-
-	pub fn get_output_path(&self, keys: &[&str]) -> Option<&String> {
-		for k in keys.iter() {
-			if let Some(p) = self.outputs.get(*k) {
-				return Some(p)
+		let mut cfg = Self::from_str(&s)?;
+		if let Some(d) = path.parent() {
+			if let Ok(d) = fs::canonicalize(d) {
+				cfg.path = d.to_str().map(str::to_string);
 			}
 		}
-		None
+		Ok(cfg)
+	}
+
+	pub fn get_output_path(&self, keys: &[&str], def: &str) -> PathBuf {
+		let mut path = format!("./{def}");
+		for k in keys.iter() {
+			if let Some(p) = self.outputs.get(*k) {
+				path = p.to_owned();
+				break;
+			}
+		}
+		let is_rel = path.starts_with('.');
+		match (&self.path, is_rel) {
+			(Some(cwd), true) => [cwd, &path].iter().collect(),
+			_ => path.into()
+		}
 	}
 
 	pub fn gen_all(&self) -> Result<(), String> {
 
 	    let mut setting = GeneratorBaseSetting {
-	        path: "".to_owned(),
+	        path: "".into(),
 	        casing: Casing::Snake,
 	        privacy: if self.public {Privacy::Public} else {Privacy::Internal},
 	        compact: true,
@@ -126,39 +139,38 @@ impl YarigCfg {
 	    for target in self.targets.iter() {
 	        match target {
 	            RifGenTargets::C => {
-	                setting.path = self.get_output_path(&["c", "sw"]).map_or("c", |v| v).to_owned();
+	                setting.path = self.get_output_path(&["c", "sw"],"c");
 	                let mut g = GeneratorC::new(setting.clone(), self.c.base_offset.clone());
 	                g.gen_all(&rif_obj).map_err(|e| format!("C generation failed: {e}"))?;
 	            },
 	            RifGenTargets::Html => {
-	                setting.path = self.get_output_path(&["html", "doc"]).map_or("doc", |v| v).to_owned();
-	                println!("{}", setting.path);
+	                setting.path = self.get_output_path(&["html", "doc"],"doc");
 	                let mut g = GeneratorHtml::new(setting.clone());
 	                g.gen_all(&rif_obj).map_err(|e| format!("Html generation failed: {e}"))?;
 	            }
 	            RifGenTargets::Mif => {
-	                setting.path = self.get_output_path(&["mif", "doc"]).map_or("doc", |v| v).to_owned();
+	                setting.path = self.get_output_path(&["mif", "doc"], "doc");
 	                // TODO: support customization of paragraph style
 	                let mut g = GeneratorMif::new(setting.clone());
 	                g.gen_all(&rif_obj).map_err(|e| format!("MIF generation failed: {e}"))?;
 	            }
 	            RifGenTargets::Latex => {
-	                setting.path = self.get_output_path(&["latex", "doc"]).map_or("doc", |v| v).to_owned();
+	                setting.path = self.get_output_path(&["latex", "doc"], "doc");
 	                let mut g = GeneratorLatex::new(setting.clone());
 	                g.gen_all(&rif_obj).map_err(|e| format!("Latex generation failed: {e}"))?;
 	            }
 	            RifGenTargets::Sv => {
-	                setting.path = self.get_output_path(&["sv", "rtl"]).map_or("rtl", |v| v).to_owned();
+	                setting.path = self.get_output_path(&["sv", "rtl"], "rtl");
 	                let mut g = GeneratorSv::new(setting.clone());
 	                g.gen_all(&rif_obj).map_err(|e| format!("SystemVerilog generation failed: {e}"))?;
 	            }
 	            RifGenTargets::Ral => {
-	                setting.path = self.get_output_path(&["ral", "sim"]).map_or("sim", |v| v).to_owned();
+	                setting.path = self.get_output_path(&["ral", "sim"], "sim");
 	                let mut g = GeneratorRal::new(setting.clone(), self.ral.clone());
 	                g.gen_all(&rif_obj).map_err(|e| format!("RAL generation failed: {e}"))?;
 	            }
 	            RifGenTargets::Py => {
-	                setting.path = self.get_output_path(&["py", "sw"]).map_or("py", |v| v).to_owned();
+	                setting.path = self.get_output_path(&["py", "sw"], "py");
 	                let mut g = GeneratorPy::new(setting.clone(), self.py.clone());
 	                g.gen_all(&rif_obj).map_err(|e| format!("Python generation failed: {e}"))?;
 	            }
