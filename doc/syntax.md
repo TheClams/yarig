@@ -176,6 +176,7 @@ The optional properties of a field, indented by one level compare to the field d
  - `partial <lsb_pos>` : Indicates that this field is larger than the register and that the LSB correspond to the bit _lsb_pos_ of larger field.
  - `interrupt high|low|rising|falling|edge [en=<valEnable>] [mask=<valMask>] [rclr|wclr|w0clr|w1clr|hwclr]` : override default interrupt settings.
  - `limit ([min:max]|{v0,v1,..}|enum) [bypass_signal]` : Limit valid write value for a field. The limit can be a range in the form of `[min:max]` (min & max included, one can be omitted), a set of value with `{v0,v1,v2}` or, when the field is an enum using the keyword `enum` will automatically limit the value to the enumerated values. When writing an invalid value, the register will not be updated and an access error will be raised on the control bus. If a bypass signal is provided, when the signal is high the limit is ignored.
+ - `nb_frac [value]` : Number of fractional bits for fixed point representation
  - `password [once=<val>] [hold=<val>] [protect]` : The field is used to generate an internal signal named `<regname>_<fieldname>_locked` which is initialize to 1
   and reset to 0 if the written value match one of the password value. If the password correspond to once the field will stay low until the next write.
   Otherwise it stays low until a value different from the a valid code is written.

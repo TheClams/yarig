@@ -862,6 +862,7 @@ pub struct RifFieldInst {
     pub enum_kind: EnumKind,
     pub partial: (Option<u16>, u16),
     pub array: ArrayIdx,
+    pub nb_frac: isize,
     pub limit: Limit,
 }
 
@@ -925,6 +926,10 @@ impl RifFieldInst {
         if let Some(kind) = field.get_auto_hw_kind(params) {
             hw_kind.push(kind);
         }
+        // Create format sting for description
+        let s = if matches!(reset, ResetVal::Signed(_)) {'s'} else {'u'};
+        let format_str = format!("{s}{}.{}", width, field.nb_frac);
+        let desc = desc.with_format(&format_str);
         //
         *next_lsb += width;
         RifFieldInst {
@@ -939,6 +944,7 @@ impl RifFieldInst {
             enum_kind: field.enum_kind.clone(),
             limit: field.limit.clone(),
             partial: field.partial,
+            nb_frac: field.nb_frac,
             lsb,
             width,
             array: idx,
@@ -958,6 +964,7 @@ impl RifFieldInst {
             visibility: Visibility::Unused,
             enum_kind: EnumKind::None,
             partial: (None, 0),
+            nb_frac: 0,
             array: ArrayIdx::default(),
             limit: Limit::default(),
         }

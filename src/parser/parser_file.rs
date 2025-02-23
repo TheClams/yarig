@@ -8,9 +8,7 @@ use winnow::Parser;
 use crate::error::{RifError, RifErrorKind, ERROR_CONTEXT};
 use crate::parser::parser_expr::parse_expr;
 use crate::parser::{
-    bool_or_default, clk_en, enum_kind, generic_def, intr_desc, limit_def,
-    password_info, path_val, reg_incl_or_decl, reg_inst_array_properties, reg_inst_properties,
-    reg_pulse_info, rif_inst_suffix, rifmux_group, rifmux_map, signal_or_expr, val_u16
+    bool_or_default, clk_en, enum_kind, generic_def, intr_desc, limit_def, password_info, path_val, reg_incl_or_decl, reg_inst_array_properties, reg_inst_properties, reg_pulse_info, rif_inst_suffix, rifmux_group, rifmux_map, signal_or_expr, val_isize, val_u16
 };
 use crate::rifgen::{
     Access, ClockingInfo, Context, DataWidth, EnumDef, EnumKind, ExternalKind,
@@ -502,6 +500,7 @@ impl RifGenSrc {
                             self.last_field_mut().enum_kind = enum_kind;
                         }
                         Context::Limit => self.last_field_mut().limit = limit_def(l)?,
+                        Context::FieldFrac => self.last_field_mut().nb_frac = val_isize(&mut l)?,
                         _ => {
                             return Err(RifError::unsupported(info, l));
                         }

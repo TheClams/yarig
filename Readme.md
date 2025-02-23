@@ -86,8 +86,8 @@ The exact behavior of each traits can be tweaked with some associated constant.
    - [ ] VHDL
 
 ## Feature
- - [ ] Support frac property in field (number of fractionnal bits)
- - [ ] Support $f inside description to display format u7.0 or s0.4
+ - [x] Support frac property in field (number of fractionnal bits)
+ - [x] Support $f inside description to display format u7.0 or s0.4
  - [ ] Support pipe option RTL
  - [ ] Support option to repeat field description for interrupt derived register
  - [ ] Support JSON config file: top entry is a target name

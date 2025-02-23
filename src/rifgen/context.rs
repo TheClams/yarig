@@ -67,6 +67,8 @@ pub enum Context { #[default]
 	Optional,
     /// Set limit of field write value (started by keyword `limit`)
     Limit,
+    /// Set number fo fractional bits of field
+    FieldFrac,
     /// Set limit of field write value (started by keyword `limit`)
     Password,
     /// Generic item : format is `- identifier`

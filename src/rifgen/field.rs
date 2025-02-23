@@ -681,6 +681,8 @@ pub struct Field {
     pub intr_desc: Option<InterruptDesc>,
     /// Optional limits on the value which can be writen
     pub limit: Limit,
+    /// Number of fractional bits
+    pub nb_frac: isize,
     /// Indicates the register instance is controlled by a parameter
     pub optional: String,
     /// Extra Info
@@ -707,6 +709,7 @@ impl Default for Field {
             lock: Lock(None),
             visibility: Visibility::Full,
             intr_desc: None,
+            nb_frac : 0,
             limit: Limit::default(),
             info: HashMap::new(),
             optional: "".to_owned(),

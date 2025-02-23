@@ -70,6 +70,12 @@ impl Description {
         // let s = self.0.replace("$i", &format!("{idx}"));
         Description(desc)
     }
+
+    // Create a description with $f replace by a format string (for example u8.0 or s5.3)
+    pub fn with_format(&self, format: &str) -> Description {
+        let desc = self.0.replace("$f", format);
+        Description(desc)
+    }
 }
 
 impl From<String> for Description {

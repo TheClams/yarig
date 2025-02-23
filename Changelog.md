@@ -5,6 +5,7 @@
 ### Added
   - target py: generator for python class
   - configuration using toml file
+  - New field property: `nb_frac` to specify number of fractional bits
 
 ### Changed
   - Trait Sw:

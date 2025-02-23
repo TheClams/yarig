@@ -76,7 +76,6 @@ pub fn field_decl<'a>(input: &mut &'a str) -> Res<'a, Field> {
     )
 }
 
-// TODO: support mask|enable|pending.description : maybe something specific on interrupt register
 pub fn field_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
     terminated(
         alt((
@@ -92,6 +91,7 @@ pub fn field_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
                 alt((ws("disabled"), ws("disable"))).value(Context::Disabled),
                 ws("reserved").value(Context::Reserved),
                 ws("optional").value(Context::Optional),
+                alt((ws("nbfrac"),ws("nb_frac"))).value(Context::FieldFrac),
             )),
             alt((
                 ws("clock").value(Context::HwClock),
