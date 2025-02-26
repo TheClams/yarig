@@ -5,7 +5,7 @@ use toml;
 use crate::{
 	comp::comp_inst::Comp,
 	generator::{
-		casing::Casing, gen_c::GeneratorC, gen_common::{GeneratorBaseSetting, Privacy}, gen_html::GeneratorHtml, gen_latex::GeneratorLatex, gen_mif::GeneratorMif, gen_py::GeneratorPy, gen_ral::GeneratorRal, gen_sv::GeneratorSv, trait_doc::GeneratorDoc, trait_sw::GeneratorSw
+		casing::Casing, gen_c::GeneratorC, gen_common::{GeneratorBaseSetting, Privacy}, gen_html::GeneratorHtml, gen_json::GeneratorJson, gen_latex::GeneratorLatex, gen_mif::GeneratorMif, gen_py::GeneratorPy, gen_ral::GeneratorRal, gen_sv::GeneratorSv, trait_doc::GeneratorDoc, trait_sw::GeneratorSw
 	},
 	parser::{parser_expr::ParamValues, RifGenSrc},
 	rifgen::SuffixInfo
@@ -173,6 +173,11 @@ impl YarigCfg {
 	                setting.path = self.get_output_path(&["py", "sw"], "py");
 	                let mut g = GeneratorPy::new(setting.clone(), self.py.clone());
 	                g.gen_all(&rif_obj).map_err(|e| format!("Python generation failed: {e}"))?;
+	            }
+	            RifGenTargets::Json => {
+	                setting.path = self.get_output_path(&["json", "doc"], "doc");
+	                let mut g = GeneratorJson::new(setting.clone());
+	                g.gen_all(&rif_obj).map_err(|e| format!("JSON generation failed: {e}"))?;
 	            }
 	            t => eprintln!("Target {t:?} not supported -> skipping"),
 	        }

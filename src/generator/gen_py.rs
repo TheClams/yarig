@@ -1,7 +1,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    cfg::CfgPy, comp::comp_inst::{RifFieldInst, RifInst, RifRegInst, RifmuxInst}, parser::remove_rif, rifgen::Description};
+    cfg::CfgPy,
+    comp::comp_inst::{RifFieldInst, RifInst, RifRegInst, RifmuxInst},
+    parser::remove_rif,
+    rifgen::{Description, EnumDef}
+};
 
 use super::{
     casing::{Casing, ToCasing},
@@ -126,19 +130,30 @@ impl GeneratorSw for GeneratorPy {
         if let Some(desc) = self.desc_to_string(&reg.base_description,2) {
             self.write(&desc);
         }
+        //
+        let mut flags = Vec::new();
+        if reg.is_external() {
+            flags.push("external");
+        }
+        if reg.is_intr() {
+            flags.push("interrupt");
+        }
+        if !flags.is_empty() {
+            self.write(&format!("      flags : list[str] = {:?}\n", flags));
+        }
         // Cleanup field array dictionnary
         self.field_array.clear();
     }
 
     // End of register declaration: add the init function with all the field instance
-    fn write_reg_footer(&mut self, _basename: &str, reg: &RifRegInst) {
+    fn write_reg_footer(&mut self, _basename: &str, reg: &RifRegInst, _is_last: bool) {
         self.write("\n      def __init__(self, parent: None | Peripheral, name: str, addr: int, init: None|int = None) :\n");
         let ro = if reg.sw_access.is_writable() {"False"} else {"True"};
         self.write(&format!("         super().__init__(parent, name, addr, {ro}, init)\n"));
         self.pop_stash(0);
     }
 
-    fn write_field_decl(&mut self, _basename: &str, reg: &RifRegInst, field: &RifFieldInst) {
+    fn write_field_decl(&mut self, _basename: &str, reg: &RifRegInst, field: &RifFieldInst, _enum_def: Option<&EnumDef>, _is_last: bool) {
         let field_type = field.name.to_casing(Casing::Pascal);
         let reg_type = reg.reg_type.to_casing(Casing::Pascal);
         let name = field.name.to_casing(Casing::Snake);
@@ -175,17 +190,7 @@ impl GeneratorSw for GeneratorPy {
         self.write(&format!("         value : int = {}\n", field.reset()));
         self.write(&format!("         signed : bool = {}\n",
             if field.is_signed() {"True"} else {"False"}));
-        //
-        let mut flags = Vec::new();
-        if field.sw_kind.is_special() {
-            flags.push(field.sw_kind.access_str());
-        }
-        if reg.is_intr() {
-            flags.push("interrupt");
-        }
-        if !flags.is_empty() {
-            self.write(&format!("         flags : list[str] = {:?}\n", flags));
-        }
+        self.write(&format!("         kind : str = {:?}\n", field.sw_kind.access_str()));
     }
 
     fn write_page_header(&mut self, _name: &str, _desc: &Description) {}
@@ -196,7 +201,7 @@ impl GeneratorSw for GeneratorPy {
         self.pop_stash(1)
     }
 
-    fn write_reginst(&mut self, _basename: &str, base_addr: u64, reg: &RifRegInst, _reg_1st: &RifRegInst) {
+    fn write_reginst(&mut self, _basename: &str, base_addr: u64, reg: &RifRegInst, _reg_1st: &RifRegInst, _is_last: bool) {
         let name = reg.reg_name.to_casing(Casing::Snake);
         if reg.array.dim() > 1 {
             if reg.array.idx() == 0 {
@@ -251,7 +256,7 @@ impl GeneratorSw for GeneratorPy {
 
     fn write_rifmux_footer(&mut self, _rifmux: &RifmuxInst) {}
 
-    fn write_rif_inst(&mut self, rif_inst: &RifInst, cntxt: RifContext, _desc: &Description, _is_last: bool) {
+    fn write_rif_inst(&mut self, rif_inst: &RifInst, cntxt: RifContext, _desc: &Description, _last_page: bool, _last_comp: bool) {
         self.write(&format!("      self.{} = {}({:#x})\n",
             remove_rif(&rif_inst.inst_name).to_casing(Casing::Snake),
             remove_rif(&rif_inst.type_name).to_casing(Casing::Pascal),

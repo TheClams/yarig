@@ -1,4 +1,9 @@
-use crate::{cfg::CfgRal, comp::comp_inst::{RifFieldInst, RifInst, RifRegInst, RifmuxInst}, parser::remove_rif, rifgen::Description};
+use crate::{
+    cfg::CfgRal,
+    comp::comp_inst::{RifFieldInst, RifInst, RifRegInst, RifmuxInst},
+    parser::remove_rif,
+    rifgen::{Description, EnumDef}
+};
 
 use super::{
     gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore, RifList},
@@ -106,7 +111,7 @@ impl GeneratorSw for GeneratorRal {
             remove_rif(&self.comp_name)));
     }
 
-    fn write_reg_footer(&mut self,  basename: &str, reg: &RifRegInst) {
+    fn write_reg_footer(&mut self,  basename: &str, reg: &RifRegInst, _is_last: bool) {
         let reg_type = reg.reg_type.to_lowercase();
         self.write(&format!("\n   function new(string name = \"{basename}_{reg_type}\");\n"));
         if self.reg_is_incl {
@@ -122,7 +127,7 @@ impl GeneratorSw for GeneratorRal {
         self.write(&format!("endclass : ral_reg_{basename}_{reg_type}\n\n"));
     }
 
-    fn write_field_decl(&mut self, _basename: &str, reg: &RifRegInst, field: &RifFieldInst) {
+    fn write_field_decl(&mut self, _basename: &str, reg: &RifRegInst, field: &RifFieldInst, _enum_def: Option<&EnumDef>, _is_last: bool) {
         let fieldname = self.get_field_name(reg, field);
         if !self.reg_is_incl {
             let rand_s = if field.is_sw_write() {"rand "} else {""};
@@ -158,7 +163,7 @@ impl GeneratorSw for GeneratorRal {
         self.write(&format!("endclass : ral_block_{name}\n\n"));
     }
 
-    fn write_reginst(&mut self, _basename: &str, base_addr: u64, reg: &RifRegInst, reg_1st: &RifRegInst) {
+    fn write_reginst(&mut self, _basename: &str, base_addr: u64, reg: &RifRegInst, reg_1st: &RifRegInst, _is_last: bool) {
         let regname = reg.name().to_lowercase();
         let regtype = format!("ral_reg_{}_{}", remove_rif(&self.comp_name), reg.reg_type.to_lowercase());
         // Declare register instance as members of the class
@@ -225,7 +230,7 @@ impl GeneratorSw for GeneratorRal {
         self.write(&format!("`endif // {}\n", blkname.to_uppercase()));
     }
 
-    fn write_rif_inst(&mut self, rif_inst: &RifInst, cntxt: RifContext, _desc: &Description, _is_last: bool) {
+    fn write_rif_inst(&mut self, rif_inst: &RifInst, cntxt: RifContext, _desc: &Description, _last_page: bool, _last_comp: bool) {
         let instname = remove_rif(&rif_inst.inst_name);
         let typename = &rif_inst.type_name;
         let macroname = self.ral_macro.clone().unwrap_or("ral_create_reg_block".to_owned());
@@ -233,7 +238,7 @@ impl GeneratorSw for GeneratorRal {
         self.push_stash(0,&format!("      `{macroname}({instname}, {typename}, 'h{:08x})\n", cntxt.addr));
     }
 
-    fn write_rifmux_inst(&mut self, rifmux_inst: &RifmuxInst, addr: u64) {
+    fn write_rifmux_inst(&mut self, rifmux_inst: &RifmuxInst, addr: u64, _last_comp: bool) {
         let instname = remove_rif(&rifmux_inst.inst_name);
         let typename = &rifmux_inst.type_name;
         let macroname = self.ral_macro.clone().unwrap_or("ral_create_reg_block".to_owned());

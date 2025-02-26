@@ -10,5 +10,6 @@ pub mod trait_sw;
 pub mod gen_c;
 pub mod gen_ral;
 pub mod gen_py;
+pub mod gen_json;
 // Hardware Generators
 pub mod gen_sv;

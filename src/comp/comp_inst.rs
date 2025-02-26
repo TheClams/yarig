@@ -50,6 +50,12 @@ pub enum Comp {
     External(RifExt),
 }
 
+impl Comp {
+    pub fn is_external(&self) -> bool {
+        matches!(self, Comp::External(_))
+    }
+}
+
 #[derive(Clone, Debug)]
 /// Component instance: a component with an address and an optional group name
 pub struct CompInst {

@@ -98,7 +98,7 @@ The exact behavior of each traits can be tweaked with some associated constant.
    - [x] latex
    - [x] mif
  - [x] Implement base generator for software (from C) :
-   - [ ] json : both flat (multi file) and hierarchical
+   - [x] json
    - [ ] svd
    - [ ] IP-XACT
    - [x] python
@@ -109,16 +109,23 @@ The exact behavior of each traits can be tweaked with some associated constant.
 ## Feature
  - [x] Support frac property in field (number of fractionnal bits)
  - [x] Support $f inside description to display format u7.0 or s0.4
+ - [ ] Support casing option
  - [ ] Support pipe option RTL
  - [ ] Support option to repeat field description for interrupt derived register
- - [ ] Support JSON config file: top entry is a target name
+ - [x] Support TOML config file
  - [ ] Support latex equation in description
  - [ ] Implement a TUI ? (ratatui)
- - [x] Implement a GUI (eGui Based, in an external crate)
+ - [x] Implement a GUI (eGui Based, in an external crate, visualizer only)
  - [ ] Support overlapping register in hardware: need to check exclusive access (RO/WO)
  - [ ] Check enum size fit the field size
  - [ ] Option to add representation value for enum. Syntax could be 'NAME = VAL (repr) "description"'. Could be usefull when enum is representing a limited set of integer or real values.
  - [ ] Option to control if clear works without clock enable or not
+
+## Documentation
+ - [ ] Config file: full description
+ - [ ] Base generator trait
+ - [ ] Why Yarig vs other existing solution (mostly SystemRDL)
+ - [ ] List of syntax example for typical use-cases
 
 ## Known Bugs / Edge cases
  - [ ] Support partial fields arrays

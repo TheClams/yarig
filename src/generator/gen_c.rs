@@ -1,7 +1,7 @@
 use crate::{
     comp::comp_inst::{RifFieldInst, RifInst, RifRegInst, RifmuxInst},
     parser::remove_rif,
-    rifgen::{Description, EnumEntry}
+    rifgen::{Description, EnumEntry, EnumDef}
 };
 
 use super::{
@@ -154,7 +154,7 @@ impl GeneratorSw for GeneratorC {
     }
 
     /// Write register end of declaration
-    fn write_field_decl(&mut self, basename: &str, reg: &RifRegInst, field: &RifFieldInst) {
+    fn write_field_decl(&mut self, basename: &str, reg: &RifRegInst, field: &RifFieldInst, _enum_def: Option<&EnumDef>, _is_last: bool) {
         let field_name = self.get_field_name(reg, field);
         let name = self.casing(&field_name);
         let mask =
@@ -178,7 +178,7 @@ impl GeneratorSw for GeneratorC {
     }
 
     /// Write register end of declaration
-    fn write_reg_footer(&mut self,  basename: &str, reg: &RifRegInst) {
+    fn write_reg_footer(&mut self,  basename: &str, reg: &RifRegInst, _is_last: bool) {
         self.write("  } fields; //!< Access to bitfields\n");
         self.write(&format!("}} {}_{}_reg_t;\n\n",
             basename.to_lowercase(),
@@ -230,7 +230,7 @@ impl GeneratorSw for GeneratorC {
     }
 
     /// Write register instances
-    fn write_reginst(&mut self, basename: &str, base_addr: u64, reg: &RifRegInst, _reg_1st: &RifRegInst) {
+    fn write_reginst(&mut self, basename: &str, base_addr: u64, reg: &RifRegInst, _reg_1st: &RifRegInst, _is_last: bool) {
         let dim = reg.array.dim();
         let lt = self.max_len_reg_type;
         let ln = self.max_len_reg_name;
@@ -282,7 +282,7 @@ impl GeneratorSw for GeneratorC {
     }
 
     /// Write RIF end of declaration
-    fn write_rif_inst(&mut self, rif_inst: &RifInst, cntxt: RifContext, desc: &Description, is_last: bool) {
+    fn write_rif_inst(&mut self, rif_inst: &RifInst, cntxt: RifContext, desc: &Description, last_page: bool, _last_comp: bool) {
         let mut base_addr_name = self.base_addr_name.clone();
         if !cntxt.group.is_empty() && cntxt.prefix.is_empty() {
             base_addr_name.push('_');
@@ -303,7 +303,7 @@ impl GeneratorSw for GeneratorC {
         self.write(&format!("#define {name_uc}_BASE_ADDR ({base_addr_name} + 0x{:08X})\n", cntxt.addr));
         self.push_stash(0, &format!("/// Pointer to {name_tt} registers\n"));
         self.push_stash(0, &format!("#define P_{name_uc} ((volatile {page_type}_regs_t* ) {name_uc}_BASE_ADDR)\n"));
-        if is_last {
+        if last_page {
             self.write("\n");
         }
     }

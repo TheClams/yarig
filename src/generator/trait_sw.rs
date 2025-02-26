@@ -2,13 +2,27 @@ use std::fs::create_dir_all;
 
 use crate::{
     comp::comp_inst::{Comp, RifFieldInst, RifInst, RifRegInst, RifmuxInst},
-    parser::remove_rif, rifgen::{Access, Description, EnumEntry}
+    parser::remove_rif, rifgen::{Access, Description, EnumDef, EnumEntry}
 };
 
 use super::{
     casing::{Casing, ToCasing},
     gen_common::{GeneratorBase, InstDict, RifList}
 };
+
+/// Current context for a component instance (Rif or rifmux)
+pub struct RifContext<'a> {
+    pub prefix: &'a str,
+    pub group: &'a str,
+    pub page: &'a str,
+    pub addr: u64,
+}
+
+impl RifContext<'_> {
+    pub fn new<'a>(prefix: &'a str, group: &'a str, page: &'a str, addr: u64) -> RifContext<'a> {
+        RifContext {prefix, group, page, addr}
+    }
+}
 
 /// Trait to implement generator for software control (C, python, ...)
 /// 
@@ -29,6 +43,8 @@ pub trait GeneratorSw : GeneratorBase {
     const INST_ARRAY : bool = false;
     /// Instantiate rifmux instead of flatenning all rifs instance
     const IS_HIERARCHICAL : bool = false;
+    /// Create register type declaration before register instance
+    const HAS_REG_DECL : bool = true;
 
     /// Main generator function
     fn gen_all(&mut self, obj: &Comp) -> Result<(), Box<dyn std::error::Error>> {
@@ -49,7 +65,7 @@ pub trait GeneratorSw : GeneratorBase {
                         self.gen_rif(rif, false)?;
                     }
                 }
-                self.gen_rifmux(rifmux, &riflist, true)
+                self.gen_rifmux(rifmux, &riflist)
             }
             Comp::Rif(rif) => self.gen_rif(rif, true),
             // Nothing todo for external RIF
@@ -92,32 +108,25 @@ pub trait GeneratorSw : GeneratorBase {
             let pname =
                 if Self::INC_PAGENAME && rif.pages.len() > 1 {format!("{}_{}", basename,page.name)}
                 else {basename.to_owned()};
-            for reg in page.iter_reg_type().filter(|r| r.sw_access!=Access::NA) {
-                let max_len = reg.fields.iter()
-                    .map(|f| self.get_field_name(reg,f).len())
-                    .max().expect("Registers should have fields");
-                self.set_max_field_name_len(max_len);
-                self.write_reg_header(&pname, reg);
-                let mut pos_l = 0;
-                let fields = reg.fields.iter().filter(|f| !(f.visibility.is_hidden() && is_public));
-                for f in fields {
-                    if pos_l != f.lsb {
-                        self.write_unused_field_decl(&pname, reg, pos_l, f.lsb - pos_l);
-                    }
-                    self.write_field_decl(&pname, reg, f);
-                    pos_l = f.lsb + f.width;
-                }
-                // Fill remaining bits if any
-                if pos_l < rif.data_width {
-                    self.write_unused_field_decl(&pname, reg, pos_l, rif.data_width - pos_l);
-                }
-                // End of register declaration
-                self.write_reg_footer(&pname, reg);
-            }
-            // Instantiate all registers
+            let is_last_page = idx==rif.pages.len()-1;
+            // Parse all register instance to get length, for pretty formatting
             let len_name = page.regs.iter().map(|r| r.reg_name.len()).max().expect("Page should have registers");
             let len_type = 6+page.regs.iter().map(|r| r.reg_type.len()).max().expect("Page should have registers");
             self.set_max_reg_name_len(len_name, len_type);
+            //
+            if Self::HAS_REG_DECL {
+                let mut regs = page.iter_reg_type().filter(|r| r.sw_access!=Access::NA).peekable();
+                while let Some(reg) = regs.next()  {
+                    let max_len = reg.fields.iter()
+                        .map(|f| self.get_field_name(reg,f).len())
+                        .max().expect("Registers should have fields");
+                    self.set_max_field_name_len(max_len);
+                    self.write_reg_header(&pname, reg);
+                    self.write_fields_decl(&rif, &pname, reg);
+                    self.write_reg_footer(&pname, reg, regs.peek().is_none());
+                }
+            }
+            // Instantiate all registers
             // Call page header only once on first page if instance are not grouped by page
             if idx==0 || Self::INST_BY_PAGE {
                 self.write_page_header(&pname, &page.description);
@@ -149,7 +158,12 @@ pub trait GeneratorSw : GeneratorBase {
                     self.write_reginst_unused(&pname, addr, (reg.addr - addr) / nb_byte);
                 }
                 let reg_1st = inst_dict.first_inst(page, reg);
-                self.write_reginst(&pname, page.addr, reg, reg_1st);
+                let is_last_reg = is_last_page && regs.peek().is_none();
+                self.write_reginst(&pname, page.addr, reg, reg_1st, is_last_reg);
+                if !Self::HAS_REG_DECL {
+                    self.write_fields_decl(&rif, &pname, reg);
+                    self.write_reg_footer(&pname, reg, regs.peek().is_none());
+                }
 
                 // Calculate expected next address
                 let nb = reg.array.dim().max(1);
@@ -159,9 +173,8 @@ pub trait GeneratorSw : GeneratorBase {
             if overlap {
                 self.write_reginst_overlap_footer();
             }
-            let is_last = idx==rif.pages.len()-1;
-            if is_last || Self::INST_BY_PAGE {
-                self.write_page_footer(&pname, is_last);
+            if is_last_page || Self::INST_BY_PAGE {
+                self.write_page_footer(&pname, is_last_page);
             }
         }
         // End the RIF declaration
@@ -201,10 +214,33 @@ pub trait GeneratorSw : GeneratorBase {
     fn write_reg_header(&mut self, basename: &str, reg: &RifRegInst);
 
     /// Write register end of declaration
-    fn write_reg_footer(&mut self,  basename: &str, reg: &RifRegInst);
+    fn write_reg_footer(&mut self,  basename: &str, reg: &RifRegInst, is_last: bool);
+
+    fn write_fields_decl(&mut self, rif: &RifInst, basename: &str, reg: &RifRegInst) {
+        let is_public = self.setting().privacy.is_public();
+        let mut fields = reg.fields.iter().filter(|f| !(f.visibility.is_hidden() && is_public)).peekable();
+        let mut pos_l = 0;
+        while let Some(f) = fields.next() {
+            if pos_l != f.lsb {
+                self.write_unused_field_decl(basename, reg, pos_l, f.lsb - pos_l, false);
+            }
+            let enum_def =
+                if let Some(enum_name) = f.enum_kind.name() {
+                    rif.get_enum_def(enum_name).ok()
+                } else {
+                    None
+                };
+            self.write_field_decl(basename, reg, f, enum_def, fields.peek().is_none());
+            pos_l = f.lsb + f.width;
+        }
+        // Fill remaining bits if any
+        if pos_l < rif.data_width {
+            self.write_unused_field_decl(basename, reg, pos_l, rif.data_width - pos_l, true);
+        }
+    }
 
     /// Write register end of declaration
-    fn write_field_decl(&mut self, basename: &str, reg: &RifRegInst, field: &RifFieldInst);
+    fn write_field_decl(&mut self, basename: &str, reg: &RifRegInst, field: &RifFieldInst, enum_defs: Option<&EnumDef>, is_last: bool);
 
     fn get_field_name(&self, reg: &RifRegInst, f: &RifFieldInst) -> String {
         if f.is_reserved() && self.setting().privacy.is_public() {
@@ -225,10 +261,10 @@ pub trait GeneratorSw : GeneratorBase {
     }
 
     /// Write register end of declaration
-    fn write_unused_field_decl(&mut self, basename: &str, reg: &RifRegInst, lsb: u8, width: u8) {
+    fn write_unused_field_decl(&mut self, basename: &str, reg: &RifRegInst, lsb: u8, width: u8, is_last: bool) {
         if Self::HAS_UNUSED {
             let field = RifFieldInst::new_unused(lsb, width);
-            self.write_field_decl(basename, reg, &field);
+            self.write_field_decl(basename, reg, &field, None, is_last);
         }
     }
 
@@ -245,39 +281,41 @@ pub trait GeneratorSw : GeneratorBase {
     fn write_reginst_overlap_footer(&mut self) {}
 
     /// Write register instances
-    fn write_reginst(&mut self, basename: &str, base_addr: u64, reg: &RifRegInst, reg_1st: &RifRegInst);
+    fn write_reginst(&mut self, basename: &str, base_addr: u64, reg: &RifRegInst, reg_1st: &RifRegInst, is_last: bool);
 
     /// Write unused register instances
     /// Default to nothing
     fn write_reginst_unused(&mut self, _basename: &str, _addr: u64, _span: u64) {}
 
     /// Generate structure associated to a RIFmux
-    fn gen_rifmux(&mut self, rifmux: &RifmuxInst, rif_list: &RifList, _is_top: bool) -> Result<(), Box<dyn std::error::Error>> {
+    fn gen_rifmux(&mut self, rifmux: &RifmuxInst, rif_list: &RifList) -> Result<(), Box<dyn std::error::Error>> {
         let rifmux_list : Vec<&RifmuxInst> = rifmux.components.iter()
             .filter_map(|c| if let Comp::Rifmux(m) = &c.inst {Some(m)} else {None})
             .collect();
         self.write_rifmux_header(rifmux, rif_list, &rifmux_list);
-        self.scan_rifmux(rifmux, "", 0)?;
+        self.scan_rifmux(rifmux, "", 0, true )?;
         self.write_rifmux_footer(rifmux);
         self.save(&self.filename_rifmux(rifmux))
     }
 
     /// Scan rifmux components
-    fn scan_rifmux(&mut self, rifmux: &RifmuxInst, top_name: &str, offset: u64) -> Result<(), Box<dyn std::error::Error>> {
+    fn scan_rifmux(&mut self, rifmux: &RifmuxInst, top_name: &str, offset: u64, last_scan : bool) -> Result<(), Box<dyn std::error::Error>> {
         let prefix = if top_name.is_empty() {
             "".to_owned()
         } else {
             format!("{}_",top_name)
         };
-        for comp in rifmux.components.iter() {
+        let mut comps = rifmux.components.iter().filter(|c| !c.is_external()).peekable();
+        while let Some(comp) = comps.next()  {
             let addr = offset + comp.addr;
+            let last_comp = comps.peek().is_none() && last_scan;
             match &comp.inst {
                 Comp::Rifmux(r) => {
                     if Self::IS_HIERARCHICAL {
-                        self.write_rifmux_inst(r, addr)
+                        self.write_rifmux_inst(r, addr, last_comp)
                     } else {
                         let comp_name = format!("{prefix}{}",r.inst_name.to_casing(Casing::Pascal));
-                        self.scan_rifmux(r, &comp_name, addr)?;
+                        self.scan_rifmux(r, &comp_name, addr, last_comp)?;
                     }
                 }
                 Comp::Rif(r) => {
@@ -286,7 +324,7 @@ pub trait GeneratorSw : GeneratorBase {
                     while let Some(page) = pages.next() {
                         let desc = if page.description.is_empty() {&r.description} else {&page.description};
                         let cntxt = RifContext::new(&prefix, &comp.group, &page.name, page.addr + addr);
-                        self.write_rif_inst(r, cntxt, desc, pages.peek().is_none());
+                        self.write_rif_inst(r, cntxt, desc, pages.peek().is_none(), last_comp);
                         if !Self::INST_BY_PAGE {
                             break;
                         }
@@ -308,22 +346,9 @@ pub trait GeneratorSw : GeneratorBase {
     fn write_rifmux_footer(&mut self, rifmux: &RifmuxInst);
 
     /// Write RIF instance
-    fn write_rif_inst(&mut self, rif_inst: &RifInst, cntxt: RifContext, desc: &Description, is_last: bool);
+    fn write_rif_inst(&mut self, rif_inst: &RifInst, cntxt: RifContext, desc: &Description, last_page: bool, last_comp: bool);
 
     /// Write RIF mux instance
-    fn write_rifmux_inst(&mut self, _rifmux_inst: &RifmuxInst, _addr: u64) {}
+    fn write_rifmux_inst(&mut self, _rifmux_inst: &RifmuxInst, _addr: u64, _last_comp: bool) {}
 
-}
-
-pub struct RifContext<'a> {
-    pub prefix: &'a str,
-    pub group: &'a str,
-    pub page: &'a str,
-    pub addr: u64,
-}
-
-impl RifContext<'_> {
-    pub fn new<'a>(prefix: &'a str, group: &'a str, page: &'a str, addr: u64) -> RifContext<'a> {
-        RifContext {prefix, group, page, addr}
-    }
 }

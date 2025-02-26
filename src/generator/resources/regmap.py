@@ -9,6 +9,9 @@ class Peripheral(object):
 class Register(object):
     '''Register definition: address and collection of fields'''
 
+    flags : list[str] = []
+    '''Register flags: interrupt, external, ...'''
+
     @typing.final
     class regInfo:
 
