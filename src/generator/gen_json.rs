@@ -48,8 +48,6 @@ impl GeneratorSw for GeneratorJson {
     const IS_HIERARCHICAL : bool = false;
     const HAS_REG_DECL    : bool = false;
 
-    fn set_rif_info(&mut self, _rif: &RifInst) {}
-
     fn write_rif_header(&mut self, _rif: &RifInst, _is_top: bool) {
         self.write("{\n");
     }
@@ -57,8 +55,6 @@ impl GeneratorSw for GeneratorJson {
     fn write_rif_footer(&mut self) {
         self.write("}");
     }
-
-    fn write_reg_header(&mut self, _basename: &str, _reg: &RifRegInst) {}
 
     fn write_reginst(&mut self, _basename: &str, base_addr: u64, reg: &RifRegInst, _reg_1st: &RifRegInst, _is_last: bool) {
         let reg_name = self.casing(&reg.name());
@@ -119,10 +115,6 @@ impl GeneratorSw for GeneratorJson {
         let sep = if is_last {""} else {","};
         self.write(&format!("   }}{sep}\n"));
     }
-
-    fn write_page_header(&mut self, _name: &str, _desc: &Description) {}
-
-    fn write_page_footer(&mut self, _name: &str, _is_last: bool) {}
 
     fn write_rifmux_header(&mut self, _rifmux: &RifmuxInst, _rif_list: &RifList, _rifmux_list: &[&RifmuxInst]) {
         self.write("{\n");

@@ -230,8 +230,6 @@ impl GeneratorDoc for GeneratorHtml {
         txt
     }
 
-    fn write_footer(&mut self, _name: &str) {}
-
     fn write_info(&mut self, info: &str) {
         self.write("<span><p>");
         self.write(info);

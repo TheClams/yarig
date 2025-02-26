@@ -121,8 +121,6 @@ impl GeneratorSw for GeneratorPy {
         self.field_parent.clear();
     }
 
-    fn write_rif_footer(&mut self) {}
-
     fn write_reg_header(&mut self, _basename: &str, reg: &RifRegInst) {
         let typename = reg.reg_type.to_casing(Casing::Pascal);
         self.write(       "\n   @final\n");
@@ -193,8 +191,6 @@ impl GeneratorSw for GeneratorPy {
         self.write(&format!("         kind : str = {:?}\n", field.sw_kind.access_str()));
     }
 
-    fn write_page_header(&mut self, _name: &str, _desc: &Description) {}
-
     fn write_page_footer(&mut self, _name: &str, _is_last: bool) {
         self.write("\n\n   def __init__(self, addr: int):\n");
         self.write("      super().__init__(addr)\n");
@@ -252,9 +248,7 @@ impl GeneratorSw for GeneratorPy {
         }
         self.write("   def __init__(self, addr: int = 0):\n");
         self.write("      super().__init__(addr)\n");
-   }
-
-    fn write_rifmux_footer(&mut self, _rifmux: &RifmuxInst) {}
+    }
 
     fn write_rif_inst(&mut self, rif_inst: &RifInst, cntxt: RifContext, _desc: &Description, _last_page: bool, _last_comp: bool) {
         self.write(&format!("      self.{} = {}({:#x})\n",

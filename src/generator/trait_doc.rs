@@ -65,7 +65,7 @@ impl std::fmt::Display for LinkKind {
 ///     This is not shown when compact mode is enabled and there is only one instance
 ///   * Second table showing the register layout (field position),
 ///     followed by a description of all fields
-#[allow(dead_code)]
+#[allow(unused_variables)]
 pub trait GeneratorDoc : GeneratorBase {
 
     /// Display register layout table
@@ -433,23 +433,23 @@ pub trait GeneratorDoc : GeneratorBase {
     }
 
     /// Set the width of address/data for current RIF
-    fn set_rif_info(&mut self, _addr_w: u8, _data_w: u8, _nb_page: usize) {}
+    fn set_rif_info(&mut self, addr_w: u8, data_w: u8, nb_page: usize) {}
 
     /// Write file header
     /// No header by default
-    fn write_header(&mut self, _name: &str) {}
+    fn write_header(&mut self, name: &str) {}
 
     /// Write file footer (empty by default)
-    fn write_footer(&mut self, _name: &str) {}
+    fn write_footer(&mut self, name: &str) {}
 
     /// Write component title
-    fn write_rif_title(&mut self, idx_rif: (&str,usize), desc: &str);
+    fn write_rif_title(&mut self, idx_rif: (&str,usize), desc: &str) {}
 
     /// Write page title
-    fn write_page_title(&mut self, idx_rif: (&str,usize), idx_page: (&str, usize), desc: (&str, Option<&str>));
+    fn write_page_title(&mut self, idx_rif: (&str,usize), idx_page: (&str, usize), desc: (&str, Option<&str>)) {}
 
     /// Write register title
-    fn write_reg_title(&mut self, idx_rif: (&str,usize), idx_page: (&str, usize), idx_reg: (&str, usize), desc: &str);
+    fn write_reg_title(&mut self, idx_rif: (&str,usize), idx_page: (&str, usize), idx_reg: (&str, usize), desc: &str) {}
 
     /// Write component/page information
     fn write_info(&mut self, info: &str) {
@@ -457,19 +457,19 @@ pub trait GeneratorDoc : GeneratorBase {
     }
 
     /// Write a table header
-    fn write_table_title(&mut self, kind: TableKind, title: &str, id: &str);
+    fn write_table_title(&mut self, kind: TableKind, title: &str, id: &str) {}
 
     /// Write a table header
-    fn write_table_footer(&mut self, kind: TableKind);
+    fn write_table_footer(&mut self, kind: TableKind) {}
 
     /// Write a table row header
-    fn write_table_row_header(&mut self, id: Option<&str>);
+    fn write_table_row_header(&mut self, id: Option<&str>) {}
 
     /// Write a table row footer
-    fn write_table_row_footer(&mut self);
+    fn write_table_row_footer(&mut self) {}
 
     /// Write a table top row header
-    fn write_table_row_top_header(&mut self, _kind: TableKind) {
+    fn write_table_row_top_header(&mut self, kind: TableKind) {
         self.write_table_row_header(None)
     }
 
@@ -479,7 +479,7 @@ pub trait GeneratorDoc : GeneratorBase {
     }
 
     /// Write a table column
-    fn write_table_cell(&mut self, kind: (TableKind, CellKind), span: usize, txt: &str, id: &str);
+    fn write_table_cell(&mut self, kind: (TableKind, CellKind), span: usize, txt: &str, id: &str) {}
 
     /// Write a table cell header
     fn write_table_cell_top(&mut self, kind: (TableKind, CellKind), span: usize, txt: &str, id: &str) {
@@ -487,7 +487,7 @@ pub trait GeneratorDoc : GeneratorBase {
     }
 
     /// Add a link to an ID of the document
-    fn add_link(&mut self, _kind: LinkKind, _id: &str) {}
+    fn add_link(&mut self, kind: LinkKind, _id: &str) {}
 
     /// Write description of an enum field
     fn enum_def_desc(&mut self, def: &EnumDef) -> String;

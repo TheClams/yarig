@@ -26,7 +26,7 @@ impl RifContext<'_> {
 
 /// Trait to implement generator for software control (C, python, ...)
 /// 
-#[allow(dead_code)]
+#[allow(unused_variables)]
 pub trait GeneratorSw : GeneratorBase {
 
     /// Declare enum type
@@ -187,34 +187,34 @@ pub trait GeneratorSw : GeneratorBase {
     }
 
     /// Save information for the current RIF
-    fn set_rif_info(&mut self, rif: &RifInst);
+    fn set_rif_info(&mut self, rif: &RifInst) {}
 
     /// Set the max length  of field name inside a register (for pretty formatting)
-    fn set_max_field_name_len(&mut self, _len: usize) {}
+    fn set_max_field_name_len(&mut self, len: usize) {}
 
     /// Set the max length of register name/type inside a page (for pretty formatting)
-    fn set_max_reg_name_len(&mut self, _name_len: usize, _type_len: usize) {}
+    fn set_max_reg_name_len(&mut self, name_len: usize, type_len: usize) {}
 
     /// Write RIF start of declaration statement
-    fn write_rif_header(&mut self, rif: &RifInst, is_top: bool);
+    fn write_rif_header(&mut self, rif: &RifInst, is_top: bool) {}
 
     /// Write RIF end of declaration
-    fn write_rif_footer(&mut self);
+    fn write_rif_footer(&mut self) {}
 
     /// Write enum start of declaration statement
-    fn write_enum_header(&mut self, _type_name: &str, _desc: &str) {}
+    fn write_enum_header(&mut self, type_name: &str, desc: &str) {}
 
     /// Write enum entry
-    fn write_enum_entry(&mut self, _entry: &EnumEntry , _is_last: bool) {}
+    fn write_enum_entry(&mut self, entry: &EnumEntry , is_last: bool) {}
 
     /// Write enum end of declaration
-    fn write_enum_footer(&mut self, _type_name: &str) {}
+    fn write_enum_footer(&mut self, type_name: &str) {}
 
     /// Write register start of declaration statement
-    fn write_reg_header(&mut self, basename: &str, reg: &RifRegInst);
+    fn write_reg_header(&mut self, basename: &str, reg: &RifRegInst) {}
 
     /// Write register end of declaration
-    fn write_reg_footer(&mut self,  basename: &str, reg: &RifRegInst, is_last: bool);
+    fn write_reg_footer(&mut self,  basename: &str, reg: &RifRegInst, is_last: bool) {}
 
     fn write_fields_decl(&mut self, rif: &RifInst, basename: &str, reg: &RifRegInst) {
         let is_public = self.setting().privacy.is_public();
@@ -240,7 +240,7 @@ pub trait GeneratorSw : GeneratorBase {
     }
 
     /// Write register end of declaration
-    fn write_field_decl(&mut self, basename: &str, reg: &RifRegInst, field: &RifFieldInst, enum_defs: Option<&EnumDef>, is_last: bool);
+    fn write_field_decl(&mut self, basename: &str, reg: &RifRegInst, field: &RifFieldInst, enum_defs: Option<&EnumDef>, is_last: bool) {}
 
     fn get_field_name(&self, reg: &RifRegInst, f: &RifFieldInst) -> String {
         if f.is_reserved() && self.setting().privacy.is_public() {
@@ -269,10 +269,10 @@ pub trait GeneratorSw : GeneratorBase {
     }
 
     /// Write register start of declaration statement
-    fn write_page_header(&mut self, name: &str, desc: &Description);
+    fn write_page_header(&mut self, name: &str, desc: &Description) {}
 
     /// Write register end of declaration
-    fn write_page_footer(&mut self, name: &str, is_last: bool);
+    fn write_page_footer(&mut self, name: &str, is_last: bool) {}
 
     /// Write the start of register instances overlap
     fn write_reginst_overlap_header(&mut self) {}
@@ -281,11 +281,11 @@ pub trait GeneratorSw : GeneratorBase {
     fn write_reginst_overlap_footer(&mut self) {}
 
     /// Write register instances
-    fn write_reginst(&mut self, basename: &str, base_addr: u64, reg: &RifRegInst, reg_1st: &RifRegInst, is_last: bool);
+    fn write_reginst(&mut self, basename: &str, base_addr: u64, reg: &RifRegInst, reg_1st: &RifRegInst, is_last: bool) {}
 
     /// Write unused register instances
     /// Default to nothing
-    fn write_reginst_unused(&mut self, _basename: &str, _addr: u64, _span: u64) {}
+    fn write_reginst_unused(&mut self, basename: &str, addr: u64, span: u64) {}
 
     /// Generate structure associated to a RIFmux
     fn gen_rifmux(&mut self, rifmux: &RifmuxInst, rif_list: &RifList) -> Result<(), Box<dyn std::error::Error>> {
@@ -340,15 +340,15 @@ pub trait GeneratorSw : GeneratorBase {
     }
 
     /// Write RIF start of declaration statement
-    fn write_rifmux_header(&mut self, rifmux: &RifmuxInst, rif_list: &RifList, rifmux_list: &[&RifmuxInst]);
+    fn write_rifmux_header(&mut self, rifmux: &RifmuxInst, rif_list: &RifList, rifmux_list: &[&RifmuxInst]) {}
 
     /// Write RIF end of declaration
-    fn write_rifmux_footer(&mut self, rifmux: &RifmuxInst);
+    fn write_rifmux_footer(&mut self, rifmux: &RifmuxInst) {}
 
     /// Write RIF instance
-    fn write_rif_inst(&mut self, rif_inst: &RifInst, cntxt: RifContext, desc: &Description, last_page: bool, last_comp: bool);
+    fn write_rif_inst(&mut self, rif_inst: &RifInst, cntxt: RifContext, desc: &Description, last_page: bool, last_comp: bool) {}
 
     /// Write RIF mux instance
-    fn write_rifmux_inst(&mut self, _rifmux_inst: &RifmuxInst, _addr: u64, _last_comp: bool) {}
+    fn write_rifmux_inst(&mut self, rifmux_inst: &RifmuxInst, addr: u64, last_comp: bool) {}
 
 }
