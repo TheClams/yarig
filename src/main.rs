@@ -27,20 +27,20 @@ struct RifGenArgs{
     #[arg(long, num_args = 0..)]
     gen_inc: Vec<String>,
     /// Output path for C header
-    #[arg(long, default_value_t = String::from("c"))]
-    output_c: String,
+    #[arg(long)]
+    output_c: Option<String>,
     /// Output path for Python classes
-    #[arg(long, default_value_t = String::from("py"))]
-    output_py: String,
+    #[arg(long)]
+    output_py: Option<String>,
     /// Output path for documentation output (HTML, latex, ...)
-    #[arg(long, default_value_t = String::from("doc"))]
-    output_doc: String,
+    #[arg(long)]
+    output_doc: Option<String>,
     /// Output path for hardware output (SV, VHDL)
-    #[arg(long, default_value_t = String::from("rtl"))]
-    output_rtl: String,
+    #[arg(long)]
+    output_rtl: Option<String>,
     /// Output path for simulation output (RAL)
-    #[arg(long, default_value_t = String::from("sim"))]
-    output_sim: String,
+    #[arg(long)]
+    output_sim: Option<String>,
     /// Public documentation (hide all private registers/fields)
     #[arg(long, action)]
     public: bool,
@@ -106,6 +106,18 @@ fn main() {
     if !args.targets.is_empty() {cfg.targets = args.targets.to_owned()};
     if !args.parameters.is_empty() {cfg.parameters.extend(args.parameters)};
     if let Some(suffix) = args.suffix {cfg.suffixes.insert("".to_owned(), suffix);};
+    //
+    let outputs = vec![
+        ("c"  , args.output_c),
+        ("py" , args.output_py),
+        ("doc", args.output_doc),
+        ("rtl", args.output_rtl),
+        ("sim", args.output_sim)];
+    for (k,v) in outputs.iter() {
+        if let Some(path) = v {
+            cfg.outputs.insert(k.to_string(), path.to_owned());
+        }
+    }
 
     if let Err(e) = cfg.gen_all(false) {
         eprintln!(" -> Error ! {e}");
