@@ -66,7 +66,7 @@ pub fn signal_name_last(input: &str) -> ResF<&str> {
 }
 
 pub fn logic_expr<'a>(input: &mut &'a str) -> Res<'a, &'a str> {
-    (ws("("), take_until_unbalanced('(', ')'), ws(")"))
+    (ws("("), take_until_unbalanced('(', ')'), ")")
         .take()
         .context(StrContext::Label("logic expression"))
         .parse_next(input)

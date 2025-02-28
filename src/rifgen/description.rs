@@ -46,34 +46,38 @@ impl Description {
         // if self.0.starts_with("Gain and") {println!("{}",self.0)};
         let mut desc = String::with_capacity(self.0.len());
         let params = ParamValues::new_with_idx(idx as isize);
-        for (i,mut s) in self.0.split('$').enumerate() {
-            if i&1 == 0 {
+        let mut parts = self.0.split('$');
+        desc.push_str(parts.next().unwrap_or(""));
+        while let Some(mut s) = parts.next() {
+            // Variable $i replaced by index
+            if let Some(stripped) = s.strip_prefix('i') {
+                desc.push_str(&format!("{idx}"));
+                desc.push_str(stripped);
+            }
+            // Start of an equation
+            else if s.starts_with('(') {
+                let expr_s = logic_expr(&mut s).unwrap();
+                let expr = parse_expr(expr_s).unwrap();
+                let val = expr.eval(&params).unwrap();
+                desc.push_str(&format!("{val}"));
                 desc.push_str(s);
             } else {
-                // Variable $i replaced by index
-                if let Some(stripped) = s.strip_prefix('i') {
-                    desc.push_str(&format!("{idx}"));
-                    desc.push_str(stripped);
-                }
-                // Start of an equation
-                else if s.starts_with('(') {
-                    let expr_s = logic_expr(&mut s).unwrap();
-                    let expr = parse_expr(expr_s).unwrap();
-                    let val = expr.eval(&params).unwrap();
-                    desc.push_str(&format!("{val}"));
-                    desc.push_str(s);
-                } else {
-                    desc.push_str(s);
-                }
+                desc.push_str(s);
             }
         }
-        // let s = self.0.replace("$i", &format!("{idx}"));
         Description(desc)
     }
 
     // Create a description with $f replace by a format string (for example u8.0 or s5.3)
     pub fn with_format(&self, format: &str) -> Description {
         let desc = self.0.replace("$f", format);
+        Description(desc)
+    }
+
+    // Remove the $ special character from description:
+    //  used when we do not want the interpolated version (for register base description typically)
+    pub fn no_dollar(&self) -> Description {
+        let desc = self.0.replace('$', "");
         Description(desc)
     }
 }

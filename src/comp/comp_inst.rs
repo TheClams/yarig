@@ -296,7 +296,7 @@ impl RifInst {
             data_width: rif.data_width.value(),
             enum_defs,
             description: if description.is_empty() {rif.description.clone()} else {description},
-            base_description: rif.description.clone(),
+            base_description: rif.description.no_dollar(),
             pages,
             reg_impl_defs, hw_regs,
             ports,
@@ -655,7 +655,7 @@ impl RifRegInst {
             group_type: def.get_group_name().to_owned(),
             group_name,
             description,
-            base_description: def.description.to_owned(),
+            base_description: def.description.no_dollar(),
             intr_info,
             addr,
             reset: 0,
@@ -685,7 +685,7 @@ impl RifRegInst {
             let info = if kind.is_derived() {def.interrupt[idx].get_rst_desc(kind)} else {None};
             if let Some(info) = info {
                 if !info.1.is_empty() {
-                    r.base_description = info.1.clone();
+                    r.base_description = info.1.no_dollar();
                     r.description = info.1.interpolate(idx as u16);
                 }
                 if kind.is_pending() {
@@ -888,6 +888,9 @@ impl RifFieldInst {
         };
         let mut reset = field.reset.first().unwrap_or_default().clone();
         let idx : ArrayIdx;
+        // Create format string for description
+        let s = if matches!(reset, ResetVal::Signed(_)) {'s'} else {'u'};
+        let format_str = format!("{s}{}.{}", width, field.nb_frac);
         let desc: Description;
         // For array, adjust the increment when needed
         if let Some(array) = array {
@@ -908,7 +911,7 @@ impl RifFieldInst {
             let i = array.dim() + array.idx();
             idx = ArrayIdx::Def(i,field.array.value(params).into());
             // println!("Field array: {array:?} | rst_idx={rst_idx}, idx={idx:?} | reset = {reset:?}", );
-            desc = field.description.interpolate(i);
+            desc = field.description.with_format(&format_str).interpolate(i);
         } else {
             idx = ArrayIdx::Def(0,0);
             desc = if let Some(intr_desc) = &field.intr_desc {
@@ -917,11 +920,11 @@ impl RifFieldInst {
                     InterruptRegKind::Mask    => &intr_desc.mask,
                     InterruptRegKind::Pending => &intr_desc.pending,
                     _ => &field.description
-                };
-                if desc_.is_empty() {&field.description} else {desc_}
+                }.to_owned();
+                if desc_.is_empty() {field.description.to_owned()} else {desc_}
             } else {
-                &field.description
-            }.to_owned();
+                field.description.with_format(&format_str)
+            };
         }
         if let ResetVal::Param(p) = reset {
             let v = params.get(&p).expect("Undefined parameter in reset value");
@@ -932,15 +935,12 @@ impl RifFieldInst {
         if let Some(kind) = field.get_auto_hw_kind(params) {
             hw_kind.push(kind);
         }
-        // Create format sting for description
-        let s = if matches!(reset, ResetVal::Signed(_)) {'s'} else {'u'};
-        let format_str = format!("{s}{}.{}", width, field.nb_frac);
-        let desc = desc.with_format(&format_str);
+        let desc = desc;
         //
         *next_lsb += width;
         RifFieldInst {
             name: field.name.to_owned(),
-            base_description: desc.clone(),
+            base_description: desc.no_dollar(),
             description: desc,
             reset,
             sw_kind: field.sw_kind.to_owned(),

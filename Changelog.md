@@ -7,8 +7,11 @@
 
  ### Changed
   - Python and C target now uses the nb_frac property
-  - C casing is configurable in the configuration file
-  - Path in toml file can now be relative to the toml file location
+  - Config file:
+    * C casing is configurable in the configuration file
+    * Support relative file location
+    * Output path Can now be overriden by CLI arguments
+  - Bug fix around description interpolation
 
 ### Internal
   - Field structure now has a is_signed() function
