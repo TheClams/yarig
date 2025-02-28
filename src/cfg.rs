@@ -117,7 +117,7 @@ impl YarigCfg {
 		}
 	}
 
-	pub fn gen_all(&self) -> Result<(), String> {
+	pub fn gen_all(&self, allow_unknown: bool) -> Result<(), String> {
 
 	    let mut setting = GeneratorBaseSetting {
 	        path: "".into(),
@@ -132,8 +132,12 @@ impl YarigCfg {
 	        |(k,v)| params.insert(k.to_owned(), *v)
 	    );
 	    // if !params.is_empty() {println!("Parameters: {params}");}
-
-	    let rif_src = RifGenSrc::from_file(&self.filename)?;
+	    let mut rif_path : PathBuf = self.filename.clone().into();
+	    if !rif_path.exists() && rif_path.is_relative() && self.path.is_some() {
+	    	rif_path = [self.path.as_ref().unwrap(), &self.filename].iter().collect();
+	    }
+	    let rif_src = RifGenSrc::from_file(&rif_path)
+	    	.map_err(|e| format!("Error opening {:?} : {e:?}", rif_path))?;
 	    let rif_obj = Comp::compile(&rif_src, &self.suffixes, &params)
 	    	.map_err(|e| format!("Compilation failed: {e}"))?;
 	    for target in self.targets.iter() {
@@ -179,7 +183,9 @@ impl YarigCfg {
 	                let mut g = GeneratorJson::new(setting.clone());
 	                g.gen_all(&rif_obj).map_err(|e| format!("JSON generation failed: {e}"))?;
 	            }
-	            t => eprintln!("Target {t:?} not supported -> skipping"),
+	            t => if !allow_unknown {
+	            	eprintln!("Target {t:?} not supported -> skipping");
+	            }
 	        }
 	    }
 	    Ok(())

@@ -107,7 +107,7 @@ fn main() {
     if !args.parameters.is_empty() {cfg.parameters.extend(args.parameters)};
     if let Some(suffix) = args.suffix {cfg.suffixes.insert("".to_owned(), suffix);};
 
-    if let Err(e) = cfg.gen_all() {
+    if let Err(e) = cfg.gen_all(false) {
         eprintln!(" -> Error ! {e}");
     }
 
