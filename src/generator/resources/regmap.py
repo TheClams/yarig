@@ -72,6 +72,7 @@ class Field(object):
     pos    : int = 0
     name   : str = ""
     signed : bool = False
+    nb_frac: int = 0
 
     def __init__(self, parent: Register, name: str = '', init: None|int = None) :
         self.__parent__ : Register = parent
@@ -85,14 +86,27 @@ class Field(object):
     def mask(self) -> int:
         return ((1<<self.width) - 1) << self.pos
 
-    def set_value(self, value: int):
-        self.value = value
+    def set_value(self, value: int | float):
+        if isinstance(value, int):
+            self.value = value
+        else :
+            if self.nb_frac < 0:
+                self.value = int(value / (1 << (-self.nb_frac)))
+            else :
+                self.value = int(value * (1 << self.nb_frac))
 
     def get_value(self) -> int:
         v = self.value
-        if getattr(self, 'signed', False) :
-            if v > 1<<(self.width-1):
-                v -= (1<<self.width)
+        if self.signed and v > 1<<(self.width-1):
+            v -= (1<<self.width)
+        return v
+
+    def get_float(self) -> float:
+        v = float(self.get_value())
+        if self.nb_frac < 0:
+            v = v * (1 << (-self.nb_frac))
+        else :
+            v = v / (1 << self.nb_frac)
         return v
 
     def address(self) -> int:

@@ -64,7 +64,10 @@ impl FieldImpl {
         } else {
             (field.width(params) as u16, field.reset.clone())
         };
-
+        // Get description
+        let s = if field.is_signed() {'s'} else {'u'};
+        let format_str = format!("{s}{}.{}", width, field.nb_frac);
+        let description = field.description.with_format(&format_str);
         // Handle case where only access is a set/clr from software: this implies the equivalent from hardware to be complete
         let mut hw_kind = field.hw_kind.to_owned();
         if let Some(kind) = field.get_auto_hw_kind(params) {
@@ -77,7 +80,7 @@ impl FieldImpl {
             signed,
             clk: field.clk.clone(),
             reset,
-            description: field.description.clone(),
+            description,
             enum_kind: field.enum_kind.clone(),
             hw_kind,
             sw_kind: field.sw_kind.clone(),

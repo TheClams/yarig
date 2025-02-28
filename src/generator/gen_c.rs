@@ -174,6 +174,9 @@ impl GeneratorSw for GeneratorC {
             self.push_stash(0, &format!("#define {name}_POS   {}\n", field.lsb));
             self.push_stash(0, &format!("#define {name}_MASK  0x{:08X}\n",(1_u128<< field.width)-1));
             self.push_stash(0, &format!("#define {name}_SMASK ({name}_MASK<<{name}_POS)\n"));
+            if field.nb_frac != 0 {
+                self.push_stash(0, &format!("#define {name}_FRAC    {}\n", field.nb_frac));
+            }
         }
     }
 

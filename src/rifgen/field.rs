@@ -816,6 +816,11 @@ impl Field {
         };
     }
 
+    pub fn is_signed(&self) -> bool {
+        let reset = self.reset.get(0).unwrap_or(&ResetVal::Unsigned(0));
+        matches!(reset, ResetVal::Signed(_))
+    }
+
     /// Set interrupt settings
     pub fn set_intr(&mut self, value: InterruptInfoField) {
         if self.hw_kind.is_empty() {

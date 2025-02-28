@@ -1,6 +1,22 @@
 # Changelog
 
 
+## [0.6.0] - 2025-02-28
+### Added
+  - New target: json
+
+ ### Changed
+  - Python and C target now uses the nb_frac property
+  - C casing is configurable in the configuration file
+  - Path in toml file can now be relative to the toml file location
+
+### Internal
+  - Field structure now has a is_signed() function
+  - Trait Sw :
+    * All function now have an empty implementation to avoid having to implement them in each targets
+    * Add option to skip the register declaration (HAS_REG_DECL)
+    * Add is_last parameter to a few function (reg_footer, field_decl, reg_inst, rif_inst, rifmux_inst)
+
 ## [0.5.0] - 2025-02-23
 ### Added
   - target py: generator for python class

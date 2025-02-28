@@ -1,5 +1,6 @@
-#[allow(dead_code)]
-#[derive(Clone, Copy, PartialEq, Debug, Default)]
+use serde_derive::Deserialize;
+
+#[derive(Clone, Copy, PartialEq, Debug, Default, Deserialize)]
 pub enum Casing {#[default]
     /// Display string as-is
     Raw,
@@ -16,7 +17,7 @@ pub enum Casing {#[default]
 }
 
 impl Casing {
-    #[allow(dead_code)]
+
     pub fn format(&self, s: &str) -> String {
         let mut out = String::with_capacity(s.len()+8);
         let mut str_start = true;

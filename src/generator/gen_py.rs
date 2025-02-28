@@ -188,6 +188,9 @@ impl GeneratorSw for GeneratorPy {
         self.write(&format!("         value : int = {}\n", field.reset()));
         self.write(&format!("         signed : bool = {}\n",
             if field.is_signed() {"True"} else {"False"}));
+        if field.nb_frac != 0 {
+            self.write(&format!("         nb_frac : int = {}\n", field.nb_frac));
+        }
         self.write(&format!("         kind : str = {:?}\n", field.sw_kind.access_str()));
     }
 
