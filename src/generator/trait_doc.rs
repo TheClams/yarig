@@ -183,6 +183,7 @@ pub trait GeneratorDoc : GeneratorBase {
         let addr_w = ((rif.addr_width+3)>>2) as usize;
         let data_w = ((rif.data_width+3)>>2) as usize;
         let is_public = self.core().setting.privacy.is_public();
+        self.write_reg_summary_header(rif);
         for page in rif.pages.iter() {
             // TODO: check hidden
             let mut id_page = format!("regmap.{rif_name}");
@@ -219,6 +220,7 @@ pub trait GeneratorDoc : GeneratorBase {
         }
     }
 
+    fn write_reg_summary_header(&mut self, rif: &RifInst) {}
 
     /// Add register details: table with register instance followed by table with fields description
     fn add_reg_detail(&mut self, rif: &RifInst, idx_c: usize)  -> Result<(),String> {
@@ -228,6 +230,7 @@ pub trait GeneratorDoc : GeneratorBase {
         let is_public = self.core().setting.privacy.is_public();
         let reg_headers = [CellKind::Addr, CellKind::Inst, CellKind::Reset, CellKind::Desc];
         let inst_dict = InstDict::new(&rif.pages, is_public);
+        self.write_reg_summary_header(rif);
         for (idx_p, page) in rif.pages.iter().enumerate() {
             let page_name = &page.name;
             let mut id_page = format!("regmap.{rif_name}");
@@ -239,11 +242,8 @@ pub trait GeneratorDoc : GeneratorBase {
             let desc = page.description.get_split();
             self.write_page_title((rif_name, idx_c), (page_name, idx_p+1), desc);
             let mut idx_r = 0;
-            for (idx_ri,reg) in page.regs.iter().enumerate() {
-                // Check hidden
-                if reg.visibility.is_hidden() && is_public {
-                    continue;
-                }
+            let regs = page.regs.iter().filter(|r| !(is_public && r.visibility.is_hidden()));
+            for (idx_ri,reg) in regs.enumerate() {
                 // Check not already defined in case of compact display
                 let reg_type = reg.expanded_type_name();
                 let Some(instances) = inst_dict.get(&reg_type) else {
@@ -420,6 +420,9 @@ pub trait GeneratorDoc : GeneratorBase {
         }
         Ok(())
     }
+
+    /// Write header for the register detail tables
+    fn write_reg_detail_header(&mut self, rif: &RifInst) {}
 
     /// Convert access to string
     fn access_str(kind: &FieldSwKind) -> &str {

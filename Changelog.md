@@ -1,17 +1,22 @@
 # Changelog
 
 
-## [0.6.0] - 2025-02-28
+## [0.6.0] - 2025-01-03
 ### Added
-  - New target: json
+  - New targets:
+    * JSON: a basic representation of register with field position/reset/description and kind (RW/RO/....)
+    * AsciiDoctor: doc similar to HTML/latex output
 
- ### Changed
+### Changed
   - Python and C target now uses the nb_frac property
   - Config file:
     * C casing is configurable in the configuration file
     * Support relative file location
     * Output path Can now be overriden by CLI arguments
-  - Bug fix around description interpolation
+
+### Bug Fixes
+  - Description interpolation of $i/$f was not supporting multiple variable in a line
+  - Register visibility was not respected
 
 ### Internal
   - Field structure now has a is_signed() function
@@ -19,6 +24,7 @@
     * All function now have an empty implementation to avoid having to implement them in each targets
     * Add option to skip the register declaration (HAS_REG_DECL)
     * Add is_last parameter to a few function (reg_footer, field_decl, reg_inst, rif_inst, rifmux_inst)
+  - Trait doc: add some hook functions before register summary and register detail
 
 ## [0.5.0] - 2025-02-23
 ### Added

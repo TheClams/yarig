@@ -133,9 +133,11 @@ pub trait GeneratorSw : GeneratorBase {
             }
             let mut overlap = false;
             let mut addr = 0;
-            // TODO: handle visibility ?
             let mut regs = page.regs.iter()
-                .filter(|r| (r.array.idx()==0 || !Self::INST_ARRAY) && !r.sw_access.is_na())
+                .filter(|r|
+                    (r.array.idx()==0 || !Self::INST_ARRAY) &&
+                    !r.sw_access.is_na() &&
+                    !(is_public && r.visibility.is_hidden()))
                 .peekable();
             while let Some(reg) = regs.next() {
                 // println!("Register instance: {} ({}) @ {} | {:?}", reg.reg_name, reg.reg_type, reg.addr, reg.array );

@@ -10,7 +10,7 @@ pub struct GeneratorLatex {
     first_col: bool,
     /// Flag when current document is for a RIFMux
     is_rifmux: bool,
-    /// Flag when current document is for a RIFMux
+    /// Flag when current RIF has multiple pages
     multipage: bool,
 }
 
