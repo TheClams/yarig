@@ -1,18 +1,21 @@
-# Changelog
+# Change Log
 
 
-## [0.6.0] - 2025-01-03
+## [0.6.0] - 2025-03-02
 ### Added
   - New targets:
     * JSON: a basic representation of register with field position/reset/description and kind (RW/RO/....)
     * AsciiDoctor: doc similar to HTML/latex output
+    * SVD (System View Description): standard register file description used in embedded development
 
 ### Changed
   - Python and C target now uses the nb_frac property
+    * Python: base field functions allows to get the floating point value
+    * C: define a macro with number of fractional bits for each field (when not null)
   - Config file:
     * C casing is configurable in the configuration file
     * Support relative file location
-    * Output path Can now be overriden by CLI arguments
+    * Output path Can now be overridden by CLI arguments
 
 ### Bug Fixes
   - Description interpolation of $i/$f was not supporting multiple variable in a line

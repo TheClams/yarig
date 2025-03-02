@@ -164,7 +164,7 @@ pub trait GeneratorSw : GeneratorBase {
                 self.write_reginst(&pname, page.addr, reg, reg_1st, is_last_reg);
                 if !Self::HAS_REG_DECL {
                     self.write_fields_decl(&rif, &pname, reg);
-                    self.write_reg_footer(&pname, reg, regs.peek().is_none());
+                    self.write_reg_footer(&pname, reg, is_last_reg);
                 }
 
                 // Calculate expected next address

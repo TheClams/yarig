@@ -99,7 +99,7 @@ The exact behavior of each traits can be tweaked with some associated constant.
    - [x] mif
  - [x] Implement base generator for software (from C) :
    - [x] json
-   - [ ] svd
+   - [x] svd
    - [ ] IP-XACT
    - [x] python
    - [x] ral

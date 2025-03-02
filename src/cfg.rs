@@ -14,6 +14,7 @@ use crate::{
         gen_latex::GeneratorLatex,
         gen_mif::GeneratorMif,
         gen_py::GeneratorPy,
+        gen_svd::GeneratorSvd,
         gen_ral::GeneratorRal,
         gen_sv::GeneratorSv,
         trait_doc::GeneratorDoc,
@@ -66,10 +67,11 @@ pub struct YarigCfg {
     /// optional suffix definition
     pub suffixes: HashMap<String, SuffixInfo>,
     //-- Target specific settings--//
-    pub c: CfgC,
+    pub c  : CfgC,
     pub ral: CfgRal,
     pub rtl: CfgRtl,
-    pub py: CfgPy,
+    pub py : CfgPy,
+    pub svd: CfgSvd,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -92,6 +94,12 @@ pub struct CfgRal {
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct CfgPy {
     pub class: Option<String>,
+}
+
+#[derive(Deserialize, Debug, Clone, Default)]
+pub struct CfgSvd {
+    pub vendor: Option<String>,
+    pub version: Option<String>,
 }
 
 impl FromStr for YarigCfg {
@@ -206,6 +214,11 @@ impl YarigCfg {
                     setting.path = self.get_output_path(&["adoc", "doc"], "doc");
                     let mut g = GeneratorAdoc::new(setting);
                     g.gen_all(&rif_obj).map_err(|e| format!("AsciiDoctor generation failed: {e}"))?;
+                }
+                RifGenTargets::Svd => {
+                    setting.path = self.get_output_path(&["svd", "sw"], "sw");
+                    let mut g = GeneratorSvd::new(setting, self.svd.clone());
+                    g.gen_all(&rif_obj).map_err(|e| format!("SVD generation failed: {e}"))?;
                 }
                 t => if !allow_unknown {
                     eprintln!("Target {t:?} not supported -> skipping");

@@ -14,3 +14,4 @@ pub mod gen_py;
 pub mod gen_json;
 // Hardware Generators
 pub mod gen_sv;
+pub mod gen_svd;
