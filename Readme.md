@@ -107,9 +107,10 @@ The exact behavior of each traits can be tweaked with some associated constant.
    - [ ] VHDL
 
 ## Feature
- - [x] Support frac property in field (number of fractionnal bits)
- - [x] Support $f inside description to display format u7.0 or s0.4
- - [ ] Support casing option
+ - [ ] Improve nb_frac support:
+   - [ ] Support reset value in floating-point
+   - [ ] Use floating-point value in documentation when nb_frac is non-zero (and use a tool-tip in html to display corresponding integer value)
+ - [x] Support casing option
  - [ ] Support pipe option RTL
  - [ ] Support option to repeat field description for interrupt derived register
  - [x] Support TOML config file

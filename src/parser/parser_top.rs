@@ -61,7 +61,7 @@ pub fn rif_properties_or_item<'a>(input: &mut &'a str) -> Res<'a, Context> {
 }
 
 pub fn val_intf<'a>(input: &mut &'a str) -> Res<'a, Interface> {
-  identifier.try_map(str::parse).parse_next(input)
+  identifier.map(Interface::from).parse_next(input)
 }
 
 

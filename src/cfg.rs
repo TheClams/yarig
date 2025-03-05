@@ -1,5 +1,4 @@
 use serde_derive::Deserialize;
-use clap::{ValueEnum};
 use std::{collections::HashMap, fs, path::PathBuf, str::FromStr};
 use toml;
 use crate::{
@@ -7,25 +6,24 @@ use crate::{
     generator::{
         casing::Casing,
         gen_common::{GeneratorBaseSetting, Privacy},
-        gen_c::GeneratorC,
+        trait_doc::GeneratorDoc,
         gen_adoc::GeneratorAdoc,
         gen_html::GeneratorHtml,
-        gen_json::GeneratorJson,
         gen_latex::GeneratorLatex,
         gen_mif::GeneratorMif,
+        trait_sw::GeneratorSw,
+        gen_c::GeneratorC,
+        gen_json::GeneratorJson,
         gen_py::GeneratorPy,
-        gen_svd::GeneratorSvd,
         gen_ral::GeneratorRal,
+        gen_svd::GeneratorSvd,
         gen_sv::GeneratorSv,
-        trait_doc::GeneratorDoc,
-        trait_sw::GeneratorSw
     },
     parser::{parser_expr::ParamValues, RifGenSrc},
-    rifgen::SuffixInfo
+    rifgen::{Interface, SuffixInfo}
 };
 
-#[derive(Deserialize, ValueEnum, Debug, Clone)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone)]
 pub enum RifGenTargets {
     /// SystemVerilog
     Sv,
@@ -48,24 +46,76 @@ pub enum RifGenTargets {
     /// JSON
     Json,
     /// AsciiDoctor
-    Adoc
+    Adoc,
+    /// Custom target
+    Custom(String),
+}
+
+impl From<&str> for RifGenTargets {
+
+    fn from(s: &str) -> Self {
+        let s_lc = s.to_lowercase();
+        match s_lc.as_ref() {
+            "sv" => RifGenTargets::Sv,
+            "ral" => RifGenTargets::Ral,
+            "vhdl" => RifGenTargets::Vhdl,
+            "c" => RifGenTargets::C,
+            "py" => RifGenTargets::Py,
+            "html" => RifGenTargets::Html,
+            "latex" => RifGenTargets::Latex,
+            "mif" => RifGenTargets::Mif,
+            "svd" => RifGenTargets::Svd,
+            "json" => RifGenTargets::Json,
+            "adoc" => RifGenTargets::Adoc,
+            _ => RifGenTargets::Custom(s_lc),
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for RifGenTargets {
+    fn deserialize<D: serde::Deserializer<'de> >(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        Ok(RifGenTargets::from(s.as_ref()))
+    }
+}
+
+impl RifGenTargets {
+    pub fn custom_name(&self) -> Option<String> {
+        if let RifGenTargets::Custom(n) = self {
+            Some(n.to_owned())
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Deserialize, Debug, Default)]
 #[serde(default)]
 pub struct YarigCfg {
+    /// File name of the RIF to compile
     pub filename: String,
+    /// Path used as reference for relative paths
     pub path: Option<String>,
+    /// List of path to search for included reference
     pub include: Vec<String>,
+    /// List of included reference to generate (use ["*"] for all)
     pub gen_inc: Vec<String>,
+    /// List of targets to generate
     pub targets: Vec<RifGenTargets>,
+    /// Flag when the output is for public usage (i.e. hide private register/field)
     pub public: bool,
+    /// Specify an HDL interface
+    pub interface: Option<Interface>,
     /// dictionary of parameters
     pub parameters: HashMap<String,isize>,
     /// dictionary of path associated to each targets
     pub outputs: HashMap<String,String>,
+    /// Use prefixes only for RTL generation
+    pub suffix_rtl_only: bool,
     /// optional suffix definition
     pub suffixes: HashMap<String, SuffixInfo>,
+    /// Specify casing used in all targets
+    pub casing: Option<Casing>,
     //-- Target specific settings--//
     pub c  : CfgC,
     pub ral: CfgRal,
@@ -77,7 +127,6 @@ pub struct YarigCfg {
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct CfgC {
     pub base_offset: Option<String>,
-    pub casing: Option<Casing>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -140,16 +189,14 @@ impl YarigCfg {
         }
     }
 
-    pub fn gen_all(&self, allow_unknown: bool) -> Result<(), String> {
+    pub fn gen_all(&self) -> Result<Comp, String> {
 
         let base_setting = GeneratorBaseSetting {
             path: "".into(),
-            casing: Casing::Snake,
+            casing: self.casing.unwrap_or(Casing::Snake),
             privacy: if self.public {Privacy::Public} else {Privacy::Internal},
-            compact: true,
             gen_inc: self.gen_inc.clone()
         };
-
         let mut params = ParamValues::new();
         self.parameters.iter().for_each(
             |(k,v)| params.insert(k.to_owned(), *v)
@@ -161,16 +208,23 @@ impl YarigCfg {
         }
         let rif_src = RifGenSrc::from_file(&rif_path)
             .map_err(|e| format!("Error opening {:?} : {e:?}", rif_path))?;
-        let rif_obj = Comp::compile(&rif_src, &self.suffixes, &params)
+        let mut rif_obj = Comp::compile(&rif_src, &self.suffixes, &params)
             .map_err(|e| format!("Compilation failed: {e}"))?;
+        // Handle case where suffixes are enabled only for RTL targets
+        // Force to None by default and will set it properly only in the appropriate target
+        let no_suffixes = HashMap::new();
+        if self.suffix_rtl_only {
+            rif_obj.set_suffixes(&no_suffixes);
+        }
+        // Force interface if specified in the configuration
+        if let Some(intf) = &self.interface {
+            rif_obj.set_interface(intf);
+        }
         for target in self.targets.iter() {
             let mut setting = base_setting.clone();
             match target {
                 RifGenTargets::C => {
                     setting.path = self.get_output_path(&["c", "sw"],"c");
-                    if let Some(casing) = self.c.casing {
-                        setting.casing = casing;
-                    }
                     let mut g = GeneratorC::new(setting, self.c.base_offset.clone());
                     g.gen_all(&rif_obj).map_err(|e| format!("C generation failed: {e}"))?;
                 },
@@ -192,8 +246,14 @@ impl YarigCfg {
                 }
                 RifGenTargets::Sv => {
                     setting.path = self.get_output_path(&["sv", "rtl"], "rtl");
+                    if self.suffix_rtl_only {
+                        rif_obj.set_suffixes(&self.suffixes);
+                    }
                     let mut g = GeneratorSv::new(setting);
                     g.gen_all(&rif_obj).map_err(|e| format!("SystemVerilog generation failed: {e}"))?;
+                    if self.suffix_rtl_only {
+                        rif_obj.set_suffixes(&no_suffixes);
+                    }
                 }
                 RifGenTargets::Ral => {
                     setting.path = self.get_output_path(&["ral", "sim"], "sim");
@@ -220,12 +280,10 @@ impl YarigCfg {
                     let mut g = GeneratorSvd::new(setting, self.svd.clone());
                     g.gen_all(&rif_obj).map_err(|e| format!("SVD generation failed: {e}"))?;
                 }
-                t => if !allow_unknown {
-                    eprintln!("Target {t:?} not supported -> skipping");
-                }
+                _ => {},
             }
         }
-        Ok(())
+        Ok(rif_obj)
     }
 
 }

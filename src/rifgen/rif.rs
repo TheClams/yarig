@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::str::FromStr;
 
 use crate::parser::parser_expr::ExprTokens;
 
@@ -61,18 +60,25 @@ pub enum Interface { #[default]
 }
 
 
-impl FromStr for Interface {
-    type Err = std::io::Error;
+impl From<&str> for Interface {
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from(s: &str) -> Self {
         match s.to_lowercase().as_str() {
-            "default" => Ok(Interface::Default),
-            "apb"     => Ok(Interface::Apb),
-            "uaux"    => Ok(Interface::Uaux),
-            custom    => Ok(Interface::Custom(custom.to_owned())),
+            "default" => Interface::Default,
+            "apb"     => Interface::Apb,
+            "uaux"    => Interface::Uaux,
+            custom    => Interface::Custom(custom.to_owned()),
         }
     }
 }
+
+impl<'de> serde::Deserialize<'de> for Interface {
+    fn deserialize<D: serde::Deserializer<'de> >(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        Ok(Interface::from(s.as_ref()))
+    }
+}
+
 
 impl Interface {
     pub fn name(&self) -> &str {

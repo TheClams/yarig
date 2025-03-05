@@ -2,8 +2,9 @@
 use std::error::Error;
 use clap::Parser;
 use yarig::{
-    cfg::{YarigCfg, RifGenTargets},
-    rifgen::SuffixInfo
+    cfg::{RifGenTargets, YarigCfg},
+    generator::casing::Casing,
+    rifgen::{Interface, SuffixInfo}
 };
 
 // use crate::comp::comp_inst::RifmuxMap;
@@ -47,9 +48,18 @@ struct RifGenArgs{
     /// Set parameters value
     #[arg(short = 'P', value_parser = parse_key_val::<String, isize>)]
     parameters: Vec<(String, isize)>,
+    /// Use suffix only  for RTL outputs
+    #[arg(long, action)]
+    suffix_rtl_only: bool,
     /// Set suffix value
     #[arg(short = 'S', long)]
     suffix: Option<SuffixInfo>,
+    /// Specify an HDL interface
+    #[arg(long)]
+    interface: Option<Interface>,
+    /// Specify casing used in all targets
+    #[arg(long)]
+    casing: Option<Casing>,
     /// C macro name defining the base address of the top level
     #[arg(long)]
     c_base_addr_name: Option<String>,
@@ -106,6 +116,9 @@ fn main() {
     if !args.targets.is_empty() {cfg.targets = args.targets.to_owned()};
     if !args.parameters.is_empty() {cfg.parameters.extend(args.parameters)};
     if let Some(suffix) = args.suffix {cfg.suffixes.insert("".to_owned(), suffix);};
+    if args.casing.is_some() {cfg.casing = args.casing};
+    if args.interface.is_some() {cfg.interface = args.interface};
+    if args.suffix_rtl_only {cfg.suffix_rtl_only = true;}
     //
     let outputs = vec![
         ("c"  , args.output_c),
@@ -119,7 +132,7 @@ fn main() {
         }
     }
 
-    if let Err(e) = cfg.gen_all(false) {
+    if let Err(e) = cfg.gen_all() {
         eprintln!(" -> Error ! {e}");
     }
 

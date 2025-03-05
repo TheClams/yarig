@@ -1,6 +1,7 @@
+use clap::ValueEnum;
 use serde_derive::Deserialize;
 
-#[derive(Clone, Copy, PartialEq, Debug, Default, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Debug, Default, Deserialize, ValueEnum)]
 pub enum Casing {#[default]
     /// Display string as-is
     Raw,

@@ -1,6 +1,24 @@
 # Change Log
 
 
+## [0.6.1] - 2025-03-06
+
+### Changed
+  - Configuration:
+    * Support custom targets (silently ignored in the main)
+    * Support override of HDL interface
+    * New option "suffix_rtl_only" to add suffix only on RTL file
+    * Casing is now configurable
+  - Generator HTML:
+    * Enum description can be changed via CSS and by default is displayed with smaller font
+    * Field description now has breaking line only after a dot or colon
+
+### Bug Fixes
+  - Generator SV:
+    * fix issue with register declared as an array
+    * fix issue with only one external register inside a group
+  - Generator C: add missing include stdint.h
+
 ## [0.6.0] - 2025-03-02
 ### Added
   - New targets:

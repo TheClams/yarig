@@ -54,6 +54,33 @@ impl Comp {
     pub fn is_external(&self) -> bool {
         matches!(self, Comp::External(_))
     }
+
+    pub fn set_suffixes(&mut self, suffixes: &HashMap<String, SuffixInfo>) {
+        match self {
+            Comp::Rifmux(rifmux) => {
+                for comp in rifmux.components.iter_mut() {
+                    comp.inst.set_suffixes(suffixes);
+                }
+            },
+            Comp::Rif(rif) => {
+                let n = if suffixes.contains_key(&rif.inst_name) {rif.inst_name.as_str()} else {""};
+                rif.suffix = suffixes.get(n).cloned();
+            },
+            Comp::External(_) => {},
+        }
+    }
+
+    pub fn set_interface(&mut self, intf: &Interface) {
+        match self {
+            Comp::Rifmux(rifmux) => {
+                for comp in rifmux.components.iter_mut() {
+                    comp.inst.set_interface(intf);
+                }
+            },
+            Comp::Rif(rif) => rif.interface = intf.clone(),
+            Comp::External(_) => {},
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -1222,7 +1249,7 @@ impl Comp {
             }
             RifGenTop::Rif(s) => {
                 if let Some(rifdef) = src.rifs.get(s) {
-                    r = Comp::Rif(RifInst::new(s, rifdef, params, &src.rifs, rifdef.description.clone(), None)?);
+                    r = Comp::Rif(RifInst::new(s, rifdef, params, &src.rifs, rifdef.description.clone(), suffixes.get("").cloned())?);
                 } else {
                     return Err(format!("Rif {s} not defined !"));
                 }
