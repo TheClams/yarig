@@ -106,6 +106,7 @@ impl GeneratorSw for GeneratorC {
         self.write(&format!("// Register definition for P_{rifname_uc}\n"));
         self.write(&format!("#ifndef __{rifname_uc}_H__\n"));
         self.write(&format!("#define __{rifname_uc}_H__\n\n"));
+        self.write(&format!("#include <stdint.h>\n\n"));
     }
 
     /// Write RIF end of ifdef

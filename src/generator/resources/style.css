@@ -87,6 +87,14 @@ td.mapv {
     -moz-transform:  rotate(180deg) scaleY(1.15) translateX(25%);
 }
 td.enum-name {
+    font: 8pt Arial,verdana,sans-serif;
+    width: 1%;
+    border: 0px solid red;
+    white-space: nowrap;
+    margin-bottom: 5px;
+}
+td.enum-desc {
+    font: 8pt Arial,verdana,sans-serif;
     width: 1%;
     border: 0px solid red;
     white-space: nowrap;

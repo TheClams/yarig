@@ -535,6 +535,11 @@ impl RegImpl {
         self.regs_ctrl.iter().map(|c| if c.pulse.is_empty() {0} else {1}).sum::<usize>() > 1
     }
 
+    /// Indicate if the register group contains multiple external register control signals
+    pub fn is_multi_ext(&self) -> bool {
+        self.regs_ctrl.iter().map(|c| if c.external.is_none() {0} else {1}).sum::<usize>() > 1
+    }
+
     /// Retrieve interrupt information
     pub fn intr_info(&self, reg: &RifRegInst) -> Result<&InterruptInfo, String> {
         let intr_name = reg.intr_info.1.strip_prefix('_').unwrap_or(&reg.intr_info.1);
@@ -619,7 +624,6 @@ impl HwRegs {
                         return Err(format!("Register group {} should be defined in the hardware registers !", group_name))
                     };
                     // println!("[HwRegs] reg {} : port = {:?} | {:?}", group_name, reg_impl.port, reg_impl.fields.iter().map(|f| (&f.name,&f.hw_acc)).collect::<Vec<(&String,&Access)>>());
-                    let dim = reg.array.dim();
                     let ext_reg_impl;
                     let fields = if let Some(pkg) = &reg_impl.pkg {
                         // Register defined in another RIF: need to build its implementation
@@ -653,7 +657,7 @@ impl HwRegs {
                     // println!("{:?} ({:?}) : {:?} ", reg.reg_name, group_name, port);
                     hw_regs.insert(
                         group_name.clone(),
-                        HwRegInst::new(reg.group_type.clone(), dim, port, reg.intr_info.0.is_derived(), missing)
+                        HwRegInst::new(reg.group_type.clone(), reg.array.dim_inst(), port, reg.intr_info.0.is_derived(), missing)
                     );
                 }
             }

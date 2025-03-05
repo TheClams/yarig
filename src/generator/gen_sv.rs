@@ -254,6 +254,7 @@ impl GeneratorSv {
             }
             // Add fields for register pulse and external access
             let is_multi_pulse = hw_reg.is_multi_pulse();
+            let is_multi_ext = hw_reg.is_multi_ext();
             for ctrl in hw_reg.regs_ctrl.iter() {
                 let (sep,name) = if is_multi_pulse {("_",&*ctrl.name)} else {("","")};
                 for pulse in ctrl.pulse.iter() {
@@ -264,6 +265,7 @@ impl GeneratorSv {
                     }
                 }
                 if ctrl.external != ExternalKind::None {
+                    let (sep,name) = if is_multi_ext {("_",&*ctrl.name)} else {("","")};
                     self.push_stash(0, &format!("      logic ext_{name}{sep}done; // Pulse high when read/write operation on register {} is complete\n", ctrl.name));
                     if matches!(ctrl.external, ExternalKind::ReadWrite | ExternalKind::Write) {
                         self.push_stash(1, &format!("      logic ext_{name}{sep}write; // Pulse high to start a write operation on register {}\n", ctrl.name));
@@ -686,9 +688,9 @@ impl GeneratorSv {
                 self.write("         end\n");
             }
         }
+        self.write("         default: begin\n");
         // Handle external pages
         if !ext_pages.is_empty() {
-            self.write("      default: begin\n");
             for (i,(name,_,_)) in ext_pages.iter().enumerate() {
                 let name = name.to_casing(Snake);
                 self.write(&format!("            {}if(if_page_{}.done) begin\n",if i!=0 {"else"} else {""},name));
@@ -697,8 +699,8 @@ impl GeneratorSv {
                 self.write(&format!("               rif_err_access_l = if_page_{name}.err_access;\n"));
                 self.write("            end\n");
             }
-            self.write("      end\n");
         }
+        self.write("         end\n");
 
         self.write("      endcase\n");
         self.write("   end\n\n");
@@ -1099,7 +1101,7 @@ impl GeneratorSv {
                 // External register
                 if reg.is_external() {
                     let mut sig_name = format!("rif_{group_name_i}.ext");
-                    if reg_impl.regs_ctrl.len() > 1 {
+                    if reg_impl.is_multi_ext() {
                         sig_name.push_str(&format!("_{}",reg.reg_name));
                     }
                     if reg.sw_access.is_writable() {

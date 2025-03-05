@@ -97,8 +97,6 @@ pub struct GeneratorBaseSetting {
     pub casing: Casing,
     /// Confidentality: confidential or public
     pub privacy: Privacy,
-    /// Document only option: true for compact view
-    pub compact: bool,
     /// List of included component to generate
     pub gen_inc: Vec<String>,
 }

@@ -44,6 +44,11 @@ impl ExternalKind {
             ExternalKind::Write |
             ExternalKind::ReadWrite)
     }
+
+    /// Flag External Read/Write access
+    pub fn is_none(&self) -> bool {
+        *self==ExternalKind::None
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]

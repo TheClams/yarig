@@ -208,7 +208,7 @@ impl GeneratorDoc for GeneratorHtml {
             let entry_name = self.sanitize(&entry.name);
             let entry_desc = self.sanitize(entry.description.get());
             desc.push_str(&format!("   <tr><td class=\"enum-name\">{}&nbsp;({entry_name})</td>", entry.value));
-            desc.push_str(&format!("<td width=\"*\" class=\"noborders\">{entry_desc}</td></tr>\n"));
+            desc.push_str(&format!("<td width=\"*\" class=\"enum-desc\">{entry_desc}</td></tr>\n"));
         }
         desc.push_str("</table>\n");
         desc
@@ -216,16 +216,20 @@ impl GeneratorDoc for GeneratorHtml {
 
     fn sanitize(&self, raw: &str) -> String {
         let mut txt = String::with_capacity(raw.len());
-        for l in raw.split('\n') {
+        let mut last_char = '-';
+        for line in raw.split('\n') {
+            let l = line.trim();
             // Insert a line return after each line
             if !txt.is_empty() {
-                txt.push_str("<br/>");
+                let need_br = ['.', ':'].iter().any(|c| last_char==*c) || l.chars().next().unwrap_or('a').is_uppercase();
+                txt.push_str(if need_br {"<br/>"} else {" "});
             }
             // Replace starting indentation by &nbsp; to
-            let nb_spc = l.chars().take_while(|c| c.is_whitespace()).count();
+            let nb_spc = line.chars().take_while(|c| c.is_whitespace()).count();
             txt.push_str(&"&nbsp;".repeat(nb_spc));
             //
-            txt.push_str(l.trim());
+            last_char = l.chars().last().unwrap_or('.');
+            txt.push_str(l);
         }
         txt
     }

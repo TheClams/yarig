@@ -545,6 +545,13 @@ impl ArrayIdx {
         }
     }
 
+    pub fn dim_inst(&self) -> u16 {
+        match self {
+            ArrayIdx::Inst(_, dim) => *dim,
+            _ => 0,
+        }
+    }
+
     pub fn is_def(&self) -> bool {
         matches!(self,ArrayIdx::Def(_,_))
     }
