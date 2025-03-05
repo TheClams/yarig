@@ -1,7 +1,7 @@
 use std::fs::create_dir_all;
 
 use crate::{
-    comp::comp_inst::{Comp, RifFieldInst, RifInst, RifRegInst, RifmuxInst},
+    comp::comp_inst::{Comp, RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxInst},
     parser::remove_rif, rifgen::{Access, Description, EnumDef, EnumEntry}
 };
 
@@ -159,9 +159,8 @@ pub trait GeneratorSw : GeneratorBase {
                 if reg.addr > addr {
                     self.write_reginst_unused(&pname, addr, (reg.addr - addr) / nb_byte);
                 }
-                let reg_1st = inst_dict.first_inst(page, reg);
                 let is_last_reg = is_last_page && regs.peek().is_none();
-                self.write_reginst(&pname, page.addr, reg, reg_1st, is_last_reg);
+                self.write_reginst(&pname, page, reg, &inst_dict, is_last_reg);
                 if !Self::HAS_REG_DECL {
                     self.write_fields_decl(&rif, &pname, reg);
                     self.write_reg_footer(&pname, reg, is_last_reg);
@@ -283,7 +282,7 @@ pub trait GeneratorSw : GeneratorBase {
     fn write_reginst_overlap_footer(&mut self) {}
 
     /// Write register instances
-    fn write_reginst(&mut self, basename: &str, base_addr: u64, reg: &RifRegInst, reg_1st: &RifRegInst, is_last: bool) {}
+    fn write_reginst(&mut self, basename: &str, page: &RifPageInst, reg: &RifRegInst, inst_dict: &InstDict, is_last: bool) {}
 
     /// Write unused register instances
     /// Default to nothing

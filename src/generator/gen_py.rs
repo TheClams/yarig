@@ -2,14 +2,14 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     cfg::CfgPy,
-    comp::comp_inst::{RifFieldInst, RifInst, RifRegInst, RifmuxInst},
+    comp::comp_inst::{RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxInst},
     parser::remove_rif,
     rifgen::{Description, EnumDef}
 };
 
 use super::{
     casing::{Casing, ToCasing},
-    gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore, RifList},
+    gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore, InstDict, RifList},
     trait_sw::{GeneratorSw, RifContext}
 };
 
@@ -200,7 +200,7 @@ impl GeneratorSw for GeneratorPy {
         self.pop_stash(1)
     }
 
-    fn write_reginst(&mut self, _basename: &str, base_addr: u64, reg: &RifRegInst, _reg_1st: &RifRegInst, _is_last: bool) {
+    fn write_reginst(&mut self, _basename: &str, page: &RifPageInst, reg: &RifRegInst, _inst_dict: &InstDict, _is_last: bool) {
         let name = reg.reg_name.to_casing(Casing::Snake);
         if reg.array.dim() > 1 {
             if reg.array.idx() == 0 {
@@ -216,7 +216,7 @@ impl GeneratorSw for GeneratorPy {
                 remove_rif(&self.comp_name).to_casing(Casing::Pascal),
                 reg.reg_type.to_casing(Casing::Pascal),
                 reg.array.idx(),
-                base_addr + reg.addr,
+                page.addr + reg.addr,
                 reg.reset
             ));
 
@@ -224,7 +224,7 @@ impl GeneratorSw for GeneratorPy {
             self.push_stash(1, &format!("      self.{name} = {}.{}(self, \"{name}\", {}, {:#x})\n",
                 remove_rif(&self.comp_name).to_casing(Casing::Pascal),
                 reg.reg_type.to_casing(Casing::Pascal),
-                base_addr + reg.addr,
+                page.addr + reg.addr,
                 reg.reset
             ));
             if let Some(desc) = self.desc_to_string(&reg.description,2) {

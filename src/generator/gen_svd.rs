@@ -1,9 +1,9 @@
 use crate::{
-    cfg::CfgSvd, comp::comp_inst::{RifFieldInst, RifInst, RifRegInst, RifmuxInst}, parser::remove_rif, rifgen::{Description, EnumDef, FieldSwKind}
+    cfg::CfgSvd, comp::comp_inst::{RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxInst}, parser::remove_rif, rifgen::{Description, EnumDef, FieldSwKind}
 };
 
 use super::{
-    gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore, RifList},
+    gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore, InstDict, RifList},
     trait_sw::{GeneratorSw, RifContext}
 };
 
@@ -100,10 +100,10 @@ impl GeneratorSw for GeneratorSvd {
         }
     }
 
-    fn write_reginst(&mut self, _basename: &str, base_addr: u64, reg: &RifRegInst, _reg_1st: &RifRegInst, _is_last: bool) {
+    fn write_reginst(&mut self, _basename: &str, page: &RifPageInst, reg: &RifRegInst, _inst_dict: &InstDict, _is_last: bool) {
         let reg_name = self.casing(&reg.name());
         let desc = self.desc_to_string(&reg.description);
-        let addr = base_addr + reg.addr;
+        let addr = page.addr + reg.addr;
         let tab = " ".repeat(4*2);
         self.write(&format!("{tab}<register>\n"));
         self.write(&format!("{tab}  <name>{reg_name}</name>\n"));

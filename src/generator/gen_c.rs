@@ -1,12 +1,12 @@
 use crate::{
-    comp::comp_inst::{RifFieldInst, RifInst, RifRegInst, RifmuxInst},
+    comp::comp_inst::{RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxInst},
     parser::remove_rif,
-    rifgen::{Description, EnumEntry, EnumDef}
+    rifgen::{Description, EnumDef, EnumEntry}
 };
 
 use super::{
     casing::{Casing, ToCasing},
-    gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore, RifList},
+    gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore, InstDict, RifList},
     trait_sw::{GeneratorSw, RifContext}
 };
 
@@ -234,7 +234,7 @@ impl GeneratorSw for GeneratorC {
     }
 
     /// Write register instances
-    fn write_reginst(&mut self, basename: &str, base_addr: u64, reg: &RifRegInst, _reg_1st: &RifRegInst, _is_last: bool) {
+    fn write_reginst(&mut self, basename: &str, page: &RifPageInst, reg: &RifRegInst, inst_dict: &InstDict, _is_last: bool) {
         let dim = reg.array.dim();
         let lt = self.max_len_reg_type;
         let ln = self.max_len_reg_name;
@@ -246,7 +246,7 @@ impl GeneratorSw for GeneratorC {
         if dim > 1 {
             inst_name.push_str(&format!("[{dim}]"));
         }
-        let addr = base_addr + reg.addr;
+        let addr = page.addr + reg.addr;
         // Increase indentation for overelapping register
         if self.overlap{
             self.push_stash(1,"  ");
@@ -261,7 +261,22 @@ impl GeneratorSw for GeneratorC {
         let basename_uc = basename.to_uppercase();
         let reg_name_uc = reg.reg_name.to_uppercase();
         self.push_stash(2, &format!("#define {basename_uc}_{reg_name_uc}_OFFSET {addr}\n"));
-        self.push_stash(2, &format!("#define {basename_uc}_{reg_name_uc}_RESET {:#08X}\n", reg.reset));
+        let inst_idxs = inst_dict.get(&reg.expanded_type_name()).expect("All register instances should be in the dictionnary !");
+        let mut has_multi_reset = false;
+        let resets : Vec<(String,u128)> = inst_idxs.iter().map(|i| {
+            let r = page.regs.get(*i as usize).unwrap();
+            if r.reset != reg.reset {
+                has_multi_reset = true;
+            }
+            (r.name().to_uppercase(), r.reset)
+        }).collect();
+        if has_multi_reset {
+            for (k,v) in resets.iter() {
+                self.push_stash(2, &format!("#define {basename_uc}_{k}_RESET {:#08X}\n", v));
+            }
+        } else {
+            self.push_stash(2, &format!("#define {basename_uc}_{reg_name_uc}_RESET {:#08X}\n", reg.reset));
+        }
     }
 
     //-------- RIFmux functions --------//

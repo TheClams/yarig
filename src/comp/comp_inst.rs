@@ -1089,6 +1089,21 @@ impl RifFieldInst {
     pub fn reset(&self) -> u128 {
         self.reset.to_u128(self.width)
     }
+
+    /// return reset value in a string: hexa/decimal are chosen automatically based on width
+    pub fn reset_str(&self) -> String {
+        let val = self.reset();
+        let w = (self.width >> 2) as usize;
+        // let width
+        if self.width > 12 {
+            format!("0x{val:0w$X}")
+        } else if self.is_signed() && self.width > 1 && val >= 1<<(self.width-1) {
+            format!("{}", val as i128 - (1<<(self.width)))
+        } else {
+            format!("{val}")
+        }
+    }
+
 }
 
 #[derive(Clone, Debug)]

@@ -88,16 +88,15 @@ td.mapv {
 }
 td.enum-name {
     font: 8pt Arial,verdana,sans-serif;
-    width: 1%;
+    width: 5%;
     border: 0px solid red;
     white-space: nowrap;
     margin-bottom: 5px;
 }
 td.enum-desc {
     font: 8pt Arial,verdana,sans-serif;
-    width: 1%;
+    width: 95%;
     border: 0px solid red;
-    white-space: nowrap;
     margin-bottom: 5px;
 }
 td.rsvd{

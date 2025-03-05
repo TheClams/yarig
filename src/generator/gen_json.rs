@@ -1,11 +1,11 @@
 use crate::{
-    comp::comp_inst::{RifFieldInst, RifInst, RifRegInst, RifmuxInst},
+    comp::comp_inst::{RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxInst},
     parser::remove_rif,
     rifgen::{Description, EnumDef}
 };
 
 use super::{
-    gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore, RifList},
+    gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore, InstDict, RifList},
     trait_sw::{GeneratorSw, RifContext}
 };
 
@@ -56,7 +56,7 @@ impl GeneratorSw for GeneratorJson {
         self.write("}");
     }
 
-    fn write_reginst(&mut self, _basename: &str, base_addr: u64, reg: &RifRegInst, _reg_1st: &RifRegInst, _is_last: bool) {
+    fn write_reginst(&mut self, _basename: &str, page: &RifPageInst, reg: &RifRegInst, _inst_dict: &InstDict, _is_last: bool) {
         let reg_name = self.casing(&reg.name());
         let desc = self.desc_to_string(&reg.description);
         let ro = if reg.sw_access.is_writable() {"false"} else {"true"};
@@ -69,7 +69,7 @@ impl GeneratorSw for GeneratorJson {
             flags.push("interrupt");
         }
         self.write(&format!("   \"{reg_name}\" : {{\n"));
-        self.write(&format!("      \"addr\" : {},\n", base_addr + reg.addr));
+        self.write(&format!("      \"addr\" : {},\n", page.addr + reg.addr));
         self.write(&format!("      \"desc\" : \"{desc}\",\n"));
         self.write(&format!("      \"readonly\" : {ro},\n"));
         self.write(&format!("      \"flags\" : {flags:?},\n"));

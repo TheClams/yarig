@@ -1,12 +1,12 @@
 use crate::{
     cfg::CfgRal,
-    comp::comp_inst::{RifFieldInst, RifInst, RifRegInst, RifmuxInst},
+    comp::comp_inst::{RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxInst},
     parser::remove_rif,
     rifgen::{Description, EnumDef}
 };
 
 use super::{
-    gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore, RifList},
+    gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore, InstDict, RifList},
     trait_sw::{GeneratorSw, RifContext},
 };
 
@@ -163,7 +163,7 @@ impl GeneratorSw for GeneratorRal {
         self.write(&format!("endclass : ral_block_{name}\n\n"));
     }
 
-    fn write_reginst(&mut self, _basename: &str, base_addr: u64, reg: &RifRegInst, reg_1st: &RifRegInst, _is_last: bool) {
+    fn write_reginst(&mut self, _basename: &str, page: &RifPageInst, reg: &RifRegInst, inst_dict: &InstDict, _is_last: bool) {
         let regname = reg.name().to_lowercase();
         let regtype = format!("ral_reg_{}_{}", remove_rif(&self.comp_name), reg.reg_type.to_lowercase());
         // Declare register instance as members of the class
@@ -175,9 +175,10 @@ impl GeneratorSw for GeneratorRal {
         self.push_stash(0, &format!("      this.{regname}.build();\n"));
         self.push_stash(0, &format!("      this.{regname}.add_hdl_path_slice(\"{regname}__read_data\", 0, {});\n", self.data_width));
         self.push_stash(0, &format!("      this.default_map.add_reg(this.{regname}, "));
-        self.push_stash(0, &format!("`UVM_REG_ADDR_WIDTH\'h{:X}, ", base_addr + reg.addr));
+        self.push_stash(0, &format!("`UVM_REG_ADDR_WIDTH\'h{:X}, ", page.addr + reg.addr));
         self.push_stash(0, &format!("\"{}\", 0);\n", reg.sw_access));
         let is_public = self.setting().privacy.is_public();
+        let reg_1st = &inst_dict.first_inst(page, reg);
         for (fi,field) in reg.fields.iter()
                 .filter(|f| !(f.visibility.is_hidden() && is_public))
                 .enumerate() {

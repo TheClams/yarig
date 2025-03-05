@@ -244,7 +244,7 @@ pub trait GeneratorDoc : GeneratorBase {
             let mut idx_r = 0;
             let regs = page.regs.iter().filter(|r| !(is_public && r.visibility.is_hidden()));
             for (idx_ri,reg) in regs.enumerate() {
-                // Check not already defined in case of compact display
+                // Check not already defined
                 let reg_type = reg.expanded_type_name();
                 let Some(instances) = inst_dict.get(&reg_type) else {
                     return Err(format!("Unable to find register type {rif_name}.{reg_type} in instance dict: {:?}", inst_dict.keys().collect::<Vec<&String>>()))
@@ -359,26 +359,29 @@ pub trait GeneratorDoc : GeneratorBase {
                         self.write_table_cell((TableKind::Field, CellKind::Inst), 0, &fieldname, "");
                         // let access = if is_intr_derived {&FieldSwKind::ReadWrite} else {&f.sw_kind};
                         self.write_table_cell((TableKind::Field, CellKind::Access), 0, Self::access_str(&f.sw_kind), "");
-                        // Check if the field reset is the same in all register instance
-                        // If not display a dash character
-                        let mut is_single_reset = true;
+                        // Build a reset string:
+                        // if multiple value display the first two, and an ellipsis if at least a third value exists
+                        let mut rst = f.reset_str();
+                        let mut f_inst_reset = f.reset.clone();
                         for inst_idx in instances.iter().skip(1) {
                             let reg_inst = page.regs.get(*inst_idx as usize).unwrap(); // Case were this does not exist already checked before
                             let Some(f_inst) = reg_inst.fields.iter().find(|fi| fi.name==f.name) else {
                                 return Err(format!("Unable to find field {}.{} !", reg.reg_name, f.name));
                             };
+                            // Display
                             if f_inst.reset != f.reset {
-                                is_single_reset = false;
-                                break;
+                                if f_inst.reset != f_inst_reset {
+                                    rst.push('/');
+                                    if f_inst_reset == f.reset {
+                                        rst.push_str(&f_inst.reset_str());
+                                        f_inst_reset = f_inst.reset.clone();
+                                    } else {
+                                        rst.push('…');
+                                        break;
+                                    }
+                                }
                             }
                         }
-                        let rst = if is_single_reset {
-                            let val = f.reset.to_u128(f.width);
-                            let w = (f.width>>2) as usize;
-                            format!("0x{val:0w$X}")
-                        } else {
-                            "-".to_owned()
-                        };
                         self.write_table_cell((TableKind::Field, CellKind::Reset), 0, &rst, "");
                         // Description
                         let mut desc = self.sanitize(f.description.get());
