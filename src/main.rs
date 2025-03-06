@@ -120,7 +120,7 @@ fn main() {
     if args.interface.is_some() {cfg.interface = args.interface};
     if args.suffix_rtl_only {cfg.suffix_rtl_only = true;}
     //
-    let outputs = vec![
+    let outputs = [
         ("c"  , args.output_c),
         ("py" , args.output_py),
         ("doc", args.output_doc),

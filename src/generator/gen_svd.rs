@@ -1,5 +1,8 @@
 use crate::{
-    cfg::CfgSvd, comp::comp_inst::{RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxInst}, parser::remove_rif, rifgen::{Description, EnumDef, FieldSwKind}
+    cfg::CfgSvd,
+    comp::comp_inst::{RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxInst},
+    parser::remove_rif,
+    rifgen::{Description, EnumDef, FieldSwKind}
 };
 
 use super::{
@@ -85,7 +88,7 @@ impl GeneratorSw for GeneratorSvd {
 
     fn write_rif_header(&mut self, rif: &RifInst, is_top: bool) {
         if is_top {
-            self.write_svd_header(&remove_rif(&rif.type_name), &rif.description, rif.data_width);
+            self.write_svd_header(remove_rif(&rif.type_name), &rif.description, rif.data_width);
             self.rif_top = true;
             let cntxt = RifContext {prefix: "", group: "", page: "", addr: 0};
             self.write_rif_inst(rif, cntxt, &rif.description, true, true);
@@ -116,7 +119,7 @@ impl GeneratorSw for GeneratorSvd {
 
     fn write_field_decl(&mut self, _basename: &str, _reg: &RifRegInst, field: &RifFieldInst, enum_def: Option<&EnumDef>, _is_last: bool) {
         let tab = " ".repeat(6*2);
-        let name = self.casing(&&field.name_flat());
+        let name = self.casing(&field.name_flat());
         let desc = self.desc_to_string(&field.description);
 
         let access = match field.sw_kind {
@@ -178,7 +181,7 @@ impl GeneratorSw for GeneratorSvd {
 
     fn write_rif_inst(&mut self, rif_inst: &RifInst, cntxt: RifContext, desc: &Description, _last_page: bool, _last_comp: bool) {
         let desc = self.desc_to_string(desc);
-        let name = self.casing(&remove_rif(&rif_inst.type_name));
+        let name = self.casing(remove_rif(&rif_inst.type_name));
 
         self.write(         "    <peripheral>\n");
         self.write(&format!("      <name>{name}</name>\n"));

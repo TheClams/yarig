@@ -73,8 +73,7 @@ impl GeneratorDoc for GeneratorAdoc {
 
     fn write_page_title(&mut self, idx_rif: (&str,usize), idx_page: (&str, usize), desc: (&str, Option<&str>)) {
         if self.multipage {
-            self.write(&format!("\n=== "));
-            self.write(&format!("[[{}.{}]]", idx_rif.0, idx_page.0));
+            self.write(&format!("\n=== [[{}.{}]]", idx_rif.0, idx_page.0));
             let name = self.sanitize(idx_page.0);
             if desc.0.is_empty() {
                 self.write(&name);

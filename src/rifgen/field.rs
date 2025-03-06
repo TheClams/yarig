@@ -827,7 +827,7 @@ impl Field {
     }
 
     pub fn is_signed(&self) -> bool {
-        let reset = self.reset.get(0).unwrap_or(&ResetVal::Unsigned(0));
+        let reset = self.reset.first().unwrap_or(&ResetVal::Unsigned(0));
         matches!(reset, ResetVal::Signed(_))
     }
 

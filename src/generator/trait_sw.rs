@@ -124,7 +124,7 @@ pub trait GeneratorSw : GeneratorBase {
                         .max().expect("Registers should have fields");
                     self.set_max_field_name_len(max_len);
                     self.write_reg_header(basename, reg);
-                    self.write_fields_decl(&rif, basename, reg);
+                    self.write_fields_decl(rif, basename, reg);
                     self.write_reg_footer(basename, reg, regs.peek().is_none());
                 }
             }
@@ -138,8 +138,7 @@ pub trait GeneratorSw : GeneratorBase {
             let mut regs = page.regs.iter()
                 .filter(|r|
                     (r.array.idx()==0 || !Self::INST_ARRAY) &&
-                    !r.sw_access.is_na() &&
-                    !(is_public && r.visibility.is_hidden()))
+                    !(r.sw_access.is_na() || (is_public && r.visibility.is_hidden())))
                 .peekable();
             while let Some(reg) = regs.next() {
                 // println!("Register instance: {} ({}) @ {} | {:?}", reg.reg_name, reg.reg_type, reg.addr, reg.array );
@@ -164,7 +163,7 @@ pub trait GeneratorSw : GeneratorBase {
                 let is_last_reg = is_last_page && regs.peek().is_none();
                 self.write_reginst(basename, page, reg, &inst_dict, is_last_reg);
                 if !Self::HAS_REG_DECL {
-                    self.write_fields_decl(&rif, basename, reg);
+                    self.write_fields_decl(rif, basename, reg);
                     self.write_reg_footer(basename, reg, is_last_reg);
                 }
 

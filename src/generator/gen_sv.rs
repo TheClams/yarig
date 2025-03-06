@@ -104,7 +104,7 @@ impl GeneratorSv {
     //-----------------------------------------------------------------------------
 
     fn gen_pkg(&mut self, rif: &RifInst) -> Result<(), Box<dyn std::error::Error>> {
-        let rif_name = rif.name(true).to_casing(Snake); // TODO: handle prefixing
+        let rif_name = rif.name(true).to_casing(Snake);
         // Add header : TODO: configurable header
         self.write("// File generated automatically by rifgen: DO NOT EDIT.\n\n");
         //

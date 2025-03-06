@@ -48,7 +48,7 @@ impl Description {
         let params = ParamValues::new_with_idx(idx as isize);
         let mut parts = self.0.split('$');
         desc.push_str(parts.next().unwrap_or(""));
-        while let Some(mut s) = parts.next() {
+        for mut s in parts {
             // Variable $i replaced by index
             if let Some(stripped) = s.strip_prefix('i') {
                 desc.push_str(&format!("{idx}"));

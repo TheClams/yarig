@@ -989,7 +989,6 @@ impl RifFieldInst {
         if let Some(kind) = field.get_auto_hw_kind(params) {
             hw_kind.push(kind);
         }
-        let desc = desc;
         //
         *next_lsb += width;
         RifFieldInst {

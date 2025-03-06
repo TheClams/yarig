@@ -126,8 +126,8 @@ impl GeneratorSw for GeneratorJson {
 
     fn write_rif_inst(&mut self, rif_inst: &RifInst, cntxt: RifContext, desc: &Description, _last_page: bool, last_comp: bool) {
         let desc = self.desc_to_string(desc);
-        let inst_name = self.casing(&remove_rif(&rif_inst.inst_name));
-        let type_name = self.casing(&remove_rif(&rif_inst.type_name));
+        let inst_name = self.casing(remove_rif(&rif_inst.inst_name));
+        let type_name = self.casing(remove_rif(&rif_inst.type_name));
         self.write(&format!("   \"{inst_name}\" : {{\n"));
         self.write(&format!("      \"type\" : {type_name},\n"));
         self.write(&format!("      \"group\" : {},\n", cntxt.group));
