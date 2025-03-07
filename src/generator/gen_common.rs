@@ -185,12 +185,12 @@ impl GeneratorCore {
     }
 
     /// Get a field name with proper casing
-    pub fn get_field_name(&self, r: &RifRegInst, field: &RifFieldInst) -> String {
+    pub fn get_field_name(&self, reg: &RifRegInst, field: &RifFieldInst) -> String {
         // println!("[get_field_name] {}.{} : rsvd={}, field array = {:?}, reg array={:?}",
-        //     r.reg_name, f.name, f.is_reserved(), f.array, r.array);
+        //     reg.reg_name, f.name, f.is_reserved(), f.array, reg.array);
         if field.is_reserved() && self.setting.privacy.is_public() {
             format!("rsvd{}",field.lsb)
-        } else if field.array.dim() > 1 || r.array.dim()==0 || r.array.is_inst() {
+        } else if field.array.dim() > 1 || reg.array.dim()==0 || reg.array.is_inst() {
             field.name_flat().to_casing(self.setting.casing)
         } else {
             field.name.to_casing(self.setting.casing)

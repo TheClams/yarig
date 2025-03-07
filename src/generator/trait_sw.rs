@@ -243,14 +243,8 @@ pub trait GeneratorSw : GeneratorBase {
     /// Write register end of declaration
     fn write_field_decl(&mut self, basename: &str, reg: &RifRegInst, field: &RifFieldInst, enum_defs: Option<&EnumDef>, is_last: bool) {}
 
-    fn get_field_name(&self, reg: &RifRegInst, f: &RifFieldInst) -> String {
-        if f.is_reserved() && self.setting().privacy.is_public() {
-            format!("rsvd{}",f.lsb)
-        } else if f.array.dim() > 1 || reg.array.dim()==0 || reg.array.is_inst() {
-            f.name_flat()
-        } else {
-            f.name.to_owned()
-        }
+    fn get_field_name(&self, reg: &RifRegInst, field: &RifFieldInst) -> String {
+        self.core().get_field_name(reg, field)
     }
 
     fn get_field_iter<'a>(&self, reg: &'a RifRegInst, ) -> impl std::iter::Iterator<Item = &'a RifFieldInst> {

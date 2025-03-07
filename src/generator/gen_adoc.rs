@@ -158,7 +158,7 @@ impl GeneratorDoc for GeneratorAdoc {
         self.write("== Registers definition\n");
     }
 
-    fn write_table_cell(&mut self, kind: (TableKind, CellKind), span: usize, txt: &str, id: &str) {
+    fn write_table_cell(&mut self, kind: (TableKind, CellKind), span: usize, txt: &str, id: &str, _tip: Option<String>) {
         // Call sanitize on non-description cell (already caled on description)
         let txt = if kind.1!=CellKind::Desc {self.sanitize(txt)} else {txt.to_owned()};
         if span > 1 {

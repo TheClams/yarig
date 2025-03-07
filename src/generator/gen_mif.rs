@@ -259,7 +259,7 @@ impl GeneratorDoc for GeneratorMif {
         self.write_mif_table_cell(txt, PgfKind::TableHeading);
     }
 
-    fn write_table_cell(&mut self, kind: (TableKind, CellKind), _span: usize, txt: &str, _id: &str) {
+    fn write_table_cell(&mut self, kind: (TableKind, CellKind), _span: usize, txt: &str, _id: &str, _tip: Option<String>) {
         let txt = if kind.0==TableKind::FieldRsvd {
             match kind.1 {
                 CellKind::Inst => "-",

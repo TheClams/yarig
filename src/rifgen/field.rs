@@ -417,6 +417,16 @@ impl ResetVal {
         }
     }
 
+    // Suppose used only on compiled value
+    pub fn to_f64(&self, nb_frac: isize) -> f64 {
+        let scale = f64::powf(2.0, -nb_frac as f64);
+        match self {
+            ResetVal::Unsigned(v) => (*v as f64) * scale,
+            ResetVal::Signed(v) => (*v as f64) * scale,
+            ResetVal::Param(p) => unreachable!("to_u128 cannot be used on uncompiled values: {:?}",p),
+        }
+    }
+
     //
     pub fn is_signed(&self) -> bool {
         matches!(self,ResetVal::Signed(_))

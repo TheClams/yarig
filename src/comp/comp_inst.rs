@@ -882,8 +882,28 @@ impl RifRegInst {
         }
     }
 
+    /// Return a one-line description of the register
     pub fn get_desc_short(&self) -> &str {
         self.description.get_short()
+    }
+
+    /// True when register is defined as an array
+    pub fn is_reg_def(&self) -> bool {
+        if let ArrayIdx::Def(_,dim) = self.array {
+            dim > 0
+        } else {
+            false
+        }
+    }
+
+    /// Find a field by name
+    pub fn find_field(&self, name: &str, idx: u16) -> Option<&RifFieldInst> {
+        let reg_idx = if self.is_reg_def() {self.array.idx()} else {0};
+        self.fields.iter()
+            .find(|fi| {
+                let fi_idx = fi.array.idx() - reg_idx*fi.array.dim();
+                fi.name==name && fi_idx==idx
+            })
     }
 }
 
@@ -1092,18 +1112,20 @@ impl RifFieldInst {
 
     /// return reset value in a string: hexa/decimal are chosen automatically based on width
     pub fn reset_str(&self) -> String {
-        let val = self.reset();
-        let w = (self.width >> 2) as usize;
-        // let width
-        if self.width > 12 {
-            format!("0x{val:0w$X}")
-        } else if self.is_signed() && self.width > 1 && val >= 1<<(self.width-1) {
-            format!("{}", val as i128 - (1<<(self.width)))
-        } else {
-            format!("{val}")
-        }
+        val_str(self.reset(), self.width, self.is_signed())
     }
+}
 
+pub fn val_str(val: u128, width: u8, is_signed: bool) -> String {
+    let w = (width >> 2) as usize;
+    // let width
+    if width > 12 {
+        format!("0x{val:0w$X}")
+    } else if is_signed && width > 1 && val >= 1<<(width-1) {
+        format!("{}", val as i128 - (1<<(width)))
+    } else {
+        format!("{val}")
+    }
 }
 
 #[derive(Clone, Debug)]

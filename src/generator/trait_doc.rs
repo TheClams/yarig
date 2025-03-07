@@ -1,9 +1,9 @@
 use std::fs::create_dir_all;
 
 use crate::{
-    comp::comp_inst::{Comp, CompInst, RifInst, RifmuxGroupInst},
+    comp::comp_inst::{val_str, Comp, CompInst, RifInst, RifmuxGroupInst},
     parser::remove_rif,
-    rifgen::{EnumDef, FieldSwKind}
+    rifgen::{EnumDef, FieldSwKind, ResetVal}
 };
 
 use super::gen_common::{GeneratorBase, InstDict, RifList};
@@ -149,12 +149,12 @@ pub trait GeneratorDoc : GeneratorBase {
             inst => {
                 let tn = remove_rif(inst.get_type());
                 self.write_table_row_header(None);
-                self.write_table_cell((TableKind::Rifmux, CellKind::Addr   ), 0, &format!("0x{addr:0w$X}"), "");
+                self.write_table_cell((TableKind::Rifmux, CellKind::Addr   ), 0, &format!("0x{addr:0w$X}"), "", None);
                 if Self::SHOW_TYPE {
-                    self.write_table_cell((TableKind::Rifmux, CellKind::RifType), 0, tn, tn);
+                    self.write_table_cell((TableKind::Rifmux, CellKind::RifType), 0, tn, tn, None);
                 }
-                self.write_table_cell((TableKind::Rifmux, CellKind::Inst   ), 0, &instname, tn);
-                self.write_table_cell((TableKind::Rifmux, CellKind::Desc   ), 0, &self.sanitize(inst.get_desc_short()), "");
+                self.write_table_cell((TableKind::Rifmux, CellKind::Inst   ), 0, &instname, tn, None);
+                self.write_table_cell((TableKind::Rifmux, CellKind::Desc   ), 0, &self.sanitize(inst.get_desc_short()), "", None);
                 self.write_table_row_footer();
             }
         }
@@ -205,15 +205,15 @@ pub trait GeneratorDoc : GeneratorBase {
                 let addr = page.addr+reg.addr;
                 let id_reg = &format!("{rif_name}.{reg_type}");
                 self.write_table_row_header(None);
-                self.write_table_cell((TableKind::Page, CellKind::Addr), 0, &format!("0x{addr:0addr_w$X}"), "");
+                self.write_table_cell((TableKind::Page, CellKind::Addr), 0, &format!("0x{addr:0addr_w$X}"), "", None);
                 if Self::SHOW_TYPE {
-                    self.write_table_cell((TableKind::Page, CellKind::RegType), 0, &reg_type, id_reg);
+                    self.write_table_cell((TableKind::Page, CellKind::RegType), 0, &reg_type, id_reg, None);
                 }
-                self.write_table_cell((TableKind::Page, CellKind::Inst), 0, &reg_name, id_reg);
+                self.write_table_cell((TableKind::Page, CellKind::Inst), 0, &reg_name, id_reg, None);
                 if Self::SHOW_RESET {
-                    self.write_table_cell((TableKind::Page, CellKind::Reset), 0, &format!("0x{:0data_w$X}", reg.reset), "");
+                    self.write_table_cell((TableKind::Page, CellKind::Reset), 0, &format!("0x{:0data_w$X}", reg.reset), "", None);
                 }
-                self.write_table_cell((TableKind::Page, CellKind::Desc), 0, &self.sanitize(reg.get_desc_short()), "");
+                self.write_table_cell((TableKind::Page, CellKind::Desc), 0, &self.sanitize(reg.get_desc_short()), "", None);
                 self.write_table_row_footer();
             }
             self.write_table_footer(TableKind::Page);
@@ -280,11 +280,11 @@ pub trait GeneratorDoc : GeneratorBase {
                         let id_name = format!("inst.{rif_name}.{reg_name}");
                         let addr = page.addr+inst.addr;
                         self.write_table_row_header(Some(&id_name));
-                        self.write_table_cell((TableKind::RegInst, CellKind::Addr ), 0, &format!("0x{addr:0addr_w$X}"), "");
-                        self.write_table_cell((TableKind::RegInst, CellKind::Inst ), 0, &reg_name, &reg_type);
-                        self.write_table_cell((TableKind::RegInst, CellKind::Reset), 0, &format!("0x{:0data_w$X}", inst.reset), "");
+                        self.write_table_cell((TableKind::RegInst, CellKind::Addr ), 0, &format!("0x{addr:0addr_w$X}"), "", None);
+                        self.write_table_cell((TableKind::RegInst, CellKind::Inst ), 0, &reg_name, &reg_type, None);
+                        self.write_table_cell((TableKind::RegInst, CellKind::Reset), 0, &format!("0x{:0data_w$X}", inst.reset), "", None);
                         if instances.len() > 1 {
-                            self.write_table_cell((TableKind::RegInst, CellKind::Desc), 0, &self.sanitize(inst.get_desc_short()), "");
+                            self.write_table_cell((TableKind::RegInst, CellKind::Desc), 0, &self.sanitize(inst.get_desc_short()), "", None);
                         }
                         self.write_table_row_footer();
                     }
@@ -295,34 +295,34 @@ pub trait GeneratorDoc : GeneratorBase {
                     self.write_table_title(TableKind::Layout, &format!("{id_reg} Layout"), &format!("layout.{id_reg}"));
                     // Bit number
                     self.write_table_row_header(None);
-                    self.write_table_cell((TableKind::Layout, CellKind::Desc), 0, "Bit", "");
+                    self.write_table_cell((TableKind::Layout, CellKind::Desc), 0, "Bit", "", None);
                     for i in (0..rif.data_width).rev() {
-                        self.write_table_cell((TableKind::Layout, CellKind::Desc), 1, &format!("{i}"), "");
+                        self.write_table_cell((TableKind::Layout, CellKind::Desc), 1, &format!("{i}"), "", None);
                     }
                     self.write_table_row_footer();
                     // Field name
                     self.write_table_row_header(None);
-                    self.write_table_cell((TableKind::Layout, CellKind::Desc), 0, "Field", "");
+                    self.write_table_cell((TableKind::Layout, CellKind::Desc), 0, "Field", "", None);
                     let mut last_pos = rif.data_width;
                     for f in reg.fields.iter().rev().filter(|f| !(f.visibility.is_hidden() && is_public)) {
                         let fieldname = self.core().get_field_name(reg, f);
                         // Insert reserved in unoccupied bits
                         if f.msb()+1 < last_pos {
                             let w = last_pos - (f.msb()+1);
-                            self.write_table_cell((TableKind::Layout, CellKind::Field), w.into(), "", "");
+                            self.write_table_cell((TableKind::Layout, CellKind::Field), w.into(), "", "", None);
                         }
-                        self.write_table_cell((TableKind::Layout, CellKind::Field), f.width.into(), &fieldname, "");
+                        self.write_table_cell((TableKind::Layout, CellKind::Field), f.width.into(), &fieldname, "", None);
                         last_pos = f.lsb;
                     }
                     if last_pos!=0 {
-                        self.write_table_cell((TableKind::Layout, CellKind::Field), last_pos.into(), "", "");
+                        self.write_table_cell((TableKind::Layout, CellKind::Field), last_pos.into(), "", "", None);
                     }
                     self.write_table_row_footer();
                     // Reset value
                     self.write_table_row_header(None);
-                    self.write_table_cell((TableKind::Layout, CellKind::Desc), 0, "Reset", "");
+                    self.write_table_cell((TableKind::Layout, CellKind::Desc), 0, "Reset", "", None);
                     for i in (0..rif.data_width).rev() {
-                        self.write_table_cell((TableKind::Layout, CellKind::Desc), 1, &format!("{}", (reg.reset >> i)&1), "");
+                        self.write_table_cell((TableKind::Layout, CellKind::Desc), 1, &format!("{}", (reg.reset >> i)&1), "", None);
                     }
                     self.write_table_row_footer();
                     self.write_table_footer(TableKind::Layout);
@@ -344,37 +344,52 @@ pub trait GeneratorDoc : GeneratorBase {
                             let w = last_pos - (f.msb()+1);
                             let pos = if w==1 {format!("{}",last_pos-1)} else {format!("{}:{}", last_pos-1, f.msb()+1)};
                             self.write_table_row_header(None);
-                            self.write_table_cell((TableKind::FieldRsvd, CellKind::Bits), 0, &pos, "");
-                            self.write_table_cell((TableKind::FieldRsvd, CellKind::Inst), 0, "", "");
-                            self.write_table_cell((TableKind::FieldRsvd, CellKind::Access), 0, "RO", "");
-                            self.write_table_cell((TableKind::FieldRsvd, CellKind::Reset), 0, "0x0", "");
-                            self.write_table_cell((TableKind::FieldRsvd, CellKind::Desc), 0, "", "");
+                            self.write_table_cell((TableKind::FieldRsvd, CellKind::Bits), 0, &pos, "", None);
+                            self.write_table_cell((TableKind::FieldRsvd, CellKind::Inst), 0, "", "", None);
+                            self.write_table_cell((TableKind::FieldRsvd, CellKind::Access), 0, "RO", "", None);
+                            self.write_table_cell((TableKind::FieldRsvd, CellKind::Reset), 0, "0", "", None);
+                            self.write_table_cell((TableKind::FieldRsvd, CellKind::Desc), 0, "", "", None);
                             self.write_table_row_footer();
                         }
 
                         let fieldname = self.core().get_field_name(reg, f);
                         self.write_table_row_header(Some(&format!("{rif_name}.{reg_type}.{fieldname}")));
                         let pos = if f.width==1 {format!("{}",f.lsb)} else {format!("{}:{}",f.msb(), f.lsb)};
-                        self.write_table_cell((TableKind::Field, CellKind::Bits), 0, &pos, "");
-                        self.write_table_cell((TableKind::Field, CellKind::Inst), 0, &fieldname, "");
+                        self.write_table_cell((TableKind::Field, CellKind::Bits), 0, &pos, "", None);
+                        self.write_table_cell((TableKind::Field, CellKind::Inst), 0, &fieldname, "", None);
                         // let access = if is_intr_derived {&FieldSwKind::ReadWrite} else {&f.sw_kind};
-                        self.write_table_cell((TableKind::Field, CellKind::Access), 0, Self::access_str(&f.sw_kind), "");
+                        self.write_table_cell((TableKind::Field, CellKind::Access), 0, Self::access_str(&f.sw_kind), "", None);
                         // Build a reset string:
                         // if multiple value display the first two, and an ellipsis if at least a third value exists
+                        let resets : Vec<ResetVal> = instances.iter().filter_map(|idx| {
+                                let reg_inst = page.regs.get(*idx as usize).unwrap(); // Case were this does not exist already checked before
+                                // let reg_idx = if reg_inst.is_reg_def() {reg_inst.array.idx()} else {0};
+                                // if let Some(f_inst) = reg_inst.fields.iter().find(|fi| fi.name==f.name && (fi.array.idx() - reg_idx*fi.array.dim())==f.array.idx()) {
+                                //     Some(f_inst.reset.clone())
+                                // } else {
+                                //     // Should never happen, but print a clear message to debug library if I mess something in the future
+                                //     eprintln!("[ERROR] Field {fieldname} == {} with index {:?} (reg {:?} -> {reg_idx}): Unable to find amongst {:?}",
+                                //         f.name, f.array, reg_inst.array, reg_inst.fields.iter().map(|fi| (&fi.name, fi.array)).collect::<Vec<_>>());
+                                //     None
+                                // }
+                                if let Some(f_inst) = reg_inst.find_field(&f.name, f.array.idx()) {
+                                    Some(f_inst.reset.clone())
+                                } else {
+                                    // Should never happen, but print a clear message to debug library if I mess something in the future
+                                    eprintln!("[ERROR] Field {fieldname} == {} with index {:?} (reg {:?}): Unable to find amongst {:?}",
+                                        f.name, f.array, reg_inst.array, reg_inst.fields.iter().map(|fi| (&fi.name, fi.array)).collect::<Vec<_>>());
+                                    None
+                                }
+                            }).collect();
                         let mut rst = f.reset_str();
                         let mut f_inst_reset = f.reset.clone();
-                        for inst_idx in instances.iter().skip(1) {
-                            let reg_inst = page.regs.get(*inst_idx as usize).unwrap(); // Case were this does not exist already checked before
-                            let Some(f_inst) = reg_inst.fields.iter().find(|fi| fi.name==f.name) else {
-                                return Err(format!("Unable to find field {}.{} !", reg.reg_name, f.name));
-                            };
-                            // Display
-                            if f_inst.reset != f.reset {
-                                if f_inst.reset != f_inst_reset {
+                        for inst_rst in resets.iter().skip(1) {
+                            if *inst_rst != f.reset {
+                                if *inst_rst != f_inst_reset {
                                     rst.push('/');
                                     if f_inst_reset == f.reset {
-                                        rst.push_str(&f_inst.reset_str());
-                                        f_inst_reset = f_inst.reset.clone();
+                                        rst.push_str(&val_str(inst_rst.to_u128(f.width), f.width, f.is_signed()));
+                                        f_inst_reset = inst_rst.clone();
                                     } else {
                                         rst.push('…');
                                         break;
@@ -382,7 +397,23 @@ pub trait GeneratorDoc : GeneratorBase {
                                 }
                             }
                         }
-                        self.write_table_cell((TableKind::Field, CellKind::Reset), 0, &rst, "");
+                        let tip = if f.nb_frac!=0 {
+                            let prec = if f.nb_frac < 0 {0} else {f.nb_frac as usize};
+                            Some(resets.iter().map(|r| {
+                                if f.nb_frac > 4 {
+                                    format!("{:.3e}", r.to_f64(f.nb_frac))
+                                } else {
+                                    format!("{:.prec$}", r.to_f64(f.nb_frac))
+                                }
+                            }).collect::<Vec<String>>().join("\n"))
+                        } else if rst.ends_with('…') {
+                            Some(resets.iter().map(|r|
+                                val_str(r.to_u128(f.width), f.width, f.is_signed())
+                            ).collect::<Vec<String>>().join("\n"))
+                        } else {
+                            None
+                        };
+                        self.write_table_cell((TableKind::Field, CellKind::Reset), 0, &rst, "", tip);
                         // Description
                         let mut desc = self.sanitize(f.description.get());
                         if let Some(enum_name) = f.enum_kind.name() {
@@ -398,18 +429,18 @@ pub trait GeneratorDoc : GeneratorBase {
                             }
                             desc.push_str(&self.enum_def_desc(enum_def));
                         }
-                        self.write_table_cell((TableKind::Field, CellKind::Desc), 0, &desc, "");
+                        self.write_table_cell((TableKind::Field, CellKind::Desc), 0, &desc, "", None);
                         self.write_table_row_footer();
                         last_pos = f.lsb;
                     }
                     if Self::SHOW_UNUSED && last_pos!=0 {
                         let pos = if last_pos==0 {"0".to_owned()} else {format!("{}:0", last_pos-1)};
                         self.write_table_row_header(None);
-                        self.write_table_cell((TableKind::FieldRsvd, CellKind::Bits  ), 0, &pos , "");
-                        self.write_table_cell((TableKind::FieldRsvd, CellKind::Inst  ), 0, ""   , "");
-                        self.write_table_cell((TableKind::FieldRsvd, CellKind::Access), 0, "RO" , "");
-                        self.write_table_cell((TableKind::FieldRsvd, CellKind::Reset ), 0, "0x0", "");
-                        self.write_table_cell((TableKind::FieldRsvd, CellKind::Desc  ), 0, ""   , "");
+                        self.write_table_cell((TableKind::FieldRsvd, CellKind::Bits  ), 0, &pos , "", None);
+                        self.write_table_cell((TableKind::FieldRsvd, CellKind::Inst  ), 0, ""   , "", None);
+                        self.write_table_cell((TableKind::FieldRsvd, CellKind::Access), 0, "RO" , "", None);
+                        self.write_table_cell((TableKind::FieldRsvd, CellKind::Reset ), 0, "0x0", "", None);
+                        self.write_table_cell((TableKind::FieldRsvd, CellKind::Desc  ), 0, ""   , "", None);
                         self.write_table_row_footer();
                     }
                     self.write_table_footer(TableKind::Field);
@@ -485,11 +516,11 @@ pub trait GeneratorDoc : GeneratorBase {
     }
 
     /// Write a table column
-    fn write_table_cell(&mut self, kind: (TableKind, CellKind), span: usize, txt: &str, id: &str) {}
+    fn write_table_cell(&mut self, kind: (TableKind, CellKind), span: usize, txt: &str, id: &str, tip: Option<String>) {}
 
     /// Write a table cell header
     fn write_table_cell_top(&mut self, kind: (TableKind, CellKind), span: usize, txt: &str, id: &str) {
-        self.write_table_cell(kind, span, txt, id);
+        self.write_table_cell(kind, span, txt, id, None);
     }
 
     /// Add a link to an ID of the document

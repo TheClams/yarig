@@ -173,7 +173,7 @@ impl GeneratorDoc for GeneratorHtml {
         self.write(&format!(">{txt}</th>"));
     }
 
-    fn write_table_cell(&mut self, kind: (TableKind, CellKind), span: usize, txt: &str, id: &str) {
+    fn write_table_cell(&mut self, kind: (TableKind, CellKind), span: usize, txt: &str, id: &str, tip: Option<String>) {
         self.write("<td");
         match kind.0 {
             TableKind::RegInst => self.write(" class=\"noborders\""),
@@ -190,6 +190,9 @@ impl GeneratorDoc for GeneratorHtml {
         }
         if self.nb_col>1 || span > 1 {
             self.write(&format!(" colspan=\"{}\"", span * self.nb_col));
+        }
+        if let Some(tip) = tip {
+            self.write(&format!(" title=\"{tip}\""));
         }
         self.write(">");
         // Add link to type cell only

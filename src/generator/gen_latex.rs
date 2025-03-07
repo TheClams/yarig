@@ -152,7 +152,7 @@ impl GeneratorDoc for GeneratorLatex {
         self.write("\\\\\n")
     }
 
-    fn write_table_cell(&mut self, kind: (TableKind, CellKind), span: usize, txt: &str, _id: &str) {
+    fn write_table_cell(&mut self, kind: (TableKind, CellKind), span: usize, txt: &str, _id: &str, _tip: Option<String>) {
         if !self.first_col {self.write(" & ");}
         self.first_col = false;
         // Call sanitize on non-description cell (already caled on description)
