@@ -1,7 +1,7 @@
 # Change Log
 
 
-## [0.6.1] - 2025-03-06
+## [0.7.0] - 2025-03-07
 
 ### Changed
   - Configuration:
@@ -12,11 +12,18 @@
   - Generator HTML:
     * Enum description can be changed via CSS and by default is displayed with smaller font
     * Field description now has breaking line only after a dot or colon
+    * A tooltip is displayed for reset value with a fractional number of bits,
+      or when the field is part of a registered instantiated multiple times with different values
 
 ### Bug Fixes
   - Generator SV:
-    * fix issue with register declared as an array
-    * fix issue with only one external register inside a group
+    * Fix issue with register declared as an array
+    * Fix issue with only one external register inside a group
+    * Fix registered pulse using clock enable
+    * Change handling of field with clear and clk_en: both condition are split (might need to have an option allowing to have clear gated by the enable)
+  - Generator RAL:
+    * Fix issue with register arrays
+    * Fix handling of multiple pages
   - Generator C: add missing include stdint.h
 
 ## [0.6.0] - 2025-03-02

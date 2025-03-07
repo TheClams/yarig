@@ -388,7 +388,7 @@ pub trait GeneratorDoc : GeneratorBase {
                                 if *inst_rst != f_inst_reset {
                                     rst.push('/');
                                     if f_inst_reset == f.reset {
-                                        rst.push_str(&val_str(inst_rst.to_u128(f.width), f.width, f.is_signed()));
+                                        rst.push_str(&val_str(inst_rst.to_u128(f.width), f.width.into(), f.is_signed()));
                                         f_inst_reset = inst_rst.clone();
                                     } else {
                                         rst.push('…');
@@ -408,7 +408,7 @@ pub trait GeneratorDoc : GeneratorBase {
                             }).collect::<Vec<String>>().join("\n"))
                         } else if rst.ends_with('…') {
                             Some(resets.iter().map(|r|
-                                val_str(r.to_u128(f.width), f.width, f.is_signed())
+                                val_str(r.to_u128(f.width), f.width.into(), f.is_signed())
                             ).collect::<Vec<String>>().join("\n"))
                         } else {
                             None

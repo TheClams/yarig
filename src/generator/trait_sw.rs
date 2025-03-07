@@ -82,7 +82,7 @@ pub trait GeneratorSw : GeneratorBase {
     fn gen_rif(&mut self, rif: &RifInst, is_top: bool) -> Result<(), Box<dyn std::error::Error>> {
         self.set_rif_info(rif);
         self.write_rif_header(rif, is_top);
-        let basename = remove_rif(&rif.type_name);
+        let rif_name = remove_rif(&rif.type_name);
         let nb_byte = (rif.data_width >> 3) as u64;
         let is_public = self.setting().privacy.is_public();
         // Declare types for enum
@@ -105,9 +105,11 @@ pub trait GeneratorSw : GeneratorBase {
         let inst_dict = InstDict::new(&rif.pages, is_public);
         // Declare one struct per register type
         for (idx, page) in rif.pages.iter().filter(|p| !p.is_external()).enumerate() {
-            let pname =
-                if Self::INC_PAGENAME && rif.pages.len() > 1 {format!("{}_{}", basename,page.name)}
-                else {basename.to_owned()};
+            let prefix =
+                if rif.pages.len() > 1 {format!("{}_{}", rif_name, page.name.replace('_', "").to_lowercase())}
+                else {rif_name.to_owned()};
+            let basename = if Self::INC_PAGENAME {&prefix} else {rif_name};
+            let page_name = if Self::INST_BY_PAGE {&prefix} else {rif_name};
             let is_last_page = idx==rif.pages.len()-1;
             // Parse all register instance to get length, for pretty formatting
             let len_name = page.regs.iter().map(|r| r.reg_name.len()).max().expect("Page should have registers");
@@ -121,15 +123,15 @@ pub trait GeneratorSw : GeneratorBase {
                         .map(|f| self.get_field_name(reg,f).len())
                         .max().expect("Registers should have fields");
                     self.set_max_field_name_len(max_len);
-                    self.write_reg_header(&pname, reg);
-                    self.write_fields_decl(&rif, &pname, reg);
-                    self.write_reg_footer(&pname, reg, regs.peek().is_none());
+                    self.write_reg_header(basename, reg);
+                    self.write_fields_decl(&rif, basename, reg);
+                    self.write_reg_footer(basename, reg, regs.peek().is_none());
                 }
             }
             // Instantiate all registers
             // Call page header only once on first page if instance are not grouped by page
             if idx==0 || Self::INST_BY_PAGE {
-                self.write_page_header(&pname, &page.description);
+                self.write_page_header(&page_name, &page.description);
             }
             let mut overlap = false;
             let mut addr = 0;
@@ -157,13 +159,13 @@ pub trait GeneratorSw : GeneratorBase {
                 }
                 // Detect non-contiguous register: TODO add field overlap to register
                 if reg.addr > addr {
-                    self.write_reginst_unused(&pname, addr, (reg.addr - addr) / nb_byte);
+                    self.write_reginst_unused(basename, addr, (reg.addr - addr) / nb_byte);
                 }
                 let is_last_reg = is_last_page && regs.peek().is_none();
-                self.write_reginst(&pname, page, reg, &inst_dict, is_last_reg);
+                self.write_reginst(basename, page, reg, &inst_dict, is_last_reg);
                 if !Self::HAS_REG_DECL {
-                    self.write_fields_decl(&rif, &pname, reg);
-                    self.write_reg_footer(&pname, reg, is_last_reg);
+                    self.write_fields_decl(&rif, basename, reg);
+                    self.write_reg_footer(basename, reg, is_last_reg);
                 }
 
                 // Calculate expected next address
@@ -175,7 +177,7 @@ pub trait GeneratorSw : GeneratorBase {
                 self.write_reginst_overlap_footer();
             }
             if is_last_page || Self::INST_BY_PAGE {
-                self.write_page_footer(&pname, is_last_page);
+                self.write_page_footer(&page_name, is_last_page);
             }
         }
         // End the RIF declaration

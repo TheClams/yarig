@@ -31,7 +31,7 @@ impl GeneratorRal {
 
     pub fn new(setting: GeneratorBaseSetting, extra: CfgRal) -> Self {
         GeneratorRal {
-            core: GeneratorCore::new(1,setting),
+            core: GeneratorCore::new(3,setting),
             ral_class: extra.class.unwrap_or("uvm_reg_block".to_owned()),
             ral_macro: extra.macro_name,
             comp_name: "".to_owned(),
@@ -44,6 +44,19 @@ impl GeneratorRal {
         if field.sw_kind.is_ro()      {"\"RO\""}
         else if field.sw_kind.is_wo() {"\"WO\""}
         else                          {"\"RW\""}
+    }
+
+    fn format_u128(val: u128, width: u8, is_signed: bool) -> String {
+        let w = (width >> 2) as usize;
+        // let width
+        if width > 12 {
+            let s = if is_signed {"s"} else {""};
+            format!("{width}'{s}h{val:0w$X}")
+        } else if is_signed && width > 1 && val >= 1<<(width-1) {
+            format!("{}", val as i128 - (1<<(width)))
+        } else {
+            format!("{val}")
+        }
     }
 
 }
@@ -147,17 +160,18 @@ impl GeneratorSw for GeneratorRal {
     // This is called only once on first page (INST_BY_PAGE=false)
     // All pages are merged into one to create a block of register
     fn write_page_header(&mut self, name: &str, _desc: &Description) {
-        self.write(&format!("class ral_block_{name} extends {};\n", self.ral_class));
+        self.push_stash(1, &format!("class ral_block_{name} extends {};\n", self.ral_class));
     }
 
     // This is called only once on last page (INST_BY_PAGE=false)
     fn write_page_footer(&mut self, name: &str, _is_last: bool) {
+        self.pop_stash(1);
         self.write(&format!("\n   function new(string name = \"{name}\");\n"));
         self.write(         "      super.new(name, UVM_NO_COVERAGE);\n");
         self.write(         "   endfunction : new\n\n");
         self.write(         "   virtual function void build();\n");
         self.write(&format!("      this.default_map = create_map(\"\", 0, {}, UVM_LITTLE_ENDIAN, 0);\n", self.data_width>>3));
-        self.pop_stash(0);
+        self.pop_stash(2);
         self.write(         "   endfunction : build\n\n");
         self.write(&format!("   `uvm_object_utils(ral_block_{name})\n\n"));
         self.write(&format!("endclass : ral_block_{name}\n\n"));
@@ -167,16 +181,16 @@ impl GeneratorSw for GeneratorRal {
         let regname = reg.name().to_lowercase();
         let regtype = format!("ral_reg_{}_{}", remove_rif(&self.comp_name), reg.reg_type.to_lowercase());
         // Declare register instance as members of the class
-        self.write(&format!("   rand {regtype} {regname};\n"));
+        self.push_stash(1, &format!("   rand {regtype} {regname};\n"));
 
         // Push register instance on stash 0
-        self.push_stash(0, &format!("      this.{regname} = {regtype}::type_id::create(\"{regname}\",,get_full_name());\n"));
-        self.push_stash(0, &format!("      this.{regname}.configure(this, null, \"\");\n"));
-        self.push_stash(0, &format!("      this.{regname}.build();\n"));
-        self.push_stash(0, &format!("      this.{regname}.add_hdl_path_slice(\"{regname}__read_data\", 0, {});\n", self.data_width));
-        self.push_stash(0, &format!("      this.default_map.add_reg(this.{regname}, "));
-        self.push_stash(0, &format!("`UVM_REG_ADDR_WIDTH\'h{:X}, ", page.addr + reg.addr));
-        self.push_stash(0, &format!("\"{}\", 0);\n", reg.sw_access));
+        self.push_stash(2, &format!("      this.{regname} = {regtype}::type_id::create(\"{regname}\",,get_full_name());\n"));
+        self.push_stash(2, &format!("      this.{regname}.configure(this, null, \"\");\n"));
+        self.push_stash(2, &format!("      this.{regname}.build();\n"));
+        self.push_stash(2, &format!("      this.{regname}.add_hdl_path_slice(\"{regname}__read_data\", 0, {});\n", self.data_width));
+        self.push_stash(2, &format!("      this.default_map.add_reg(this.{regname}, "));
+        self.push_stash(2, &format!("`UVM_REG_ADDR_WIDTH\'h{:X}, ", page.addr + reg.addr));
+        self.push_stash(2, &format!("\"{}\", 0);\n", reg.sw_access));
         let is_public = self.setting().privacy.is_public();
         let reg_1st = &inst_dict.first_inst(page, reg);
         for (fi,field) in reg.fields.iter()
@@ -184,11 +198,19 @@ impl GeneratorSw for GeneratorRal {
                 .enumerate() {
             let rand_s = if field.is_sw_write() {"rand "} else {""};
             let fieldname = self.get_field_name(reg, field);
-            self.write(&format!("   {rand_s}uvm_reg_field {regname}_{fieldname};\n"));
-            self.push_stash(0,&format!("      this.{regname}_{fieldname} = this.{regname}.{fieldname};\n"));
+            let idx_base = if reg_1st.is_reg_def() {field.array.idx() % field.array.dim()} else {field.array.idx()};
+            let Some(base_field) = reg_1st.find_field(&field.name, idx_base) else {
+                panic!("[ERROR] Field {fieldname} == {} with index {:?} (reg {:?}): Unable to find amongst {:?}",
+                    field.name, field.array, reg_1st.array, reg_1st.fields.iter().map(|fi| (&fi.name, fi.array)).collect::<Vec<_>>());
+            };
+            let base_field_name = self.get_field_name(&reg_1st, &base_field);
+            self.push_stash(1, &format!("   {rand_s}uvm_reg_field {regname}_{fieldname};\n"));
+            self.push_stash(2, &format!("      this.{regname}_{fieldname} = this.{regname}.{base_field_name};\n"));
             let rst = field.reset();
             if rst != reg_1st.fields[fi].reset() {
-                self.push_stash(0,&format!("      this.{regname}_{fieldname}.set_reset({rst});\n"));
+                self.push_stash(2,
+                    &format!("      this.{regname}_{fieldname}.set_reset({});\n",
+                        Self::format_u128(rst, field.width, field.is_signed())));
             }
         }
     }

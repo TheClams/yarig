@@ -4,7 +4,7 @@ use crate::{parser::{get_rif, parser_expr::ParamValues}, rifgen::{
     order_dict::{OrderDict, OrderedDictIterV}, Access, ClkEn, Description, EnumKind, ExternalKind, Field, FieldHwKind, FieldSwKind, InterruptDesc, InterruptInfo, Limit, Lock, RegDef, RegDefOrIncl, RegIncludePath, RegPulseKind, ResetVal, Rif
 }};
 
-use super::comp_inst::{PartialFieldDict, PartialFieldInfos, RifPageInst, RifRegInst, RifsInfo};
+use super::comp_inst::{val_str, PartialFieldDict, PartialFieldInfos, RifPageInst, RifRegInst, RifsInfo};
 
 /// Field Implementation
 /// Contains all information for the hardware field after compilation
@@ -142,6 +142,11 @@ impl FieldImpl {
         }
     }
 
+    /// Flag field which can be set by software
+    pub fn has_sw_value(&self) -> bool {
+        self.is_sw_write() || self.is_constant() || self.is_counter() || self.hw_acc.is_readable()
+    }
+
     /// Flag field which has a Hardware Write Enable
     pub fn has_write_mod(&self) -> bool {
         self.hw_kind.iter().any(|x| x.has_write_mod())
@@ -150,6 +155,11 @@ impl FieldImpl {
     /// Flag field which requires a local flop
     pub fn is_local(&self) -> bool {
         self.has_write_mod() && !self.hw_acc.is_readable()
+    }
+
+    /// return reset value in a string: hexa/decimal are chosen automatically based on width
+    pub fn reset_str(&self, idx: usize) -> String {
+        val_str(self.get_reset(idx), self.width, self.signed)
     }
 
 }

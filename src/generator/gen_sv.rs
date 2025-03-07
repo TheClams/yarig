@@ -192,7 +192,7 @@ impl GeneratorSv {
                 }
                 t.push('\n');
                 // Add field to SW structure writable by firmware or readable by hardware
-                if (!f.is_local() || ctrl.external.is_rw()) && (f.is_sw_write() || f.is_constant() || f.is_counter() || f.hw_acc.is_readable()) {
+                if (!f.is_local() || ctrl.external.is_rw()) && f.has_sw_value() {
                     self.push_stash(1, &t);
                     if f.array > 0 {
                         sw_has_array = true;
@@ -322,7 +322,7 @@ impl GeneratorSv {
     //-----------------------------------------------------------------------------
 
     fn gen_rif(&mut self, rif: &RifInst) -> Result<(), Box<dyn std::error::Error>> {
-
+        let hw_clk = &rif.hw_clocking.first().unwrap_or(&rif.sw_clocking);
         let addr_shift = (rif.data_width as f32).log2().ceil() as u8 - 3; // Min data width is 8 bits
         // Header (TODO: support external template)
         self.write("// File generated automatically: DO NOT EDIT.\n\n");
@@ -420,12 +420,12 @@ impl GeneratorSv {
 
         // Declare local clock enable
         self.names.clear();
-        for hw_clk in rif.hw_clocking.iter() {
-            if !hw_clk.en.is_empty() && !self.names.contains(&hw_clk.en){
-                self.write(&format!("   logic {}_l;\n",hw_clk.en));
-                self.names.push(hw_clk.en.to_owned());
-            }
-        }
+        // for hw_clk in rif.hw_clocking.iter() {
+        //     if !hw_clk.en.is_empty() && !self.names.contains(&hw_clk.en){
+        //         self.write(&format!("   logic {}_l;\n",hw_clk.en));
+        //         self.names.push(hw_clk.en.to_owned());
+        //     }
+        // }
         // Declare Decode pulse / readback value per register
         for page in rif.pages.iter().filter(|p| p.external.is_none()) {
             for reg in page.regs.iter() {
@@ -586,13 +586,13 @@ impl GeneratorSv {
         ));
 
         // Hardware clock enable: add register access to ensure field can be modify  by firmware
-        self.names.clear();
-        for hw_clk in rif.hw_clocking.iter() {
-            if !hw_clk.en.is_empty() && !self.names.contains(&hw_clk.en){
-                self.write(&format!("   assign {0}_l = {0} || if_rif.en;\n",hw_clk.en));
-                self.names.push(hw_clk.en.to_owned());
-            }
-        }
+        // self.names.clear();
+        // for hw_clk in rif.hw_clocking.iter() {
+        //     if !hw_clk.en.is_empty() && !self.names.contains(&hw_clk.en){
+        //         self.write(&format!("   assign {0}_l = {0} || if_rif.en;\n",hw_clk.en));
+        //         self.names.push(hw_clk.en.to_owned());
+        //     }
+        // }
 
         // Decode process
         self.write("   always_comb begin : proc_decode\n");
@@ -919,6 +919,13 @@ impl GeneratorSv {
 
                     // Generate next value
                     if field.is_hw_write() || field.is_sw_write() {
+                        let field_clken = if let ClkEn::Signal(clk_en) = &field_impl.clk_en {
+                            clk_en.clone()
+                        } else if let ClkEn::Signal(clk_en) = &reg_impl.clk_en {
+                            clk_en.clone()
+                        } else {
+                            hw_clk.en.clone()
+                        };
 
                         // Generate __next signal
                         self.write(&format!("   assign {reg_field_name}__next{partial_range} = \n      "));
@@ -927,6 +934,10 @@ impl GeneratorSv {
                         let idx = if let Some(partial_pos) = field.partial.0 {format!("_{}",partial_pos)} else {"".to_owned()};
                         // if reg.reg_name == "" {println!("{} : Hw={:?} Sw={:?}", field.name, field.hw_kind, field.sw_kind);}
 
+                        // Handle registered pulse: need to maintain pulse high until clock enable is seen
+                        if field.sw_kind.is_pulse() && !field_clken.is_empty() {
+                            self.write(&format!("{field_path} && {field_clken} ? 1'b0 :\n      "));
+                        }
                         // Handle hardware access
                         if field.is_hw_write() {
                             for kind in field.hw_kind.iter() {
@@ -1080,7 +1091,7 @@ impl GeneratorSv {
 
                         // Default next to current value
                         match &field.sw_kind {
-                            FieldSwKind::W1Pulse(_,_) => self.write("1'b0;\n"),
+                            FieldSwKind::W1Pulse(_,_) if field_clken.is_empty() => self.write("1'b0;\n"),
                             FieldSwKind::Password(info) => {
                                 if info.hold.is_some() {
                                     self.write(&format!("{{{field_path}_hold,"))
@@ -1114,7 +1125,6 @@ impl GeneratorSv {
                 // Sequential process
                 else if reg.has_proc() {
                    // Get a default clock for the register
-                    let hw_clk = &rif.hw_clocking.first().unwrap_or(&rif.sw_clocking);
                     let reg_clk =
                         if let Some(n) = &reg_impl.clk {n}
                         else if reg.sw_access.is_writable() && !reg.is_intr() {&rif.sw_clocking.clk}
@@ -1151,9 +1161,6 @@ impl GeneratorSv {
                             else if f_clk==&hw_clk.clk {&hw_clk.rst.name}
                             else {&rif.sw_clocking.rst.name};
                         // if reg.reg_name=="" {println!("Field {} : Kind={:?} hw_write={} -> {f_rst} | reg reset={:?} | hw clocking={:?}", field.name, field.hw_kind, field.is_hw_write(), reg_impl.rst, hw_clk);}
-                        // if field.name=="syncword_rx" {
-                        //     println!("Field {} : Kind={:?}/{:?}/{:?} hw_acc={} local={}", field.name, field.hw_kind, field_impl.hw_kind, field_impl.sw_kind, field_impl.hw_acc, field_impl.is_local());
-                        // }
                         // Name of the signal
                         let mut name = if field_impl.is_local() {
                             format!("{group_name}{intr_suffix}{reg_idx}_{field_name_flat}__reg")
@@ -1174,8 +1181,9 @@ impl GeneratorSv {
                         } else {
                             rif.sw_clocking.en.clone()
                         };
-                        if !enable.is_empty() && enable == hw_clk.en {
-                            enable.push_str("_l");
+                        // Use the local enable (or-ed with interface enable) if register can be modifed by firmware access
+                        if !enable.is_empty() && enable == hw_clk.en && field.is_sw_write() {
+                            enable.push_str(&format!(" || ({reg_name}__decode && if_rif.en)"));
                         }
                         // println!("Clock enable for Field {group_name}.{field_name} : field={:?}, reg={:?}, hw_write ? {}" , field_impl.clk_en, reg_impl.clk_en, field.is_hw_write());
                         if field_impl.lock.is_some() {
@@ -1199,6 +1207,7 @@ impl GeneratorSv {
                         } else {
                             "".to_string()
                         };
+                        // TODO: handle case where a clear is defined for the clock of this field ?
 
                         // Signal Width: field width except for special fields
                         let width = if field.is_password() {1} else {field.width};
@@ -1683,20 +1692,20 @@ impl GeneratorSv {
             self.write(&format!("         {} <= {};\n", signal.name, signal.reset));
         }
         self.write("      end else ");
+        // Optional Global clear
+        // Maybe need to add an option to take the clear into account only if the enable is high
+        if clr_global && clr.is_some() {
+            self.write(&format!("if({}) begin\n", clr.unwrap()));
+            for signal in signals.iter() {
+                self.write(&format!("         {} <= {};\n", signal.name, signal.reset));
+            }
+            self.write("      end else ");
+        }
         // Optional Global Enable
-        // Should the clear be included in the enable condition ? controllable ?
         if clk_en_global && clk_en.is_some() {
             self.write(&format!("if({}) ", clk_en.unwrap()));
         }
         self.write("begin\n");
-        // Optional Global clear
-        if clr_global && clr.is_some() {
-            self.write(&format!("      if({}) begin\n", clr.unwrap()));
-            for signal in signals.iter() {
-                self.write(&format!("            {} <= {};\n", signal.name, signal.reset));
-            }
-            self.write("      end else begin\n");
-        }
         // Set value
         for signal in signals.iter() {
             self.write("         ");
@@ -1715,10 +1724,6 @@ impl GeneratorSv {
                 ));
             }
             self.write(&format!("{} <= {};\n", signal.name, signal.value));
-        }
-        //
-        if clr_global && clr.is_some() {
-            self.write("      end\n");
         }
         self.write("      end\n   end\n\n");
     }
