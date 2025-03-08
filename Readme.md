@@ -97,12 +97,6 @@ The exact behavior of each traits can be tweaked with some associated constant.
    - [ ] html: view with a sidebar showing the hierarchy.
    - [x] latex
    - [x] mif
- - [x] Implement base generator for software (from C) :
-   - [x] json
-   - [x] svd
-   - [x] IP-XACT
-   - [x] python
-   - [x] ral
  - [ ] Implement base generator for hardware (from SV):
    - [ ] VHDL
 
@@ -133,3 +127,6 @@ The exact behavior of each traits can be tweaked with some associated constant.
 
 ## Known Bugs / Edge cases
  - [ ] Support partial fields arrays
+ - [ ] Handle counter larger than register size (TBD if this should simply be forbidden or properly handled ...)
+ - [ ] Add parsing of LogicExpr (currently logic expression works only for SystemVerilog)
+ - [ ] Add check on password not being partial fields

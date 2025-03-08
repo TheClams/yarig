@@ -16,3 +16,4 @@ pub mod gen_ral;
 pub mod gen_svd;
 // Hardware Generators
 pub mod gen_sv;
+pub mod trait_hw;

@@ -1,0 +1,1865 @@
+use std::{collections::HashSet, fs::create_dir_all};
+
+use crate::{
+    comp::{
+        comp_inst::{ArrayIdx, Comp, CompInst, RifInst, RifmuxInst},
+        hw_info::{CastInfo, ExprId, LogicExpr, PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalInfoN, SignalKind, SignalRange}
+    },
+    parser::parser_expr::ParamValues,
+    rifgen::{
+        order_dict::OrderDict, Access, ClkEn, ClockingInfo, EnumEntry, EnumKind, ExternalKind, FieldHwKind, FieldSwKind, Interface, InterruptClr, InterruptRegKind, InterruptTrigger, LimitValue, RegPulseKind, ResetDef, ResetVal}
+};
+
+use super::{
+    casing::{Casing::{self, Snake}, ToCasing},
+    gen_common::{CompInfo, GeneratorBase, RifList}
+};
+
+/// Trait to implement generator for hardware implementation (SV, VHDL, ...)
+#[allow(unused_variables)]
+pub trait GeneratorHw : GeneratorBase {
+
+    /// Write generic header for a file
+    fn write_file_header(&mut self) {}
+
+	/// Main generator function
+    fn gen_all(&mut self, obj: &Comp) -> Result<(), Box<dyn std::error::Error>> {
+        // Create output directory if it does not exist
+        create_dir_all(self.setting().path.clone())?;
+        // Call relevant generator (Rif or Rifmux)
+        match obj {
+            Comp::Rif(rif) => {
+                self.gen_rif_pkg(rif)?;
+                self.gen_rif(rif)?;
+            }
+            Comp::Rifmux(rifmux) => {
+                self.gen_rifmux_pkg(rifmux)?;
+                self.gen_rifmux(rifmux)?;
+                // Generate include file
+                if !self.setting().gen_inc.is_empty() {
+                    let gen_all = self.setting().is_gen_all();
+                    let rif_list = RifList::new(rifmux, true);
+                    for (rif,_) in rif_list.iter() {
+                        if !gen_all && !self.setting().is_gen_inc(rif) {
+                            continue;
+                        }
+                        self.gen_rif_pkg(rif)?;
+                        self.gen_rif(rif)?;
+                    }
+                }
+                // Generate Top
+                if rifmux.top.is_some() {
+                    self.gen_riftop(rifmux)?;
+                }
+            }
+            // Nothing to do for external RIF
+            Comp::External(_) => {},
+        }
+        Ok(())
+    }
+
+    /// Generate package containing enum, type and and structure definition
+    fn gen_rif_pkg(&mut self, rif: &RifInst) -> Result<(), Box<dyn std::error::Error>> {
+    	let rif_name = self.casing(&rif.name(true));
+        self.write_file_header();
+        self.write_rif_pkg_header(rif);
+        // Constants definition
+        self.write_rif_pkg_const(&rif.type_name, rif.addr_width, rif.data_width, &rif.params);
+        // Enum definition
+        let mut enums = rif.enum_defs.iter().filter(|e| e.is_local_type()).peekable();
+        if enums.peek().is_some() {
+            self.write_comment(1, "Enums");
+            for enum_def in rif.enum_defs.iter().filter(|e| e.is_local_type()) {
+                let width = (usize::BITS - (enum_def.len()-1).leading_zeros()) as u8;
+                self.write_enum_header(&enum_def.name, width);
+                let mut entries = enum_def.iter().peekable();
+                while let Some(entry) = entries.next() {
+                    self.write_enum_entry(entry, entries.peek().is_none());
+                }
+                self.write_enum_footer(&enum_def.name, width);
+            }
+        }
+        // Structures
+        // Create two structures (hardware/software) per register type
+        let mut names : Vec<String> = Vec::new();
+        for hw_reg in rif.reg_impl_defs.values().filter(|r| r.pkg.is_none()) {
+            let mut hw_fields : Vec<SignalDecl> = Vec::new();
+            let mut sw_fields : Vec<SignalDecl> = Vec::new();
+            // Check if any fields is an array to control if structure should be packed or not
+            names.clear();
+            // Iterate over all register fields to add them in the structs
+            for f in hw_reg.fields.iter() {
+                // Create signal declaration
+                let width = if f.sw_kind.is_password() {1} else {f.width};
+                let name = f.name.to_casing(Snake);
+                let Some(ctrl) = hw_reg.regs_ctrl.get(f.ctrl_idx) else {
+                    return Err(format!("Field {}.{name} points to ctrl {} but max is {}",hw_reg.name, f.ctrl_idx, hw_reg.regs_ctrl.len()).into())
+                };
+                let kind : SignalKind = match &f.enum_kind {
+                    EnumKind::Type(n) => SignalKind::Custom((None, n.to_owned())),
+                    _ => if f.signed {SignalKind::Signed(width)} else {SignalKind::Unsigned(width)}
+                };
+                let field_name = if f.sw_kind.is_password() {format!("{name}_locked")} else {name.to_owned()};
+                let field_decl = SignalDecl::new(
+                    SignalDef::new(name.to_owned(), kind, f.array) ,
+                    f.description.get_short().to_owned()
+                );
+                // Add field to SW structure writable by firmware or readable by hardware
+                if f.has_sw_value() && (!f.is_local() || ctrl.external.is_rw()) {
+                    sw_fields.push(field_decl.clone());
+                }
+                // Add field to HW structure if written by hardware
+                if f.has_hw_value() || ctrl.external.is_rw() {
+                    hw_fields.push(field_decl);
+                }
+                // Add special fields
+                for kind in f.hw_kind.iter() {
+                    // Write modifiers: Write Enable, clr/set/tgl
+                    if kind.has_write_mod() {
+                        if let Some(d) = SignalDecl::from_hw_kind(kind, &hw_reg.name, &name) {
+                            if names.iter().rev().any(|n| n==d.name()) {
+                                names.push(d.name().to_owned());
+                                hw_fields.push(d);
+                            }
+                        }
+                    }
+                    // Counter need multiple extra fields
+                    else if let FieldHwKind::Counter(info) = kind {
+                        if info.clr {
+                            hw_fields.push(SignalDecl::new_bit(
+                                format!("{name}_clr"),
+                                format!("Clear counter {name}")));
+                        }
+                        if info.is_up() {
+                            hw_fields.push(SignalDecl::new_bit(
+                                format!("{name}_incr_en"),
+                                format!("Increment counter {name}")));
+                        }
+                        if info.is_down() {
+                            hw_fields.push(SignalDecl::new_bit(
+                                format!("{name}_decr_en"),
+                                format!("Decrement counter {name}")));
+                        }
+                        if info.incr_val > 1 {
+                            hw_fields.push(SignalDecl::new_bus(
+                                format!("{name}_incr_val"), (info.incr_val-1) as u16, f.signed,
+                                format!("Increment value for counter {name}")));
+                        }
+                        if info.decr_val > 1 {
+                            hw_fields.push(SignalDecl::new_bus(
+                                format!("{name}_decr_val"), (info.decr_val-1) as u16, f.signed,
+                                format!("Decrement value for counter {name}")));
+                        }
+                        if info.event || info.sat {
+                            sw_fields.push(SignalDecl::new_bit(
+                                format!("{name}_event"),
+                                format!("Pulse high when {name} wrap/saturate")));
+                        }
+                    }
+                }
+                if let FieldSwKind::Password(info) = &f.sw_kind {
+                    if info.has_hold() {
+                        sw_fields.push(SignalDecl::new_bit(
+                            format!("{name}_hold"),
+                            format!("High when {name}_locked is not changed by register access")));
+                    }
+                }
+                // Clear
+                if let Some(clr_sig) = &f.clear {
+                    let clr_name = if clr_sig.is_empty() {format!("this.{name}_clr")} else {clr_sig.to_owned()};
+                    let kind = FieldHwKind::Clear(Some(clr_name));
+                    if let Some(d) = SignalDecl::from_hw_kind(&kind, &hw_reg.name, &name) {
+                        if names.iter().rev().any(|n| n==d.name()) {
+                            names.push(d.name().to_owned());
+                            hw_fields.push(d);
+                        }
+                    }
+                }
+                // Lock signal from hardware
+                if let Some(lock) = f.lock.local_name() {
+                    if !lock.is_empty() && !names.iter().rev().any(|n| n==lock) {
+                        names.push(lock.to_owned());
+                        hw_fields.push(SignalDecl::new_bit(
+                            lock.to_owned(),
+                            "High to lock some field write access".to_owned()));
+                    }
+                }
+            }
+            // Add fields for register pulse and external access
+            let is_multi_pulse = hw_reg.is_multi_pulse();
+            let is_multi_ext = hw_reg.is_multi_ext();
+            for ctrl in hw_reg.regs_ctrl.iter() {
+                let (sep,name) = if is_multi_pulse {("_",&*ctrl.name)} else {("","")};
+                let desc = "Pulse high when register";
+                for pulse in ctrl.pulse.iter() {
+                    let field_decl = match pulse {
+                        RegPulseKind::Write(_)  => SignalDecl::new_bit(format!("p_{name}{sep}write"), format!("{desc} {} is written", ctrl.name)),
+                        RegPulseKind::Read(_)   => SignalDecl::new_bit(format!("p_{name}{sep}read"), format!("{desc} {} is read", ctrl.name)),
+                        RegPulseKind::Access(_) => SignalDecl::new_bit(format!("p_{name}{sep}acc"), format!("{desc} {} is accessed", ctrl.name)),
+                    };
+                    hw_fields.push(field_decl);
+                }
+                if ctrl.external != ExternalKind::None {
+                    let (sep,name) = if is_multi_ext {("_",&*ctrl.name)} else {("","")};
+                    hw_fields.push(SignalDecl::new_bit(
+                        format!("ext_{name}{sep}done"),
+                        format!("Pulse high when read/write operation on register {} is complete", ctrl.name))
+                    );
+                    if matches!(ctrl.external, ExternalKind::ReadWrite | ExternalKind::Write) {
+                        hw_fields.push(SignalDecl::new_bit(
+                            format!("ext_{name}{sep}write"),
+                            format!("Pulse high to start a write operation on register {}", ctrl.name))
+                        );
+                    }
+                    if matches!(ctrl.external, ExternalKind::ReadWrite | ExternalKind::Read) {
+                        hw_fields.push(SignalDecl::new_bit(
+                            format!("ext_{name}{sep}read"),
+                            format!("Pulse high to start a read operation on register {}", ctrl.name))
+                        );
+                    }
+                }
+            }
+            // Write the software structure (if not empty)
+            if !sw_fields.is_empty() {
+                let reg_name = hw_reg.name.to_casing(Snake);
+                self.write_struct_header(&reg_name, &sw_fields);
+                let mut fields = sw_fields.iter().peekable();
+                while let Some(f) = fields.next() {
+                    self.write_struct_field(f, fields.peek().is_none());
+                }
+                self.write_struct_footer(&reg_name);
+            }
+            // Write the hardware structure (if not empty)
+            if !hw_fields.is_empty() {
+                let reg_name = hw_reg.name.to_casing(Snake);
+                self.write_struct_header(&reg_name, &hw_fields);
+                let mut fields = hw_fields.iter().peekable();
+                while let Some(f) = fields.next() {
+                    self.write_struct_field(f, fields.peek().is_none());
+                }
+                self.write_struct_footer(&reg_name);
+            }
+        }
+
+        // Add end of package and save file
+        self.write_rif_pkg_footer(rif);
+        self.save(&self.filename_rif(rif))?;
+        Ok(())
+    }
+
+    // Hooks for RIF package
+    fn write_rif_pkg_header(&mut self, rif: &RifInst) {
+        self.write_pkg_header(&rif.type_name);
+    }
+    fn write_rif_pkg_footer(&mut self, rif: &RifInst) {
+        self.write_pkg_footer(&rif.type_name);
+    }
+
+    fn write_rif_pkg_const(&mut self, pkg_name: &str, addr_width: u8, data_width: u8, params: &ParamValues) {
+        let pkg_name_uc = pkg_name.to_uppercase();
+        let decl: SignalDecl = SignalDef::new_int(format!("{pkg_name_uc}_ADDR_W")).into();
+        self.write_const(&decl, &format!("{:2}", addr_width));
+        let decl: SignalDecl = SignalDef::new_int(format!("{pkg_name_uc}_DATA_W")).into();
+        self.write_const(&decl, &format!("{:2}", data_width));
+        for (k, &v) in params.items() {
+            let name = format!("C_{pkg_name_uc}_{}", k.to_uppercase());
+            let decl: SignalDecl = if v==0 || v==1 {
+                SignalDef::new_bit(name).into()
+            } else {
+                SignalDef::new_int(name).into()
+            };
+            self.write_const(&decl, &format!("{v}"));
+        }
+    }
+
+    /// Generate RIF module
+    fn gen_rif(&mut self, rif: &RifInst) -> Result<(), Box<dyn std::error::Error>> {
+        let rif_name = self.casing(&rif.name(false));
+        let rif_pkg_name = self.casing(&rif.name(true));
+        let hw_clk = rif.hw_clocking.first().unwrap_or(&rif.sw_clocking);
+        let addr_shift = (rif.data_width as f32).log2().ceil() as u16 - 3; // Min data width is 8 bits
+        self.write_file_header();
+        self.write_module_decl_header(&rif_name);
+
+        // Clocks/Reset/Clear
+        let mut list_clocking = HashSet::with_capacity(2);
+        self.add_clocking_port(&rif.sw_clocking, &mut list_clocking, false);
+        for hw_clk in rif.hw_clocking.iter() {
+            self.add_clocking_port(hw_clk, &mut list_clocking, true);
+        }
+        // Clock enables
+        for clk_en in rif.ports.clk_ens.iter() {
+            self.write_port_decl(clk_en, None, false);
+        }
+        // Control signals
+        if !rif.ports.ctrls.is_empty() {
+            self.write_comment(1, "Input signals");
+            for ctrl in rif.ports.ctrls.iter() {
+                self.write_port_decl(ctrl, None, false);
+            }
+        }
+        // Inputs
+        let mut ports_out = Vec::new(); // Collect interrupt registers to create the corresponding IRQ line
+        let mut interrupts = Vec::new(); // Collect interrupt registers to create the corresponding IRQ line
+        self.write_comment(1, "Input registers");
+        for (group_name, hw_reg) in rif.hw_regs.items() {
+            let hw_reg_def = rif.get_hw_reg(&hw_reg.group);
+            let pkg_name = if let Some(pkg) = &hw_reg_def.pkg {pkg} else {&rif_pkg_name};
+            let kind = if hw_reg.intr_derived {"hw"} else {"sw"};
+            let reg_type = format!("t_{}_{kind}", self.casing(&hw_reg.group));
+            let group_name = self.casing(group_name);
+            let prefix = if hw_reg.port.is_in() {""} else {"rif_"};
+            let mut port = PortInfo::new(
+                group_name.clone(),
+                SignalKind::Custom((Some(self.casing(pkg_name)),reg_type)),
+                PortDir::In,
+                hw_reg.dim,
+                hw_reg_def.description.get_short().to_owned()
+            );
+            if hw_reg.port.is_in() {
+                self.write_port_decl(&port, None, false);
+            }
+            if hw_reg.port.is_out() {
+                port.def.name = format!("rif_{}", port.name());
+                port.dir = PortDir::Out;
+                ports_out.push(port);
+            }
+            if !hw_reg_def.interrupt.is_empty() && !hw_reg.intr_derived {
+                interrupts.push((group_name.clone(), "".to_owned()));
+                for info in hw_reg_def.interrupt.iter().skip(1) {
+                    interrupts.push((group_name.clone(), info.name.clone()));
+                }
+            }
+        }
+
+        // Outputs
+        self.write_comment(1, "Output registers");
+        for port in ports_out.iter() {
+            self.write_port_decl(port, None, false);
+        }
+
+        // Interrupt lines
+        for (group,irq) in interrupts {
+            let port_irq = PortInfo::new_out(
+                format!("rif_{group}_{irq}"),
+                format!("High when one interrupt field of {irq} is asserted"));
+            self.write_port_decl(&port_irq, None, false);
+        }
+
+        // Add interface to external pages and collect them for later
+        let mut ext_pages = Vec::new();
+        for page in rif.pages.iter() {
+            if let Some(width) = &page.external {
+                let name = self.casing(&format!("if_page_{}", page.name));
+                ext_pages.push((name.clone(), page.addr, *width));
+                let port = PortInfo::new_intf(
+                    name.clone(),
+                    "rif_if".to_owned(),
+                    format!("Interface to page {name}"));
+                self.write_port_decl(&port, None, false);
+                continue;
+            }
+        }
+        // Create a few expr used many times
+        let rif_en : LogicExpr = "if_rif.en".into();
+        let rd_wrn : LogicExpr = "if_rif.rd_wrn".into();
+
+        // Add main control interface
+        self.write_intf_ports(&rif.interface);
+        self.write_module_decl_footer(&rif_name);
+
+        // Signals declaration
+        let w = rif.addr_width as u16;
+        self.write_comment_box("Signals declaration");
+        self.write_signal_decl(&("rif_addr_l", w - addr_shift).into());
+        self.write_signal_decl(&("rif_read_data_l", w).into());
+        self.write_signal_decl(&"rif_err_addr_l".into());
+        self.write_signal_decl(&"rif_err_access_l".into());
+        self.write_signal_decl(&"rif_done_next".into());
+        self.write("\n");
+
+        // Declare Decode pulse / readback value per register
+        for page in rif.pages.iter().filter(|p| p.external.is_none()) {
+            for reg in page.regs.iter() {
+                let name = reg.name().to_casing(Snake);
+                if reg.has_decode() {
+                    self.write_signal_decl(&format!("{name}__decode").as_str().into());
+                }
+                self.write_signal_decl(&(format!("{name}__read_data").as_str(), w).into());
+            }
+        }
+        self.write("\n");
+
+        // Declare local signal per register group
+        for (inst_name, hw_reg) in rif.hw_regs.items().filter(|(_,r)| !r.intr_derived) {
+            let group_name = self.casing(inst_name);
+            let hw_reg_def = rif.get_hw_reg(&hw_reg.group);
+            let reg_dim = hw_reg.dim;
+            let group_type_sw = format!("t_{}_sw", hw_reg.group);
+            let group_type_hw = format!("t_{}_hw", hw_reg.group);
+            let pkg_name = format!("{}_pkg", if let Some(pkg) = &hw_reg_def.pkg {pkg} else {&rif_pkg_name});
+            // Local register
+            if hw_reg_def.is_local() {
+                self.write_signal_decl(&SignalDef::new_ud(
+                    format!("rif_{group_name}"),
+                    pkg_name.clone(), group_type_sw.clone(), hw_reg.dim).into());
+            }
+            for idx_u16 in 0..reg_dim.max(1) {
+                let idx = if reg_dim > 0 {format!("{idx_u16}")} else {"".to_owned()};
+                // Interrupt register
+                if hw_reg_def.is_interrupt() {
+                    // Declare all interrupt related signal: event, en, pending, mask, alts
+                    for intr_info in hw_reg_def.interrupt.iter() {
+                        let name = if intr_info.name.is_empty() {
+                            group_name.to_owned()
+                        } else {
+                            format!("{}_{}", group_name, intr_info.name)
+                        };
+                        // Declare the sw struct if not an output
+                        if !hw_reg.port.is_out() {
+                            self.write_signal_decl(&SignalDef::new_ud(
+                                format!("rif_{name}{idx}"),
+                                pkg_name.clone(), group_type_sw.clone(), 0).into());
+                        }
+                        // Interrupt need a local signal (and between input and enable)
+                        self.write_signal_decl(&SignalDef::new_ud(
+                            format!("{name}{idx}_l"),
+                            pkg_name.clone(), group_type_hw.clone(), 0).into());
+                        // Add delay register if trigger works on edges
+                        if intr_info.edge_trigger() {
+                            self.write_signal_decl(&SignalDef::new_ud(
+                                format!("{name}{idx}_d1"),
+                                pkg_name.clone(), group_type_hw.clone(), 0).into());
+                        }
+                        // Add optional enable/mask register
+                        if intr_info.enable.is_some() {
+                            let n = format!("{inst_name}_en");
+                            if let Some(hw_reg_en) = rif.hw_regs.get(&n) {
+                                if !hw_reg_en.port.is_out() {
+                                    self.write_signal_decl(&SignalDef::new_ud(
+                                        format!("rif_{name}{idx}_en"),
+                                        pkg_name.clone(), group_type_hw.clone(), 0).into());
+                                }
+                            }
+                        }
+                        if intr_info.mask.is_some() {
+                            let n = format!("{inst_name}_mask");
+                            if let Some(hw_reg_mask) = rif.hw_regs.get(&n) {
+                                if !hw_reg_mask.port.is_out() {
+                                    self.write_signal_decl(&SignalDef::new_ud(
+                                        format!("rif_{name}{idx}_mask"),
+                                        pkg_name.clone(), group_type_hw.clone(), 0).into());
+                                }
+                            }
+                        }
+                        // Internal pending signal is always present (used to generate the irq output)
+                        self.write_signal_decl(&SignalDef::new_ud(
+                            format!("rif_{name}{idx}_pending"),
+                            pkg_name.clone(), group_type_hw.clone(), 0).into());
+                        self.write_signal_decl(&SignalDef::new_bit(format!("clk_en_intr_{name}{idx}")).into());
+                        // Add next signal for each field
+                        for f in hw_reg_def.fields.iter() {
+                            let f_name = self.casing(&f.name);
+                            self.write_signal_decl(&SignalDef::new_bus(
+                                format!("{name}{idx}_{f_name}__next"), f.width, false).into());
+                            if intr_info.enable.is_some() {
+                                self.write_signal_decl(&SignalDef::new_bus(
+                                    format!("{name}{idx}_en_{f_name}__next"), f.width, false).into());
+                            }
+                            if intr_info.mask.is_some() {
+                                self.write_signal_decl(&SignalDef::new_bus(
+                                    format!("{name}{idx}_mask_{f_name}__next"), f.width, false).into());
+                            }
+                        }
+
+                    }
+                    continue;
+                }
+                // Field combinatorial next value
+                for f in hw_reg_def.fields.iter() {
+                    let f_name = format!("{group_name}{idx}_{}", self.casing(&f.name));
+                    // Add signal to handle out-of-limit check
+                    if f.limit.value != LimitValue::None {
+                        self.write_signal_decl(&SignalDef::new_bit(format!("{f_name}__check")).into());
+                    }
+                    // Skip external field
+                    let Some(ctrl) = hw_reg_def.regs_ctrl.get(f.ctrl_idx) else {
+                        return Err(format!("Field {}.{} points to ctrl {} but max is {}",
+                            hw_reg_def.name, f.name, f.ctrl_idx, hw_reg_def.regs_ctrl.len()).into())
+                    };
+                    if ctrl.is_external() {
+                        continue;
+                    }
+                    // No next for combinatorial pulse or read only field from hardware with no register
+                    if f.sw_kind.is_pulse_comb() || (f.sw_kind==FieldSwKind::ReadOnly && !f.has_write_mod() && !f.is_counter()) {
+                        continue;
+                    }
+                    let sig_kind = SignalKind::from_field(f, &pkg_name, &group_name);
+                    if f.array > 0 {
+                        for i in 0..f.array {
+                            self.write_signal_decl(&SignalDef::new(
+                                format!("{f_name}{i}__next"), sig_kind.clone(), 0).into());
+                        }
+                    } else {
+                        self.write_signal_decl(&SignalDef::new(
+                            format!("{f_name}__next"), sig_kind.clone(), 0).into());
+                    }
+                    // Add register to store local value when register is not visible at the output
+                    if f.is_local() {
+                        self.write_signal_decl(&SignalDef::new(
+                            format!("{f_name}__reg"), sig_kind.clone(), 0).into());
+                    }
+                }
+            }
+        }
+
+        // Add interface bridge to the internal rif_if
+        // Nothing is done if already using rif_if
+        let comp_info : CompInfo = rif.into();
+        self.write_intf_bridge(&rif.interface, &comp_info, &rif.sw_clocking.clk, &rif.sw_clocking.rst.name);
+
+        // Connect interface to internal logic
+        self.write_comment_box("Interface handling");
+        let signals: Vec<SignalInfoN> = vec![
+            // Mask err with RIF enable signal
+            SignalInfoN::new(("if_rif","err_addr").into()  , LogicExpr::ValueU(0, 1),
+                LogicExpr::and("rif_err_addr_l".into(), rif_en.clone())),
+            SignalInfoN::new(("if_rif","err_access").into(), LogicExpr::ValueU(0, 1),
+                LogicExpr::and("rif_err_access_l".into(), rif_en.clone())),
+            // Done is a direct copy
+            SignalInfoN::new(("if_rif","done").into(), LogicExpr::ValueU(0, 1), "rif_done_next".into()),
+            // Read data updated only on read access
+            SignalInfoN::new_with_en(("if_rif","done").into(), LogicExpr::ValueU(0, rif.data_width.into()),
+                "rif_read_data_l".into(),
+                Some(LogicExpr::and("rif_done_next".into(), ("if_rif","rd_wrn").into()))),
+        ];
+        if self.nb_pipe() == 0 {
+            for s in signals {
+                self.write_assign(s.name, s.value);
+            }
+        } else {
+            self.write_process_seq(
+                &rif.sw_clocking.clk,
+                &rif.sw_clocking.rst,
+                "if_rif",
+                &signals,
+            );
+        }
+
+        self.write_assign("if_rif.done_next      ".into(), "rif_done_next   ".into());
+        self.write_assign("if_rif.err_addr_next  ".into(), "rif_err_addr_l  ".into());
+        self.write_assign("if_rif.err_access_next".into(), "rif_err_access_l".into());
+        let addr_bus = format!("if_rif.addr[{}:{}]", rif.addr_width-1, addr_shift);
+        self.write_assign("rif_addr_l".into(), addr_bus.into());
+
+        // Decode process
+        self.write_process_comb_header("decode");
+        self.write_assign_comb(2, "rif_read_data_l".into(), LogicExpr::ValueU(0, rif.data_width.into()));
+        if ext_pages.is_empty() {
+            self.write_assign_comb(2, "rif_done_next".into(), rif_en.clone());
+            self.write_assign_comb(2, "rif_err_addr_l".into(), LogicExpr::ValueU(1, 1));
+        } else {
+            let page_en = LogicExpr::Or(
+                ext_pages.iter().map(|(n,_,_)| LogicExpr::from(format!("{n}.en"))).collect());
+            let mut done_next : Vec<LogicExpr> = Vec::new();
+            done_next.push(LogicExpr::and(rif_en.clone(), LogicExpr::not(page_en.clone())));
+            done_next.extend(
+                ext_pages.iter().map(|(n,_,_)|
+                    LogicExpr::and(format!("{n}.en").into(),format!("{n}.done").into())
+                )
+            );
+            self.write_assign_comb(2, "rif_done_next".into(), LogicExpr::Or(done_next));
+            self.write_assign_comb(2, "rif_err_addr_l".into(), LogicExpr::not(page_en));
+        }
+        self.write_assign_comb(2, "rif_err_access_l".into(), LogicExpr::ValueU(0, 1));
+        // Set the decode signal default value
+        for page in rif.pages.iter().filter(|p| p.external.is_none()) {
+            for reg in page.regs.iter().filter(|r| r.has_decode()) {
+                let name = self.casing(&format!("{}__decode", reg.name()));
+                self.write_assign_comb(2, name.into(), LogicExpr::ValueU(0, 1));
+            }
+        }
+        // Decode address
+        self.write_match_header("rif_addr_l");
+        let addr_l_w = rif.addr_width as usize - addr_shift as usize ;
+        for page in rif.pages.iter().filter(|p| p.external.is_none()) {
+            for reg in page.regs.iter() {
+                let name_flat = self.casing(&reg.name());
+                let group_name = self.casing(&reg.group_name);
+                let addr = (reg.addr + page.addr) as u128 >> addr_shift;
+                self.write_match_case_header(LogicExpr::ValueU(addr, addr_l_w));
+                // Set the decode signal high when matching address
+                // and the register contains no field with limit or all limit check pass
+                let field_limit: Vec<(String, String)> = reg
+                    .fields
+                    .iter()
+                    .filter(|field| field.limit.value != LimitValue::None)
+                    .map(|field| (field.name.to_owned(), field.limit.bypass.to_owned()))
+                    .collect();
+                if reg.has_decode() {
+                    let value = if field_limit.is_empty() {LogicExpr::ValueU(1, 1)} else {
+                        let checks : Vec<LogicExpr> = field_limit.iter().map(|(name,bypass)| {
+                            let check : LogicExpr = format!("{group_name}_{name}__check").into();
+                            if bypass.is_empty() {check}
+                            else {LogicExpr::or(check, bypass.as_str().into())}
+                        }).collect();
+                        LogicExpr::or("if_rif.rd_wrn".into(), LogicExpr::And(checks))
+                    };
+                }
+                // Copy corresponding read_data signal
+                self.write_assign_comb(2, "rif_read_data_l".into(), format!("{name_flat}__read_data").into());
+                // Address is valid
+                self.write_assign_comb(2, "rif_err_addr_l".into(), LogicExpr::ValueU(0, 1));
+                // Access error when writing a read-only field, reading a write only field,
+                //  or writing one field outside its set value (when limits are defined)
+                let err_val : LogicExpr = match reg.sw_access {
+                    Access::RO => LogicExpr::not("if_rif.rd_wrn".into()),
+                    Access::WO => "if_rif.rd_wrn".into(),
+                    Access::NA => LogicExpr::ValueU(1, 1),
+                    Access::RW =>
+                        if field_limit.is_empty() {
+                            LogicExpr::ValueU(0, 1)
+                        } else {
+                            LogicExpr::not(format!("{name_flat}__decode").into())
+                        }
+                };
+                self.write_assign_comb(2, "rif_err_access_l".into(), err_val);
+                // Override done_next for external registers
+                if reg.external!=ExternalKind::None {
+                    let hw_reg_def = rif.get_hw_reg(&reg.group_type);
+                    let idx = if let ArrayIdx::Inst(idx,_)= reg.array {format!("[{idx}]")} else {"".to_owned()};
+                    let qual = if hw_reg_def.is_multi_pulse() {format!("_{name_flat}")} else {"".to_owned()};
+                    let next = format!("{group_name}{idx}.ext{qual}_done");
+                    self.write_assign_comb(2, "rif_done_next".into(), next.into());
+                }
+                self.write_match_case_footer();
+            }
+        }
+        // Default case with optional
+        self.write_match_case_header("default".into());
+        if !ext_pages.is_empty() {
+            for (i,pn) in ext_pages.iter().map(|p| p.0.as_str()).enumerate() {
+                let cond = LogicExpr::eq(format!("{pn}.done").into(), LogicExpr::ValueU(1, 1));
+                if i==0 {
+                    self.write_cond_if(4, cond);
+                } else {
+                    self.write_cond_else(4, Some(cond));
+                }
+                self.write_assign_comb(5, "rif_read_data_l ".into(), format!("{pn}.rd_data").into());
+                self.write_assign_comb(5, "rif_err_addr_l  ".into(), format!("{pn}.err_addr").into());
+                self.write_assign_comb(5, "rif_err_access_l".into(), format!("{pn}.err_access").into());
+            }
+            self.write_cond_end(4);
+        }
+        self.write_match_case_footer();
+        // Close match and process
+        self.write_match_footer();
+        self.write_process_comb_footer("decode");
+
+        // Control the external page interface
+        for (name, addr, width) in ext_pages.iter() {
+            self.write_assign(format!("{name}.addr   ").into(),"if_rif.addr   ".into());
+            self.write_assign(format!("{name}.rd_wrn ").into(), rd_wrn.clone());
+            self.write_assign(format!("{name}.wr_data").into(),"if_rif.wr_data".into());
+            let addr_bus = format!("if_rif.addr[{}:{}]", rif.addr_width-1, width);
+            let addr_val = LogicExpr::ValueU((addr >> width) as u128, (rif.addr_width - width)  as usize);
+            let addr_check = LogicExpr::eq(addr_bus.into(), addr_val);
+            let en_expr = LogicExpr::and(rif_en.clone(), addr_check);
+            self.write_assign(format!("{name}.en     ").into(), en_expr);
+        }
+
+        // Register process
+        self.write_comment_box("Registers");
+        let mut group_done : HashSet<String> = HashSet::with_capacity(rif.hw_regs.len());
+        for page in rif.pages.iter().filter(|p| p.external.is_none()) {
+            for reg in page.regs.iter() {
+                let reg_impl = rif.get_hw_reg(&reg.group_type);
+                // Save a few string to be reused
+                let reg_name  = reg.name().to_casing(Snake); // Register Name with index apped after
+                let group_name = reg.group_name().to_casing(Snake); // Group name without index
+                let reg_name_i   = reg.name_i().to_casing(Snake); // Register name with optional index in bracket
+                let group_name_i = reg.group_name_i().to_casing(Snake); // Group name with optional index in bracket
+                let reg_idx    = if let ArrayIdx::Inst(idx,_) = reg.array {Some(idx)} else {None};
+                let group_id : ExprId = (group_name.clone(), reg_idx).into();
+                let reg_idxf   = if let Some(idx) = reg_idx {format!("{idx}")} else {"".to_owned()};
+                let intr_suffix = reg.intr_info.0.get_suffix();
+                let decode : LogicExpr = format!("{reg_name}__decode").into();
+                self.write_comment(1, &format!("Register {reg_name_i}"));
+                // Assign field
+                for field in reg.fields.iter() {
+                    let field_impl = reg_impl.get_field(&field.name)?;
+                    let partial  = SignalRange::from_field(field, false);
+                    let field_range = SignalRange::from_field(field, true);
+                    let field_name = self.casing(&field.name());
+                    let field_name_flat = self.casing(&field.name_flat());
+                    let reg_field_name = format!("{group_name}{intr_suffix}{reg_idxf}_{field_name_flat}");
+                    let field_id = if field_impl.is_local() && field.has_write_mod() && !reg.is_external() {
+                        ExprId::new_range(format!("{reg_field_name}__reg"), partial.clone())
+                    } else {
+                        ExprId::new_field_range(
+                            format!("rif_{group_name}{intr_suffix}"), reg_idx,
+                            field_name.clone(), field_range.clone())
+                    };
+                    let field_cast = field_impl.hdl_cast(&rif_pkg_name, &reg.reg_type);
+                    let field_next_id = ExprId::new_range(format!("{reg_field_name}__next"), partial.clone());
+                    let field_reset = LogicExpr::reset(&field.reset, field.width);
+                    let reset_expr = if field_cast.is_custom() {
+                        LogicExpr::Cast(field_cast.clone(), Box::new(field_reset))
+                    } else {
+                        field_reset
+                    };
+                    // Constant or Disabled field ? simply assign to its reset value
+                    if field_impl.is_constant() || (field.is_disabled() && field.is_sw_write())  {
+                        self.write_assign(field_id, reset_expr);
+                        continue;
+                    }
+
+                    // Construct the field value from the bus with bit selection
+                    // For non partial field, add proper casting (signed/enum)
+                    let bus_range = if field.width > 1 {
+                        SignalRange::new(field.lsb, field.msb())
+                    } else {
+                        SignalRange::new_bit(field.lsb)
+                    };
+
+                    let wr_data_raw = LogicExpr::Id(ExprId::new_field_range("if_rif".to_owned(), None, "wr_data".to_owned(), Some(bus_range)));
+                    let wr_data = LogicExpr::Cast(
+                        if field_impl.is_partial {CastInfo::None} else {field_cast},
+                        Box::new(wr_data_raw));
+
+                    // Add logic for field with limit
+                    if field.has_limit() {
+                        let check_sig : ExprId = format!("{reg_field_name}__check").into();
+                        let check_expr = match &field.limit.value {
+                            LimitValue::Min(v) => LogicExpr::gte(wr_data.clone(), LogicExpr::reset(v, field.width)),
+                            LimitValue::Max(v) => LogicExpr::lte(wr_data.clone(), LogicExpr::reset(v, field.width)),
+                            LimitValue::MinMax(min, max) => {
+                                let min_expr = LogicExpr::gte(wr_data.clone(), LogicExpr::reset(min, field.width));
+                                let max_expr = LogicExpr::lte(wr_data.clone(), LogicExpr::reset(max, field.width));
+                                LogicExpr::and(min_expr, max_expr)
+                            },
+                            LimitValue::List(l) => {
+                                let v : Vec<LogicExpr> = l.iter()
+                                    .map(|e| LogicExpr::eq(wr_data.clone(), LogicExpr::reset(e, field.width)))
+                                    .collect();
+                                LogicExpr::Or(v)
+                            }
+                            LimitValue::Enum => {
+                                let Some(enum_name) = field.enum_kind.name() else {
+                                    return Err(format!("Using `limit enum` on non-enum field {reg_field_name}!").into());
+                                };
+                                let enum_type = if let Some(pkg) = &reg_impl.pkg {
+                                    if enum_name.contains(':') {enum_name.to_owned()}
+                                    else {format!("{pkg}_pkg::{enum_name}")}
+                                } else {
+                                    enum_name.to_owned()
+                                };
+                                let enum_def = rif.get_enum_def(&enum_type)?;
+                                let v : Vec<LogicExpr> = enum_def.iter()
+                                    .map(|e| LogicExpr::eq(wr_data.clone(), LogicExpr::value(e.value as u128, field)))
+                                    .collect();
+                                LogicExpr::Or(v)
+                            }
+                            LimitValue::None => unreachable!(),
+                        };
+                    }
+
+                    // For external register combinatorial assign from the interface bus
+                    if reg.is_external() && field.is_sw_write() {
+                        self.write_assign(field_id, wr_data);
+                        continue;
+                    }
+
+                    // Combinatorial pulse : direct assign
+                    if field.sw_kind.is_pulse_comb() {
+                        let mut cond = LogicExpr::and(decode.clone(), rif_en.clone());
+                        cond.push(LogicExpr::not(rd_wrn.clone()));
+                        let val = LogicExpr::ite(cond, wr_data, LogicExpr::value(0, field));
+                        self.write_assign(field_id, val);
+                        continue;
+                    }
+
+                    // Counter event
+                    if let Some(info) = field.counter_info() {
+                        if info.sat || info.event {
+                            let name = field_id.with_fsuffix("_event");
+                            let next_msb = ExprId::new_idx(format!("{reg_field_name}__next"), (field.width-1) as u16);
+                            let event = if field.is_signed() {
+                                let ovfl = next_msb.with_idx(field.width as u16);
+                                LogicExpr::neq(ovfl.into(), next_msb.clone().into())
+                            } else {
+                                let curr_msb : LogicExpr = field_id.with_range(SignalRange::new_bit(field.width-1)).into();
+                                let incr = if info.incr_val == 0 {None} else {
+                                    Some(LogicExpr::And([
+                                        LogicExpr::not(next_msb.clone().into()),
+                                        curr_msb.clone(),
+                                        field_id.with_fsuffix("_incr_en").into()
+                                    ].to_vec()))
+                                };
+                                let decr = if info.decr_val == 0 {None} else {
+                                    Some(LogicExpr::And([
+                                        next_msb.clone().into(),
+                                        LogicExpr::not(curr_msb),
+                                        field_id.with_fsuffix("_decr_en").into()
+                                    ].to_vec()))
+                                };
+                                match (incr,decr) {
+                                    (None   ,Some(d)) => d,
+                                    (Some(i),None   ) => i,
+                                    (Some(i),Some(d)) => LogicExpr::or(i,d),
+                                    _ => unreachable!("A counter is either up or down"),
+                                }
+                            };
+                            // When counter is writable by software, mask event when the access occurs
+                            let rhs = if field.is_sw_write() {
+                                let acc_kind = if field.sw_kind==FieldSwKind::ReadClr {
+                                    LogicExpr::not(rd_wrn.clone())
+                                } else {
+                                    rd_wrn.clone()
+                                };
+                                let acc_bar = LogicExpr::Or([
+                                    LogicExpr::not(decode.clone()),
+                                    LogicExpr::not(rif_en.clone()),
+                                    rd_wrn.clone()].to_vec());
+                                LogicExpr::and(acc_bar,event)
+                            } else {
+                                event
+                            };
+                            self.write_assign(name, rhs);
+                        }
+                    }
+
+                    // Generate intermediate signal for interrupt
+                    if reg.is_intr() { // 30 lines
+                        let intr_info = reg_impl.intr_info(reg)?;
+                        let group_name_base = reg.group_name.to_casing(Snake);
+                        // Local signal where interrupt vector is and with the optional enable signals
+                        let intr_l  : ExprId = format!("{group_name}_l.{field_name}").into();
+
+                        let mut rhs : LogicExpr = format!("{group_name_base}.{field_name}").into();
+                        if intr_info.enable.is_some() {
+                            let en : LogicExpr = format!("{group_name_base}.{field_name}").into();
+                            rhs = LogicExpr::and(rhs.clone(), en);
+                        }
+                        self.write_assign(intr_l.clone(), rhs);
+                        // Next interrupt state
+                        let intr_l = LogicExpr::Id(intr_l); // Convert ExprId into LogicExpr
+                        let intr_d1 : LogicExpr = format!("{group_name}_d1.{field_name}").into();
+                        let intr_set : LogicExpr = match field.intr_trig(intr_info.trigger) {
+                            InterruptTrigger::High    => intr_l,
+                            InterruptTrigger::Low     => LogicExpr::not_b(intr_l),
+                            InterruptTrigger::Rising  => LogicExpr::and_b(intr_l, LogicExpr::not(intr_d1)),
+                            InterruptTrigger::Falling => LogicExpr::and_b(LogicExpr::not(intr_l), intr_d1),
+                            InterruptTrigger::Edge    => LogicExpr::xor(intr_l, intr_d1),
+                        };
+                        let mut clr_acc = LogicExpr::and(format!("{reg_name}__decode").into(), rif_en.clone());
+                        let clr_val = match intr_info.clear {
+                            InterruptClr::Read   => {
+                                clr_acc.push(rd_wrn.clone());
+                                LogicExpr::ValueU(0, field.width.into())
+                            }
+                            InterruptClr::Write0 => {
+                                clr_acc.push(LogicExpr::not(rd_wrn.clone()));
+                                LogicExpr::and(wr_data, field_id.clone().into())
+                            }
+                            InterruptClr::Write1 => {
+                                clr_acc.push(LogicExpr::not(rd_wrn.clone()));
+                                LogicExpr::and(LogicExpr::not_b(wr_data), field_id.clone().into())
+                            }
+                            InterruptClr::Hw => todo!("Hardware clear interrupt are not supported yet ! :(")
+                        };
+                        let intr_clr = LogicExpr::ite(clr_acc, clr_val, field_id.into());
+                        let rhs = LogicExpr::or_b(intr_set, intr_clr);
+                        self.write_assign(field_next_id, rhs);
+                        continue;
+                    }
+
+                    // Register derived from interrupt (i.e. enable/mask)
+                    if reg.is_intr_derived() && reg.intr_info.0 !=InterruptRegKind::Pending {
+                        let acc = LogicExpr::And([
+                            decode.clone(),
+                            rif_en.clone(),
+                            LogicExpr::not(rd_wrn.clone())].to_vec());
+                        let rhs = LogicExpr::ite(acc, wr_data, field_id.into());
+                        self.write_assign(field_next_id, rhs);
+                        continue;
+                    }
+
+                    // Generate next value
+                    if field.is_hw_write() || field.is_sw_write() { // 184 lines
+                        let field_clken = if let ClkEn::Signal(clk_en) = &field_impl.clk_en {
+                            clk_en.clone()
+                        } else if let ClkEn::Signal(clk_en) = &reg_impl.clk_en {
+                            clk_en.clone()
+                        } else {
+                            hw_clk.en.clone()
+                        };
+                        let mut if_then : Vec<(LogicExpr,LogicExpr)> = Vec::new();
+
+                        // Handle registered pulse: need to maintain pulse high until clock enable is seen
+                        if field.sw_kind.is_pulse() && !field_clken.is_empty() {
+                            if_then.push((
+                                LogicExpr::and(field_id.clone().into(), field_clken.clone().into()),
+                                LogicExpr::ValueU(0, field.width.into())
+                            ));
+                        }
+                        // Handle hardware access
+                        if field.is_hw_write() {
+                            let suffix_idx = field.partial_suffix();
+                            let field_sig : LogicExpr = group_id.with_path(field_name.clone(), field_range.clone()).into();
+                            for kind in field.hw_kind.iter() {
+                                let path = kind.get_signal().as_ref().map(|n| n.as_str()).unwrap_or("");
+                                let ext = kind.get_suffix();
+                                let ctrl_id = path_to_signal(path, ext, (&reg.group_type, &group_name), reg_idx, &field_name, &suffix_idx);
+                                match kind {
+                                    FieldHwKind::WriteEn(_)  => if_then.push((ctrl_id.into(), field_sig.clone())),
+                                    FieldHwKind::WriteEnL(_) => if_then.push((LogicExpr::not(ctrl_id.into()), field_sig.clone())),
+                                    FieldHwKind::Set(_) => {
+                                        let val = if field.width == 1 {
+                                            LogicExpr::ValueU(1, 1)
+                                        } else {
+                                            LogicExpr::or_b(field_id.clone().into(), field_sig.clone())
+                                        };
+                                        if_then.push((ctrl_id.into(), val));
+                                    },
+                                    FieldHwKind::Clear(info) => {
+                                        let val = if field.width == 1 {
+                                            LogicExpr::ValueU(0, 1)
+                                        } else {
+                                            LogicExpr::and_b(field_id.clone().into(), LogicExpr::not(field_sig.clone()))
+                                        };
+                                        if_then.push((ctrl_id.into(), val));
+                                    },
+                                    FieldHwKind::Toggle(info) => {
+                                        let val = if field.width == 1 {
+                                            LogicExpr::not_b(field_id.clone().into())
+                                        } else {
+                                            LogicExpr::or_b(field_id.clone().into(), field_sig.clone())
+                                        };
+                                        if_then.push((ctrl_id.into(), val));
+                                    },
+                                    // Nothing todo for other HwKind (already handled for interrup, counter has less prevalence than software access)
+                                    FieldHwKind::Counter(_) |
+                                    FieldHwKind::Interrupt(_) |
+                                    FieldHwKind::ReadOnly => {},
+                                }
+                            }
+                        }
+
+                        // Handle Software access
+                        if field.is_sw_write() {
+                            let mut cond = LogicExpr::and(decode.clone(), rif_en.clone());
+                            if field.sw_kind==FieldSwKind::ReadClr {
+                                cond.push(rd_wrn.clone());
+                            } else {
+                                cond.push(LogicExpr::not(rd_wrn.clone()));
+                            }
+                            let val = match &field.sw_kind {
+                                // Basic write
+                                FieldSwKind::ReadWrite |
+                                FieldSwKind::WriteOnly => wr_data,
+                                //
+                                FieldSwKind::ReadClr => {
+                                    if field.is_signed() {
+                                        LogicExpr::ValueI(0, field.width.into())
+                                    } else {
+                                        LogicExpr::ValueU(0, field.width.into())
+                                    }
+                                }
+                                // Write 1 Clear: set to 0 all bit being 1 in the write data bus
+                                FieldSwKind::W1Clr => {
+                                    if field.width==1 {
+                                        cond.push(wr_data);
+                                        LogicExpr::ValueU(0, 1)
+                                    } else {
+                                        LogicExpr::and(field_id.clone().into() , LogicExpr::not_b(wr_data))
+                                    }
+                                }
+                                // Write 0 Clear: set to 0 all bit being 0 in the write data bus
+                                FieldSwKind::W0Clr => {
+                                    if field.width==1 {
+                                        cond.push(LogicExpr::not_b(wr_data));
+                                        LogicExpr::ValueU(0, 1)
+                                    } else {
+                                        LogicExpr::and(field_id.clone().into() , wr_data)
+                                    }
+                                }
+                                // Write 1 Set or Pulse: set to 1 all bit being 1 in the write data bus
+                                FieldSwKind::W1Set |
+                                FieldSwKind::W1Pulse(_,_) => {
+                                    if field.width==1 {
+                                        wr_data
+                                    } else {
+                                        LogicExpr::or_b(field_id.clone().into(), wr_data)
+                                    }
+                                }
+                                // Write 1 Toggle: flip all bits being 1 in write data bus
+                                FieldSwKind::W1Tgl => {
+                                    if field.width==1 {
+                                        LogicExpr::not_b(wr_data)
+                                    } else {
+                                        LogicExpr::xor(field_id.clone().into() , wr_data)
+                                    }
+                                }
+                                // Password:
+                                //  - Set b0 to 0 when password matches expected
+                                //  - Set b1 to 1 when value matches the hold password (it defined)
+                                //  - Set both value to 1 when password does not match and protection is enabled (i.e. locked until reset)
+                                FieldSwKind::Password(info) => {
+                                    if info.protect || (info.once.is_some() && info.hold.is_some()) {
+                                        let hold_not_lock = LogicExpr::or(
+                                            field_id.with_fsuffix("_hold").into(),
+                                            LogicExpr::not(field_id.with_fsuffix("locked").into()));
+                                        cond.push(hold_not_lock);
+                                    }
+                                    let mut if_then_pw = Vec::new();
+                                    if let Some(v) = &info.once {
+                                        if_then_pw.push((
+                                            LogicExpr::eq(wr_data.clone(), LogicExpr::reset(v, field.width)),
+                                            LogicExpr::ValueU(0, 2)
+                                        ));
+                                    }
+                                    if let Some(v) = &info.hold {
+                                        if_then_pw.push((
+                                            LogicExpr::eq(wr_data.clone(), LogicExpr::reset(v, field.width)),
+                                            LogicExpr::ValueU(2, 2)
+                                        ));
+                                    }
+                                    if info.protect {
+                                        if_then_pw.push((
+                                            LogicExpr::neq(wr_data.clone(), LogicExpr::ValueU(0, field.width.into())),
+                                            LogicExpr::ValueU(3, 2)
+                                        ));
+                                    }
+                                    LogicExpr::Ite(if_then_pw, LogicExpr::ValueU(1, 2).into())
+                                }
+                                // Read Only case should be impossible due to the is_sw_write check earlier
+                                FieldSwKind::ReadOnly => unreachable!(),
+                            };
+                            if_then.push((cond, val));
+                            // If Once password, reset value on any register access
+                            if let Some(pw) = field.password_info() {
+                                if pw.once.is_some() {
+                                    let mut cond_once = LogicExpr::and(rif_en.clone(), rd_wrn.clone());
+                                    if pw.hold.is_some() {
+                                        cond_once.push(LogicExpr::not(field_id.with_fsuffix("_hold").into()));
+                                    }
+                                    if_then.push((cond_once, LogicExpr::ValueU(1, 2)));
+                                }
+                            }
+
+                        }
+
+                        // Handle Counter
+                        if let Some(info) = field.counter_info() {
+                            let mut hw_path = field_id.clone();
+                            hw_path.name = field_id.name.strip_suffix("rif_").unwrap_or(&field_id.name).to_owned();
+                            if info.clr {
+                                if_then.push((hw_path.with_fsuffix("_clr").into(), reset_expr.clone()));
+                            }
+                            let one =
+                                if field.is_signed() {LogicExpr::ValueI(1, field.width.into())}
+                                else {LogicExpr::ValueU(1, field.width.into())};
+                            if info.is_up() {
+                                let cond = hw_path.with_fsuffix("_incr_en").into();
+                                let incr = if info.incr_val>1 {hw_path.with_fsuffix("_incr_val").into()} else {one.clone()};
+                                let val = LogicExpr::add(field_id.clone().into(), incr);
+                                if_then.push((cond,val));
+                            }
+                            if info.is_down() {
+                                let cond = hw_path.with_fsuffix("_decr_en").into();
+                                let decr = if info.decr_val>1 {hw_path.with_fsuffix("_decr_val").into()} else {one.clone()};
+                                let val = LogicExpr::sub(field_id.clone().into(), decr);
+                                if_then.push((cond,val));
+                            }
+                        }
+
+                        // Default next to current value
+                        let val_default = match &field.sw_kind {
+                            FieldSwKind::W1Pulse(_,_) if field_clken.is_empty() => LogicExpr::ValueU(0, field.width.into()),
+                            FieldSwKind::Password(info) => {
+                                let b1 = if info.hold.is_some() {field_id.with_fsuffix("_hold").into()}
+                                    else {LogicExpr::ValueU(0, 1)};
+                                LogicExpr::Concat([b1, field_id.with_fsuffix("_locked").into()].to_vec())
+                            }
+                            _ => field_id.clone().into()
+                        };
+
+                        self.write_assign(field_next_id, LogicExpr::Ite(if_then, Box::new(val_default)));
+
+                    }
+                    // Handle case of partial field where one part is read-only
+                    else if field_impl.has_write_mod() {
+                        self.write_assign(field_next_id, LogicExpr::ValueU(0, field.width.into()));
+                    }
+                }
+                // External register
+                if reg.is_external() {
+                    let mut sig_name = format!("rif_{group_name_i}.ext");
+                    if reg_impl.is_multi_ext() {
+                        sig_name.push_str(&format!("_{}",reg.reg_name));
+                    }
+                    if reg.sw_access.is_writable() {
+                        let decode_wr = LogicExpr::And([decode.clone(), rif_en.clone(), LogicExpr::not(rd_wrn.clone())].to_vec());
+                        self.write_assign(format!("{sig_name}_write").into(), decode_wr);
+                    }
+                    if reg.sw_access.is_readable() {
+                        let decode_rd = LogicExpr::And([decode.clone(),rif_en.clone(),rd_wrn.clone()].to_vec());
+                        self.write_assign(format!("{sig_name}_read").into(), decode_rd);
+                    }
+                }
+                // Sequential process
+                else if reg.has_proc() { // 170 lines
+                    let decode_en = LogicExpr::and(decode.clone(), rif_en.clone());
+                    // Get a default clock for the register
+                    let reg_clk =
+                        if let Some(n) = &reg_impl.clk {n}
+                        else if reg.sw_access.is_writable() && !reg.is_intr() {&rif.sw_clocking.clk}
+                        else {&hw_clk.clk};
+                    // Collect each field signal info in a hashmap indexed by a couple (clk/rst)
+                    let mut signals: OrderDict<(String,String), Vec<SignalInfoN> > = OrderDict::new();
+                    for field in reg.fields.iter().filter(|f| !f.is_disabled() && f.partial_lsb()==0 && !f.sw_kind.is_pulse_comb()) {
+                        // Get field implementation
+                        let field_impl = reg_impl.get_field(&field.name)?;
+                        // Skip field with no hardware
+                        if !field_impl.is_hw_write() && !field_impl.is_sw_write() {
+                            continue;
+                        }
+                        let field_name = self.casing(&field.name());
+                        let field_name_flat = self.casing(&field.name_flat());
+                        let field_range = SignalRange::from_field(field, true);
+                        let field_cast = field_impl.hdl_cast(&rif_pkg_name, &reg.reg_type);
+                        let suffix_idx = field.partial_suffix();
+                        let reg_field_name = format!("{group_name}{intr_suffix}{reg_idxf}_{field_name_flat}");
+                        let field_id = if field_impl.is_local() && field.has_write_mod() && !reg.is_external() {
+                            ExprId::new_range(format!("{reg_field_name}__reg"), SignalRange::from_field(field, false))
+                        } else if field.is_password() {
+                            ExprId::new_field_range(
+                                format!("rif_{group_name}{intr_suffix}"), reg_idx,
+                                format!("{field_name}_locked"), None)
+                        } else {
+                            ExprId::new_field_range(
+                                format!("rif_{group_name}{intr_suffix}"), reg_idx,
+                                field_name.clone(), field_range.clone())
+                        };
+                        // Get clock associated with the field
+                        let f_clk =
+                            if let Some(n) = &field_impl.clk {n}
+                            else if let Some(n) = &reg_impl.clk {n}
+                            else if field_impl.is_hw_write() && !reg.is_intr_derived() {&hw_clk.clk}
+                            else {&rif.sw_clocking.clk};
+                        // if reg.reg_name=="" {println!("Field {reg_name_i}.{field_name} : Kind={:?} hw_write={} -> {f_clk} | field:{:?} | reg:{:?}", field.hw_kind, field.is_hw_write(), field_impl.clk, reg_impl.clk);}
+                        // Get reset associated with the field
+                        let f_rst =
+                            // TODO: Add optional reset name per field
+                            if let Some(n) = &reg_impl.rst {n}
+                            else if f_clk==&hw_clk.clk {&hw_clk.rst.name}
+                            else {&rif.sw_clocking.rst.name};
+                        // Next value
+                        let next : ExprId = format!("{reg_field_name}__next").into();
+                        let value : LogicExpr = if field.is_password() {
+                            next.with_idx(0).into()
+                        } else if let Some(cnt_info) = field.counter_info().and_then(|info| if info.has_satn() {Some(info)} else {None}) {
+                            let cond = field_id.with_fsuffix("_event").into();
+                            let sat = if field.is_signed() {
+                                let wm1 = field.width - 1;
+                                let w = field.width as usize;
+                                let is_neg = LogicExpr::lt(next.clone().into(), LogicExpr::ValueI(0, w+1));
+                                LogicExpr::ite(is_neg, LogicExpr::ValueI(-(1<<wm1), w), LogicExpr::ValueI((1<<wm1)-1, w))
+                            } else {
+                                let is_neg = LogicExpr::eq(next.with_idx(w).into(), LogicExpr::ValueU(1, 1));
+                                LogicExpr::ite(is_neg, LogicExpr::ValueI(0, field.width.into()), LogicExpr::ValueI((1<<w)-1, field.width.into()))
+                            };
+                            LogicExpr::ite(cond, sat, next.clone().into())
+                        } else {
+                            next.clone().into()
+                        };
+                        // Enable
+                        let enable = if reg.is_intr() {
+                            format!("clk_en_intr_{group_name}")
+                        } else if let ClkEn::Signal(clk_en) = &field_impl.clk_en {
+                            clk_en.clone()
+                        } else if let ClkEn::Signal(clk_en) = &reg_impl.clk_en {
+                            clk_en.clone()
+                        } else if field.is_hw_write() {
+                            hw_clk.en.clone()
+                        } else {
+                            rif.sw_clocking.en.clone()
+                        };
+                        let mut enable_expr : Option<LogicExpr> = if enable.is_empty() {None} else {Some(enable.clone().into())};
+                        // Prevent counter update on saturation when increment/decrement is 1
+                        if let Some(cnt_info) = field.counter_info() {
+                            if cnt_info.sat && cnt_info.incr_val <= 1 && cnt_info.decr_val <= 1 {
+                                let sat = group_id.with_path(format!("{field_name}_event"), field_range);
+                                let not_sat = LogicExpr::not(sat.into());
+                                if let Some(e) = &mut enable_expr {
+                                    *e = LogicExpr::and((*e).clone(), not_sat);
+                                } else {
+                                    enable_expr = Some(not_sat);
+                                }
+                            }
+                        }
+                        // Use the local enable (or-ed with interface enable) if register can be modifed by firmware access
+                        if enable_expr.is_some() && enable == hw_clk.en && field.is_sw_write() {
+                            enable_expr = enable_expr.map(|e| LogicExpr::or(e, decode_en.clone()));
+                        }
+                        // Prevent modification when lock signal is high
+                        if field_impl.lock.is_some() {
+                            let path = field_impl.lock.name().as_ref().map(|n| n.as_str()).unwrap_or("");
+                            let lock_id = path_to_signal(path, "_lock", (&reg.group_type, &group_name), reg_idx, &field_name, &suffix_idx);
+                            let not_lock = LogicExpr::not(lock_id.into());
+                            if let Some(e) = &mut enable_expr {
+                                *e = LogicExpr::and((*e).clone(), not_lock);
+                            } else {
+                                enable_expr = Some(not_lock);
+                            }
+                        }
+                        // Clear
+                        let clear : Option<LogicExpr> = if let Some(clr_path) = &reg_impl.clear {
+                            Some(path_to_signal(clr_path, "reg_clr", (&reg.group_type,  &group_name), reg_idx, "", "").into())
+                        } else {
+                            field_impl.clear.as_ref().map(|clr_path|
+                                path_to_signal(clr_path, "_clr", (&reg.group_type,  &group_name), reg_idx, &field.name, &suffix_idx).into()
+                            )
+                        };
+                        // TBD: handle case where a clear is defined for the clock of this field ?
+                        // Reset
+                        let reset = if field.is_password() {
+                            LogicExpr::ValueU(1, 1)
+                        } else {
+                            let field_reset = if field.is_partial() {
+                                let rst_val = field_impl.get_reset(reg.group_idx);
+                                if field_impl.signed {
+                                    LogicExpr::ValueI(rst_val as i128, field_impl.width.into())
+                                } else {
+                                    LogicExpr::ValueU(rst_val, field_impl.width.into())
+                                }
+                            } else {
+                                LogicExpr::reset(&field.reset, field.width)
+                            };
+                            if field_cast.is_custom() {
+                                LogicExpr::Cast(field_cast.clone(), Box::new(field_reset))
+                            } else {
+                                field_reset
+                            }
+                        };
+                        // Add the signal info the hashmap
+                        let k = (f_clk.to_string(),f_rst.to_string());
+                        let field_entry = signals.entry(&k);
+
+                        field_entry.push(
+                            SignalInfoN::new_with_en_clr(field_id.clone(), reset, value, enable_expr.clone(), clear.clone())
+                        );
+
+                        // For password protected or with both option once/hold, add another signal
+                        if let FieldSwKind::Password(info) = &field.sw_kind {
+                            if info.has_hold() {
+                                field_entry.push(SignalInfoN::new_with_en_clr(
+                                    field_id.with_fsuffix("_hold"),
+                                    LogicExpr::ValueU(0, 1),
+                                    next.with_idx(1).into(),
+                                    enable_expr, clear)
+                                );
+                            }
+                        }
+                        // For interrupt on edge, add delay version of the interrupt event
+                        else if let Some(FieldHwKind::Interrupt(info)) = field.hw_kind.first() {
+                            if !info.is_level() {
+                                field_entry.push(SignalInfoN::new_with_en_clr(
+                                    field_id.with_nsuffix("_d1"),
+                                    LogicExpr::ValueU(0, 1),
+                                    field_id.with_nsuffix("_l").into(),
+                                    enable_expr, clear)
+                                );
+                            }
+                        }
+                    }
+                    // Create one process for each pair of clock/reset found in the register field
+                    for ((clk,rst_name),sig_list) in signals.items() {
+                        let mut proc_name = format!("proc_{reg_name}");
+                        // Append clk/rst_name to process if different from the register default
+                        if clk!=reg_clk && signals.len() > 1 {
+                            proc_name.push_str(&format!("_{}",clk));
+                        }
+                        let mut rst = if clk==&rif.sw_clocking.clk || rif.hw_clocking.is_empty() {&rif.sw_clocking.rst} else {&rif.hw_clocking.first().unwrap().rst};
+                        // Find the full reset definition in the sw_clock or hw_clocking
+                        if rst_name!=&rst.name {
+                            proc_name.push_str(&format!("_{}",rst_name));
+                            if rst_name == &rif.sw_clocking.rst.name {
+                                rst = &rif.sw_clocking.rst;
+                            } else {
+                                rst = &rif.hw_clocking.iter()
+                                    .find(|&x| &x.rst.name==rst_name)
+                                    .ok_or(format!("Reset {rst_name} should be amongst the software or hardware reset list !"))?
+                                    .rst;
+                            }
+                        }
+                        //
+                        self.write_process_seq(clk, rst, &proc_name, sig_list);
+                    }
+                }
+
+                // Create process to generate register pulse access
+                if !group_done.contains(&group_name_i) {
+                    group_done.insert(group_name_i.clone());
+                    let mut signals: Vec<SignalInfoN> = Vec::new();
+                    let mut reg_clk = "".to_owned();
+                    for ctrl in reg_impl.regs_ctrl.iter() {
+                        let gn = format!("rif_{group_name_i}");
+                        let ctrl_name = format!("{}{reg_idxf}",ctrl.name.to_casing(Snake));
+                        let base_name = if reg_impl.is_multi_pulse() { format!("p_{ctrl_name}")} else {"p".to_owned()};
+                        let base_value = LogicExpr::and(
+                            format!("{ctrl_name}__decode").into(),
+                            rif_en.clone());
+                        for pulse in ctrl.pulse.iter() {
+                            let mut name = base_name.to_owned();
+                            let mut value = base_value.clone();
+                            match pulse {
+                                RegPulseKind::Write(clk)  => {
+                                    name.push_str("_write");
+                                    value.push(LogicExpr::not(rd_wrn.clone()));
+                                },
+                                RegPulseKind::Read(clk)   => {
+                                    name.push_str("_read");
+                                    value.push(rd_wrn.clone());
+                                },
+                                RegPulseKind::Access(clk) => name.push_str("_access"),
+                            };
+                            // No clock means the pulse is just combinatorial logic
+                            let p_clk = pulse.clk();
+                            if p_clk.is_empty() {
+                                self.write_assign(name.into(), value);
+                            } else {
+                                if reg_clk.is_empty() {
+                                    reg_clk = p_clk.to_owned();
+                                } else if reg_clk!=p_clk {
+                                    return Err(format!("Only one clock should be used for the register {group_name} pulses").into());
+                                }
+                                signals.push(SignalInfoN::new((gn.clone(),name).into(), LogicExpr::ValueU(0,1), value));
+                            }
+                        }
+                    }
+                    if !signals.is_empty() {
+                        let proc_name = format!("proc_{group_name}{reg_idxf}_special");
+                        self.write_process_seq(&reg_clk, &rif.sw_clocking.rst, &proc_name, &signals);
+                    }
+                }
+
+                // Interrupt registers signals : clock enable and IRQ
+                if reg.is_intr() {
+
+                    let intr_info = reg_impl.intr_info(reg)?;
+                    // Enable clock of interrupt register when there is an event or when accessed from RIF
+                    // Replace the event by a the register clock enable if defined
+                    let mut intr_en : Vec<LogicExpr> = Vec::new();
+                    if let ClkEn::Signal(clk_en) = &reg_impl.clk_en {
+                        intr_en.push(clk_en.as_str().into());
+                    } else {
+                        for field in reg.fields.iter() {
+                            let field_name = self.casing(&field.name());
+                            let intr_l : LogicExpr = format!("{group_name}_l.{field_name}").into();
+                            let intr_val: LogicExpr = match field.intr_trig(intr_info.trigger) {
+                                InterruptTrigger::High => LogicExpr::ValueU(0, field.width.into()),
+                                InterruptTrigger::Low  => LogicExpr::ValueU((1<<field.width) - 1, field.width.into()),
+                                _ => format!("{group_name}_d1.{field_name}").into()
+                            };
+                            intr_en.push(LogicExpr::neq(intr_l, intr_val));
+                        }
+                    }
+                    intr_en.push(rif_en.clone());
+                    let clk_en_intr = format!("clk_en_intr_{group_name}").into();
+                    self.write_assign(clk_en_intr, LogicExpr::Or(intr_en));
+
+                    // Pending signal:  interrupts field status and-ed with mask
+                    let mut pendings : Vec<LogicExpr> = Vec::with_capacity(reg.fields.len());
+                    for field in reg.fields.iter() {
+                        let field_name = self.casing(&field.name());
+                        let rhs : LogicExpr = if field.is_disabled() {
+                            LogicExpr::ValueU(0, field.width.into())
+                        } else if intr_info.mask.is_some() {
+                            LogicExpr::and(
+                                format!("rif_{group_name}.{field_name}").into(),
+                                format!("rif_{group_name}_mask.{field_name}").into())
+                        } else {
+                            format!("rif_{group_name}.{field_name}").into()
+                        };
+                        let pending : ExprId = format!("rif_{group_name}_pending.{field_name}").into();
+                        pendings.push(pending.clone().into());
+                        self.write_assign(pending, rhs);
+                    }
+
+                    // IRQ: or of all pending interrupts
+                    self.write("\n");
+                    let irq = format!("rif_{group_name}_irq").into();
+                    self.write_assign(irq, LogicExpr::Or(pendings));
+                }
+
+                // Concatenation for Read data
+                let fields = reg.fields.iter().rev().filter(|f| !f.sw_kind.is_wo());
+                let nb_fields = fields.clone().count();
+                let first_field = reg.fields.iter().find(|f| !f.sw_kind.is_wo());
+                let first_width = if let Some(f) = first_field {f.width} else {0};
+                let first_is_signed = if let Some(f) = first_field {f.is_signed()} else {false};
+                let is_single_wide_field = nb_fields==0 || (nb_fields == 1 && first_width==rif.data_width);
+                let rhs : LogicExpr =
+                    if is_single_wide_field {
+                        let val = first_field.map(|f| f.reset.clone()).unwrap_or(ResetVal::Unsigned(0));
+                        let val = LogicExpr::reset(&val, rif.data_width);
+                        if first_is_signed {
+                            LogicExpr::Cast(CastInfo::Unsigned, Box::new(val))
+                        } else {
+                            val
+                        }
+                    } else {
+                        // Track previous LSB to know when to inssert zero-padding
+                        let mut prev_lsb = rif.data_width;
+                        // pre-allocate vector with one more element to handle the basic case where
+                        // whole register is not full and at least one padding will be neccessary
+                        let mut values : Vec<LogicExpr> = Vec::with_capacity(nb_fields+1);
+                        for field in fields {
+                            let field_impl = reg_impl.get_field(&field.name)?;
+                            let field_name = field.name().to_casing(Snake);
+                            // Fill register spaces with 0s
+                            let spaces = prev_lsb.saturating_sub(field.msb()+1);
+                            if spaces != 0 {
+                                values.push(LogicExpr::ValueU(0, spaces.into()));
+                            }
+                            //
+                            if !reg.is_external() && field_impl.is_local() && field.has_write_mod() {
+                            } else if let FieldSwKind::Password(info) = &field.sw_kind {
+                                if info.has_hold() {
+                                    values.push(LogicExpr::ValueU(0, (field.width-2).into()));
+                                    let hold = format!("rif_{group_name_i}.{}_hold", field.name);
+                                    values.push(hold.into());
+                                } else {
+                                    values.push(LogicExpr::ValueU(0, (field.width-1).into()));
+                                }
+                                let lock = format!("rif_{group_name_i}.{}_locked", field.name);
+                                values.push(lock.into());
+                            } else {
+                                let prefix = if !reg.is_external() && (field_impl.is_sw_write() || field.is_hw_write() || field_impl.is_constant()) {"rif_"} else {""};
+                                let name = format!("{prefix}{group_name}{intr_suffix}");
+                                let field_range = SignalRange::from_field(field, true);
+                                let value = ExprId::new_field_range(name, reg_idx, field_name.to_owned(), field_range);
+                                values.push(value.into());
+                            }
+                            // Save LSB
+                            prev_lsb = field.lsb;
+                        }
+                        if prev_lsb != 0 {
+                            values.push(LogicExpr::ValueU(0, prev_lsb.into()));
+                        }
+                        LogicExpr::Concat(values)
+                    };
+                let rd_data : ExprId = format!("{reg_name}__read_data").into();
+                self.write_assign(rd_data, rhs);
+            }
+        }
+
+        // Handle case of missing fields in a register implementation
+        for (group_name, hw_reg) in rif.hw_regs.items() {
+            // Skip register if read-only from firmware
+            let reg_impl = rif.get_hw_reg(&hw_reg.group);
+            if !reg_impl.port.is_out() && reg_impl.interrupt.is_empty() {continue;}
+            for (field_name,info) in &hw_reg.missing_fields {
+                // let rst = Self::value_to_str(info.reset, info.width, info.signed, info.width > 16);
+                let name = format!("rif_{group_name}.{field_name}");
+                self.write_assign(name.into(), info.into());
+            }
+        }
+
+
+        // Close the module
+        self.write_module_impl_footer(&rif_name);
+
+        // Save file
+        let filename = self.filename_rif(rif);
+        self.save(&filename)
+    }
+
+    // Add a clocking port to a module interface
+    fn add_clocking_port(&mut self, info: &ClockingInfo, list: &mut HashSet<String>, is_hw: bool) {
+        let kind = if is_hw { "Hardware" } else { "Software" };
+        // Clock
+        if !list.contains(&info.clk) {
+            let port = PortInfo::new_in(info.clk.to_owned(), format!("{kind} clock"));
+            self.write_port_decl(&port, None, false);
+            list.insert(info.clk.to_owned());
+        }
+        // Reset
+        if !list.contains(&info.rst.name) {
+            let port = PortInfo::new_in(info.rst.name.to_owned(), format!("{kind} {}", info.rst.desc()));
+            self.write_port_decl(&port, None, false);
+            list.insert(info.rst.name.to_owned());
+        }
+        // Clear
+        if !info.clear.is_empty() && !list.contains(&info.clear) {
+            let port = PortInfo::new_in(info.clear.to_owned(), format!("{kind} clear"));
+            self.write_port_decl(&port, None, false);
+            list.insert(info.clear.to_owned());
+        }
+    }
+
+    /// Generate RIFmux package (define address constant for each RIF instance)
+    fn gen_rifmux_pkg(&mut self, rifmux: &RifmuxInst) -> Result<(), Box<dyn std::error::Error>> {
+        let name_len = rifmux.components.iter().map(|c| c.get_name().len()).max().unwrap_or(0);
+        self.write_file_header();
+        self.write_rifmux_pkg_header(rifmux);
+        let w = ((rifmux.addr_width+3)>>2) as usize;
+        for comp in rifmux.components.iter() {
+            let pad = name_len - comp.get_name().len();
+            let name = format!("{}_BASE_ADDR{:<pad$}", comp.get_name().to_uppercase(), "");
+            let decl: SignalDecl= SignalDef::new_bus(name, rifmux.addr_width as u16, false).into();
+            let val = Self::value_to_str(comp.addr.into(), rifmux.addr_width.into(), false, true);
+            self.write_const(&decl, &val);
+        }
+        self.write_rifmux_pkg_footer(rifmux);
+    	Ok(())
+    }
+
+    // Hooks for RIF mux package
+    fn write_rifmux_pkg_header(&mut self, rifmux: &RifmuxInst) {
+        self.write_pkg_header(&rifmux.type_name);
+    }
+    fn write_rifmux_pkg_footer(&mut self, rifmux: &RifmuxInst) {
+        self.write_pkg_footer(&rifmux.type_name);
+    }
+
+    /// Generate RIFmux module
+    fn gen_rifmux(&mut self, rifmux: &RifmuxInst) -> Result<(), Box<dyn std::error::Error>> {
+        let rifmux_name = self.casing(&rifmux.type_name);
+        let name_len = rifmux.components.iter().map(|c| c.get_name().len()).max().unwrap_or(0);
+
+        self.write_file_header();
+        self.write_module_decl_header(&rifmux_name);
+        // Add port/reset port if not default interface
+        if !rifmux.interface.is_default() {
+            self.write_port_decl(&PortInfo::new_in(
+                rifmux.sw_clocking.clk.to_owned(), "Bridge clock".to_owned()), None, false);
+            self.write_port_decl(&PortInfo::new_in(
+                rifmux.sw_clocking.rst.name.to_owned(),
+                format!("Bridge reset : {}", rifmux.sw_clocking.rst.desc())), None, false);
+        }
+        // Add RIF interface for each component
+        for comp in rifmux.components.iter() {
+            let port = PortInfo::new_intf(
+                "rif_if".to_owned(),
+                format!("if_{:<1$}", comp.get_name(), name_len),
+                comp.get_desc_short().to_owned());
+            self.write_port_decl(&port, None, false);
+        }
+        self.write_intf_ports(&rifmux.interface);
+        self.write_module_decl_footer(&rifmux_name);
+
+        // Signals declaration
+        self.write_signal_decl(&SignalDecl::new_bit(
+            "addr_invalid".to_owned(),
+            "High when address is not in the range of any of the connected RIF".to_owned()));
+        self.write_signal_decl(&SignalDecl::new_bit(
+            "addr_invalid_next".to_owned(),
+            "Combinatorial version of addr_invalid".to_owned()));
+
+        // Add interface bridge when not default
+        let comp_info : CompInfo = rifmux.into();
+        self.write_intf_bridge(&rifmux.interface, &comp_info, &rifmux.sw_clocking.clk, &rifmux.sw_clocking.rst.name);
+
+        // Address demultiplexing
+        self.write_comment_box("Demux access");
+        let msb = rifmux.addr_width - 1;
+        let mut en_names : Vec<LogicExpr> = Vec::new();
+        for comp in rifmux.components.iter() {
+            let name = comp.get_name();
+            let width = comp.get_addr_width();
+            let range = Some(SignalRange::new(width, msb));
+            let addr_v = LogicExpr::eq(
+                ("if_rif", "addr", range).into(),
+               format!("{}", comp.addr >> width).into());
+            self.write_comment(1, &name.to_casing(Casing::Title));
+            let pad_len = name_len + 11 - name.len();
+            // Enable: rif_en & addr_v
+            let en = format!("if_{name}.en");
+            self.write_assign(
+                format!("{en:<0$}", name_len+11).into(),
+                LogicExpr::And(vec![("if_rif","en").into(), addr_v.clone()]));
+            // Force address to 0 when not valid
+            self.write_assign(
+                format!("if_{name}.addr{0:<1$}", "", pad_len-8).into(),
+                LogicExpr::ite(
+                    addr_v,
+                    format!("if_rif.addr[{}:0]", width-1).into(),
+                    LogicExpr::ValueU(0, width.into())
+                )
+            );
+            // Direct copy data & rd_wrn on the interface
+            self.write_assign(
+                format!("if_{name}.wr_data{0:<1$}", "", pad_len-11).into(),
+                "if_rif.wr_data".into());
+            self.write_assign(
+                format!("if_{name}.rd_wrn{0:<1$}", "", pad_len-10).into(),
+                ("if_rif","wr_data").into());
+            // Save enable list for later
+            en_names.push(en.into());
+        }
+
+        // Feedback (read data/error) multiplexing
+        self.write_comment_box("Mux feedback");
+        self.write_assign(
+            "addr_invalid_next".into(),
+            LogicExpr::and(
+                ("if_rif","en").into(),
+                LogicExpr::not(LogicExpr::Or(en_names))
+            )
+        );
+        // TODO : Use argument to insert pipe
+        self.write_assign(
+            "addr_invalid".into(),
+            "addr_invalid_next".into()
+        );
+        self.write("\n");
+
+        let mut dones : Vec<LogicExpr> = ["addr_invalid".into()].to_vec();
+        dones.extend(rifmux.components.iter()
+            .map(|c| LogicExpr::from(
+                format!("if_{}.done{:<2$}", c.get_name(), "", name_len-c.get_name().len())))
+        );
+        self.write_assign("if_rif.done".into(), LogicExpr::Or(dones));
+
+        let mut dones : Vec<LogicExpr> = ["addr_invalid_next".into()].to_vec();
+        dones.extend(rifmux.components.iter()
+            .map(|c| LogicExpr::from(
+                format!("if_{}.done_next{:<2$}", c.get_name(), "", name_len-c.get_name().len())))
+        );
+        self.write_assign("if_rif.done_next".into(), LogicExpr::Or(dones));
+        self.write("\n");
+
+        self.write_rifmux_muxfb(&rifmux.components, "rd_data", name_len, (0, rifmux.data_width.into()));
+        self.write_rifmux_muxfb(&rifmux.components, "err_addr", name_len, (1,1));
+        self.write_rifmux_muxfb(&rifmux.components, "err_access", name_len, (0,1));
+        self.write_rifmux_muxfb(&rifmux.components, "err_addr_next", name_len, (1,1));
+        self.write_rifmux_muxfb(&rifmux.components, "err_access_next", name_len, (0,1));
+
+        self.write_module_impl_footer(&rifmux_name);
+    	Ok(())
+    }
+
+    fn write_rifmux_muxfb(&mut self, comps: &[CompInst], name: &str, len: usize, err_val: (usize,usize)) {
+        let suffix = if name.ends_with("_next") {"_next"} else {""};
+        let mut rhs = LogicExpr::Ite(Vec::new(), Box::new(LogicExpr::ValueU(err_val.0 as u128, err_val.1)));
+        for (i,comp) in comps.iter().enumerate() {
+            let top = comp.get_name();
+            let pad = len - top.len();
+            rhs.add_ite(
+                format!("if_{top}.done{suffix}{:<pad$}", "").into(),
+                format!("if_{top}.{name}{:<pad$}", "").into(),
+            );
+        }
+        self.write_assign(
+            format!("if_rif.{name}").into(),
+            rhs
+        );
+    }
+
+    fn gen_riftop(&mut self, rifmux: &RifmuxInst) -> Result<(), Box<dyn std::error::Error>> {
+        let Some(riftop) = &rifmux.top else { return Ok(())};
+        let riftop_name = self.casing(&riftop.name);
+
+        let sw_clk = &rifmux.sw_clocking.clk;
+        let sw_rst = &rifmux.sw_clocking.rst.name;
+        let intf_ports = RifIntfPorts::new(&rifmux.interface);
+        let mut names : Vec<String> = [sw_clk.to_owned(), sw_rst.to_owned()].to_vec();
+
+        self.write_file_header();
+        // Module declaration
+        self.write_module_decl_header(&riftop_name);
+        self.write_comment(1, "RTL clock/reset");
+        self.write_port_decl(&PortInfo::new_in(sw_clk.to_owned(), "Software clock".to_owned()), None, false);
+        self.write_port_decl(&PortInfo::new_in(sw_rst.to_owned(), format!("Software reset : {}", rifmux.sw_clocking.rst.desc())), None, false);
+        let mut nb_ctrl = 0;
+        for rif in rifmux.components.iter().filter_map(|c| c.get_rif()) {
+            nb_ctrl += rif.ports.clk_ens.len() + rif.ports.ctrls.len();
+            let ports = rif.ports.clocks.iter().skip(1)
+                .chain(rif.ports.resets.iter().skip(1));
+            for port in ports {
+                if !names.iter().any(|n| n==port.name()) {
+                    names.push(port.name().to_owned());
+                    self.write_port_decl(port, None, false);
+                }
+            }
+        }
+        // Controls: clock enables, clear, lock, ...
+        if nb_ctrl > 0 {
+            self.write_comment(1, "Control signals");
+            for rif in rifmux.components.iter().filter_map(|c| c.get_rif()) {
+                let ports = rif.ports.clk_ens.iter()
+                    .chain(rif.ports.ctrls.iter());
+                for port in ports {
+                    if !names.iter().any(|n| n==port.name()) {
+                        names.push(port.name().to_owned());
+                        self.write_port_decl(port, None, false);
+                    }
+                }
+            }
+        }
+        // Register of each instances
+        for rif in rifmux.components.iter().filter_map(|c| c.get_rif()) {
+            let prefix = riftop.prefixes.get(&rif.inst_name);
+            self.write_comment(1, &format!("{} registers", rif.inst_name.to_casing(Casing::Title)));
+            for port in rif.ports.regs.iter().filter(|p| p.dir.is_in()) {
+                self.write_port_decl(port, prefix, false);
+            }
+            for port in rif.ports.regs.iter().filter(|p| p.dir.is_out()) {
+                self.write_port_decl(port, prefix, false);
+            }
+            for port in rif.ports.irqs.iter() {
+                self.write_port_decl(port, prefix, false);
+            }
+        }
+        // Control interface
+        self.write_comment(1, "Control interface");
+        self.write_intf_ports(&rifmux.interface);
+        self.write_module_decl_footer(&riftop_name);
+
+        // Interfaces declaration
+        self.write_comment_box("Interfaces to sub-RIF");
+        for comp in rifmux.components.iter().filter(|c| !c.is_external()) {
+            self.write_rif_decl(&CompInfo::from(&comp.inst), sw_clk, sw_rst);
+        }
+
+        // Instances RIF MUX and all RIFs
+        self.write_comment_box("Instances");
+
+        //
+        // RIFs
+        for rif in rifmux.components.iter().filter_map(|c| c.get_rif()) {
+            let inst_name = self.casing(&rif.inst_name);
+            let type_name = self.casing(&rif.type_name);
+            self.write_inst_header(&type_name, &inst_name);
+            // Bind main clock/reset
+            if let Some(clk) = rif.ports.clocks.first() {
+                self.write_port_bind(clk.name(), sw_clk, false);
+            }
+            if let Some(rst) = rif.ports.resets.first() {
+                self.write_port_bind(rst.name(), sw_rst, false);
+            }
+            // Bind all other ports
+            let prefix = riftop.prefixes.get(&inst_name)
+                .map(|p| format!("{p}_"))
+                .unwrap_or("".to_owned());
+            let ports = rif.ports.clocks.iter().skip(1)
+                .chain(rif.ports.resets.iter().skip(1))
+                .chain(rif.ports.clk_ens.iter())
+                .chain(rif.ports.ctrls.iter());
+            for port in ports {
+                self.write_port_bind(port.name(), port.name(), false);
+            }
+            // Add prefix to input rif signal
+            for port in rif.ports.regs.iter().filter(|p| p.dir.is_in()) {
+                self.write_port_bind(port.name(), &format!("{prefix}{}", port.name()), false);
+            }
+            // Output port are prefixed by rif_: insert the prefix
+            let ports = rif.ports.regs.iter().filter(|p| p.dir.is_out())
+                .chain(rif.ports.irqs.iter());
+            for port in ports {
+                let name_base = port.name().strip_prefix("rif_").unwrap_or(port.name());
+                self.write_port_bind(port.name(), &format!("rif_{prefix}{name_base}"), false);
+            }
+            self.write_intf_bind(&inst_name, true);
+        }
+
+        self.write_module_impl_footer(&riftop_name);
+
+        // Write file
+        self.save(&format!("{}.sv", riftop_name))
+    }
+
+    fn write_intf_ports(&mut self, intf: &Interface) {
+        let intf_ports = RifIntfPorts::new(intf);
+        let mut ports = intf_ports.iter().peekable();
+        while let Some(port) = ports.next()  {
+            self.write_port_decl(port, None, ports.peek().is_none());
+        }
+    }
+
+    fn write_intf_bridge(&mut self, intf: &Interface, comp: &CompInfo, sw_clk: &str, sw_rst: &str) {
+        if intf.is_default() {
+            return;
+        }
+
+        self.write_comment_box("Bridge to the internal register interface");
+        self.write_rif_decl(comp, sw_clk, sw_rst);
+        self.write("\n");
+        let name = intf.name();
+        // TODO:
+        // self.write(&format!("   bridge_{name}_rif#({addr_w}, {data_w}) i_bridge(.*);\n"));
+    }
+
+    //----------------------------------
+    // Generic functions
+    fn write_pkg_header(&mut self, name: &str) {}
+    fn write_pkg_footer(&mut self, name: &str) {}
+    fn write_const(&mut self, signal: &SignalDecl, value: &str) {}
+    fn write_enum_header(&mut self, name: &str, width: u8) {}
+    fn write_enum_entry(&mut self, entry: &EnumEntry, is_last: bool) {}
+    fn write_enum_footer(&mut self, name: &str, width: u8) {}
+    fn write_struct_header(&mut self, name: &str, fields: &[SignalDecl]) {}
+    fn write_struct_field(&mut self, field: &SignalDecl, is_last: bool) {}
+    fn write_struct_footer(&mut self, name: &str) {}
+    fn write_module_decl_header(&mut self, name: &str) {}
+    fn write_module_decl_footer(&mut self, name: &str) {}
+    fn write_module_impl_footer(&mut self, name: &str) {}
+    fn write_port_decl(&mut self, port: &PortInfo, prefix: Option<&String>, is_last: bool) {}
+    fn write_rif_decl(&mut self, comp: &CompInfo, clk: &str, rst: &str) {}
+    fn write_signal_decl(&mut self, signal: &SignalDecl) {}
+    fn write_inst_header(&mut self, type_name: &str, inst_name: &str) {}
+    fn write_port_bind(&mut self, port_name: &str, signal_name: &str, is_last: bool) {}
+    fn write_intf_bind(&mut self, name: &str, is_last: bool) {}
+    fn write_assign(&mut self, lhs: ExprId, rhs: LogicExpr) {}
+    fn write_process_seq(&mut self, clk: &str, rst: &ResetDef, name: &str, signals: &[SignalInfoN]) {}
+    fn write_process_comb_header(&mut self, name: &str) {}
+    fn write_match_header(&mut self, name: &str) {}
+    fn write_match_footer(&mut self) {}
+    fn write_match_case_header(&mut self, value: LogicExpr) {}
+    fn write_match_case_footer(&mut self) {}
+    fn write_cond_if(&mut self, lvl: usize, cond: LogicExpr) {}
+    fn write_cond_else(&mut self, lvl: usize, cond: Option<LogicExpr>) {}
+    fn write_cond_end(&mut self, lvl: usize) {}
+    fn write_assign_comb(&mut self, lvl: usize, lhs: ExprId, rhs: LogicExpr) {}
+    fn write_process_comb_footer(&mut self, name: &str) {}
+
+    /// Convert a value to a string
+    fn value_to_str(val: u128, width: u16, is_signed: bool, is_hexa: bool) -> String;
+
+    /// Write a comment
+    fn write_comment(&self, lvl: usize, txt: &str);
+
+    /// Write a comment enclosed in an ascii box
+    fn write_comment_box(&self, txt: &str);
+
+    /// Return number of pipe level at the interface
+    fn nb_pipe(&self) -> usize {1}
+
+}
+
+fn path_to_signal(path: &str, ext: &str, group_info: (&str, &str), idx: Option<u16>, field_name: &str, field_idx: &str) -> ExprId {
+
+    if path.starts_with('(') {
+        return path.into();
+    }
+    let mut parts = path.split('.');
+    match (parts.next(),parts.next()) {
+        // No register name, or the register name match the type: local field
+        (Some(f),None) if !f.is_empty() => (group_info.1, f).into(),
+        (Some(r),Some(f)) if r == group_info.0 || r == "this" || r == "self" => (group_info.1, f).into(),
+        // Format ".name" : input port
+        (Some(""),Some(n)) => n.into(),
+        // Esternal field
+        (Some(r),Some(f)) => (r,f).into(),
+        // No name provided: use default naming
+        _ => ExprId {
+            name: group_info.1.to_owned(),
+            idx,
+            field: Some(format!("{field_name}{ext}{field_idx}")),
+            range: None,
+        }
+    }
+}

@@ -4,12 +4,21 @@ use crate::{error::RifErrorKind, parser::parser_expr::ParamValues};
 
 use super::{Access, ClkEn, Context, Description, Field, FieldSwKind, InterruptInfo, InterruptInfoField, Visibility, Width};
 
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq)]
 pub enum RegPulseKind {
     Write(String),
     Read(String),
     Access(String),
+}
+
+impl RegPulseKind {
+    pub fn clk(&self) -> &str {
+        match self {
+            RegPulseKind::Write(n)  => n,
+            RegPulseKind::Read(n)   => n,
+            RegPulseKind::Access(n) => n,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]

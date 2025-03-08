@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use crate::{
     parser::{get_rif, parser_expr::ParamValues, RifGenSrc, RifGenTop},
     rifgen::{
-        order_dict::{OrderDict, OrderedDictIterV}, Access, AddressKind, ClockingInfo, Description, EnumDef, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, Interface, InterruptRegKind, Limit, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegPulseKind, ResetVal, ResetValOverride, Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SuffixInfo, Visibility
+        order_dict::{OrderDict, OrderedDictIterV}, Access, AddressKind, ClockingInfo, CounterInfo, Description, EnumDef, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, Interface, InterruptRegKind, InterruptTrigger, Limit, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegPulseKind, ResetVal, ResetValOverride, Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SuffixInfo, Visibility
     },
 };
 
@@ -39,6 +39,7 @@ pub struct RifmuxInst {
 pub struct RifExt {
     pub inst_name: String,
     pub addr_width: u8,
+    pub data_width: u8,
     pub description: Description,
 }
 
@@ -139,6 +140,13 @@ impl CompInst {
     pub fn get_rif(&self) -> Option<&RifInst> {
         match &self.inst {
             Comp::Rif(rif) => Some(rif),
+            _ => None
+        }
+    }
+
+    pub fn get_rifmux(&self) -> Option<&RifmuxInst> {
+        match &self.inst {
+            Comp::Rifmux(rifmux) => Some(rifmux),
             _ => None
         }
     }
@@ -807,7 +815,7 @@ impl RifRegInst {
         // get the register value once all override were applied
         for f in r.fields.iter() {
             let reset = f.reset.to_u128(f.width);
-            if f.partial.0.is_some() {
+            if f.is_partial() {
                 r.group_idx = rifs.partials.push(&r.group_type, &r.group_name, PartialFieldInfo::new(f));
             }
             r.reset |= reset << f.lsb;
@@ -1038,6 +1046,11 @@ impl RifFieldInst {
         }
     }
 
+    /// Flag when a field is split on multiple register
+    pub fn is_partial(&self) -> bool {
+        self.partial.0.is_some()
+    }
+
     /// Flag when a field is disabled
     pub fn is_disabled(&self) -> bool {
         self.visibility.is_disabled()
@@ -1077,12 +1090,29 @@ impl RifFieldInst {
     /// Flag when a field is a counter
     pub fn is_counter(&self)  -> bool {
         self.hw_kind.iter().any(|x| x.is_counter())
-        // self.hw_kind.iter().find(|&x| x.is_counter()).is_some()
+    }
+
+    /// Return the counter info if it exist
+    pub fn counter_info(&self)  -> Option<&CounterInfo> {
+        self.hw_kind.iter()
+            .find_map(|x|
+                if let FieldHwKind::Counter(info) = x {Some(info)}
+                else {None}
+            )
     }
 
     /// Flag when a field is a password
     pub fn is_password(&self) -> bool {
         self.sw_kind.is_password()
+    }
+
+    /// Return the counter info if it exist
+    pub fn password_info(&self)  -> Option<&PasswordInfo> {
+        if let FieldSwKind::Password(info) = &self.sw_kind {
+            Some(info)
+        } else {
+            None
+        }
     }
 
     /// Flag field which has a Hardware Write Enable
@@ -1093,6 +1123,20 @@ impl RifFieldInst {
     /// Return the field position MSB
     pub fn msb(&self) -> u8 {
         self.lsb + self.width - 1
+    }
+
+    /// Return the field position MSB
+    pub fn partial_lsb(&self) -> u16 {
+        self.partial.0.unwrap_or(0)
+    }
+
+    /// Return a suffix _lsb if partial else an empty string
+    pub fn partial_suffix(&self) -> String {
+        if let Some(partial_pos) = self.partial.0 {
+            format!("_{}",partial_pos)
+        } else {
+            "".to_owned()
+        }
     }
 
     /// Return name with index in bracket if part of an array
@@ -1113,6 +1157,7 @@ impl RifFieldInst {
         }
     }
 
+
     /// return reset value on 128b
     pub fn reset(&self) -> u128 {
         self.reset.to_u128(self.width)
@@ -1121,6 +1166,14 @@ impl RifFieldInst {
     /// return reset value in a string: hexa/decimal are chosen automatically based on width
     pub fn reset_str(&self) -> String {
         val_str(self.reset(), self.width.into(), self.is_signed())
+    }
+
+    /// Return interrupt trigger for the field
+    /// If no interrupt trigger is found return a default one
+    pub fn intr_trig(&self, reg_trig: InterruptTrigger) -> InterruptTrigger {
+        self.hw_kind.iter()
+            .find_map(|k| if let FieldHwKind::Interrupt(t) = k {Some(t.to_owned())} else {None})
+            .unwrap_or(reg_trig)
     }
 }
 
@@ -1272,7 +1325,7 @@ impl RifmuxInst {
                     }
                 }
                 RifType::Ext(w) => {
-                    let ext = RifExt { inst_name: i.name.clone(), addr_width: *w, description: i.description.clone() };
+                    let ext = RifExt { inst_name: i.name.clone(), addr_width: *w, data_width: rifmux.data_width.value(), description: i.description.clone() };
                     rm.components.push(CompInst::new_ext(ext, addr, i.group.clone()));
                 }
             }
@@ -1327,6 +1380,14 @@ impl Comp {
             Comp::Rifmux(r)   => r.addr_width,
             Comp::Rif(r)      => r.addr_width,
             Comp::External(r) => r.addr_width,
+        }
+    }
+
+    pub fn get_data_width(&self) -> u8 {
+        match self {
+            Comp::Rifmux(r)   => r.data_width,
+            Comp::Rif(r)      => r.data_width,
+            Comp::External(r) => r.data_width,
         }
     }
 

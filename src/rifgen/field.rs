@@ -153,6 +153,7 @@ pub enum CounterKind {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+/// Counter definition: Up/Down with optional external incr/decr value, overflow handling and clear signal
 pub struct CounterInfo {
     pub kind: CounterKind,
     pub incr_val: u8,
@@ -163,11 +164,17 @@ pub struct CounterInfo {
 }
 
 impl CounterInfo {
+    /// True when counter can increment
     pub fn is_up(&self) -> bool {
         matches!(self.kind, CounterKind::Up | CounterKind::UpDown)
     }
+    /// True when counter can decrement
     pub fn is_down(&self) -> bool {
         matches!(self.kind, CounterKind::Down | CounterKind::UpDown)
+    }
+    /// True when counter can saturate and incr/decr are not single bit
+    pub fn has_satn(&self) -> bool {
+        self.sat && (self.incr_val > 1 || self.decr_val > 1)
     }
 }
 
@@ -408,9 +415,13 @@ impl EnumKind {
             _ => None,
         }
     }
-    #[allow(dead_code)]
+
     pub fn is_type(&self) -> bool {
         matches!(self,EnumKind::Type(_))
+    }
+
+    pub fn is_none(&self) -> bool {
+        matches!(self,EnumKind::None)
     }
 }
 
@@ -865,6 +876,11 @@ impl Field {
     pub fn is_signed(&self) -> bool {
         let reset = self.reset.first().unwrap_or(&ResetVal::Unsigned(0));
         matches!(reset, ResetVal::Signed(_))
+    }
+
+    /// Flag when a field is split on multiple register
+    pub fn is_partial(&self) -> bool {
+        self.partial.0.is_some()
     }
 
     /// Set interrupt settings

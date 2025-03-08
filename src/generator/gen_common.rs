@@ -127,6 +127,53 @@ impl GeneratorBaseSetting {
     }
 }
 
+/// Component basic information: name, addr/data bus width, page/group number
+pub struct CompInfo {
+    pub name: String,
+    pub addr_width: u8,
+    pub data_width: u8,
+    pub cnt: usize,
+}
+
+impl From<&RifInst> for CompInfo {
+    fn from(rif: &RifInst) -> Self {
+        CompInfo {
+            name: rif.type_name.to_owned(),
+            addr_width: rif.addr_width,
+            data_width: rif.data_width,
+            cnt: rif.pages.len()
+        }
+    }
+}
+
+impl From<&RifmuxInst> for CompInfo {
+    fn from(rifmux: &RifmuxInst) -> Self {
+        CompInfo {
+            name: rifmux.type_name.to_owned(),
+            addr_width: rifmux.addr_width,
+            data_width: rifmux.data_width,
+            cnt: rifmux.groups.len()
+        }
+    }
+}
+
+impl From<&Comp> for CompInfo {
+    fn from(comp: &Comp) -> Self {
+        let cnt = match comp {
+            Comp::Rifmux(rifmux) => rifmux.groups.len(),
+            Comp::Rif(rif) => rif.pages.len(),
+            Comp::External(_) => 0,
+        };
+        CompInfo {
+            name: comp.get_type().to_owned(),
+            addr_width: comp.get_addr_width(),
+            data_width: comp.get_data_width(),
+            cnt
+        }
+    }
+}
+
+
 #[derive(Clone, Debug)]
 pub struct GeneratorCore {
     /// Basic settings

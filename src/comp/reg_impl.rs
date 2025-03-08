@@ -1,10 +1,19 @@
 use std::collections::BTreeMap;
 
-use crate::{parser::{get_rif, parser_expr::ParamValues}, rifgen::{
-    order_dict::{OrderDict, OrderedDictIterV}, Access, ClkEn, Description, EnumKind, ExternalKind, Field, FieldHwKind, FieldSwKind, InterruptDesc, InterruptInfo, Limit, Lock, RegDef, RegDefOrIncl, RegIncludePath, RegPulseKind, ResetVal, Rif
-}};
+use crate::{
+    parser::{get_rif, parser_expr::ParamValues},
+    rifgen::{
+        order_dict::{OrderDict, OrderedDictIterV},
+        Access, ClkEn, Description, EnumKind, ExternalKind,
+        Field, FieldHwKind, FieldSwKind, InterruptDesc, InterruptInfo,
+        Limit, Lock, RegDef, RegDefOrIncl, RegIncludePath, RegPulseKind, ResetVal, Rif
+    }
+};
 
-use super::comp_inst::{val_str, PartialFieldDict, PartialFieldInfos, RifPageInst, RifRegInst, RifsInfo};
+use super::{
+    comp_inst::{val_str, PartialFieldDict, PartialFieldInfos, RifPageInst, RifRegInst, RifsInfo},
+    hw_info::CastInfo
+};
 
 /// Field Implementation
 /// Contains all information for the hardware field after compilation
@@ -58,7 +67,7 @@ impl FieldImpl {
             array += field.partial.1;
         }
         // Handle case of partial field
-        let (width, reset) = if field.partial.0.is_some() {
+        let (width, reset) = if field.is_partial() {
             // By construction the partials should always be Some if the field is partial
             partials.unwrap().merge(&field.name, signed)
         } else {
@@ -90,7 +99,7 @@ impl FieldImpl {
             lock: field.lock.clone(),
             intr_desc: field.intr_desc.clone(),
             limit: field.limit.clone(),
-            is_partial: field.partial.0.is_some(),
+            is_partial: field.is_partial(),
             ctrl_idx
         }
     }
@@ -160,6 +169,31 @@ impl FieldImpl {
     /// return reset value in a string: hexa/decimal are chosen automatically based on width
     pub fn reset_str(&self, idx: usize) -> String {
         val_str(self.get_reset(idx), self.width, self.signed)
+    }
+
+    /// Return width of hardware signal needed for implementation
+    pub fn hdl_width(&self) -> u16 {
+        if self.sw_kind.is_password() {2}
+        else if self.is_counter() {self.width+1}
+        else {self.width}
+    }
+
+    pub fn hdl_cast(&self, scope: &str, reg_type: &str) -> CastInfo {
+        if let EnumKind::Type(t) = &self.enum_kind {
+            let mut ts = t.split("::");
+            let (scope, name) = match (ts.next(), ts.next()) {
+                (Some(s), Some(n))   => (s.to_owned(), n.to_owned()),
+                (Some("type"), None) => (scope.to_owned(), format!("e_{reg_type}_{}", self.name)),
+                (Some(n), None)      => (scope.to_owned(), n.to_owned()),
+                _ => unreachable!("Invalid enum type {t}"),
+            };
+            CastInfo::Custom(scope, name)
+        } else if self.signed {
+            CastInfo::Signed
+        } else {
+            CastInfo::None
+        }
+
     }
 
 }
@@ -437,7 +471,7 @@ impl RegImpl {
                 }
                 // Partial Array
                 if f.partial.1 > 0 && field_impl.array > 0 {
-                    if f.partial.0.is_some() {
+                    if f.is_partial() {
                         return Err(format!("Field {}.{} : arrays of partial field is not supported !", reg.name, f.name))
                     }
                     // Check contiguous partial array in increasing order
@@ -449,7 +483,7 @@ impl RegImpl {
                     for r in f.reset.iter() {
                         field_impl.reset.push(r.clone());
                     }
-                } else if f.partial.0.is_some() {
+                } else if f.is_partial() {
                     for kind in f.hw_kind.iter() {
                         if !field_impl.hw_kind.iter().any(|k| k==kind) {
                             // println!("Field {} kind updated on {} : {:?}", field_impl.name, f.name, kind);

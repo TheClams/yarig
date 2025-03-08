@@ -7,7 +7,7 @@ use std::{
 use crate::{
     comp::{
         comp_inst::{ArrayIdx, Comp, CompInst, RifFieldInst, RifInst, RifmuxInst},
-        hw_info::{PortDir, PortInfo, PortWidth, RifIntfPorts, SignalInfo}},
+        hw_info::{PortDir, PortInfo, RifIntfPorts, SignalInfo, SignalKind}},
     rifgen::{
         order_dict::OrderDict, Access, ClkEn, ClockingInfo, CounterInfo, CounterKind, EnumKind, ExternalKind, FieldHwKind, FieldSwKind, Interface, InterruptClr, InterruptRegKind, InterruptTrigger, LimitValue, RegPulseKind, ResetDef
     }
@@ -351,14 +351,6 @@ impl GeneratorSv {
                 self.write_port(ctrl, None, 0, 0, false, false);
             }
         }
-        // Collect external pages
-        let mut ext_pages = Vec::new();
-        for page in rif.pages.iter() {
-            if let Some(width) = &page.external {
-                ext_pages.push((page.name.to_lowercase(),page.addr,width));
-                continue;
-            }
-        }
 
         // Input
         let mut interrupts = Vec::new();
@@ -398,6 +390,14 @@ impl GeneratorSv {
             self.write(&format!("   output var logic rif_{0}_irq, // High when one interrupt field of {0} is asserted\n", irq));
         }
 
+        // Collect external pages
+        let mut ext_pages = Vec::new();
+        for page in rif.pages.iter() {
+            if let Some(width) = &page.external {
+                ext_pages.push((page.name.to_lowercase(),page.addr,width));
+                continue;
+            }
+        }
         // Add control to external pages
         for (name,_, _) in ext_pages.iter() {
             self.write(&format!(
@@ -592,15 +592,6 @@ impl GeneratorSv {
             addr_shift
         ));
 
-        // Hardware clock enable: add register access to ensure field can be modify  by firmware
-        // self.names.clear();
-        // for hw_clk in rif.hw_clocking.iter() {
-        //     if !hw_clk.en.is_empty() && !self.names.contains(&hw_clk.en){
-        //         self.write(&format!("   assign {0}_l = {0} || if_rif.en;\n",hw_clk.en));
-        //         self.names.push(hw_clk.en.to_owned());
-        //     }
-        // }
-
         // Decode process
         self.write("   always_comb begin : proc_decode\n");
         self.write(&format!("      rif_read_data_l = {}'b0;\n", rif.data_width));
@@ -763,24 +754,24 @@ impl GeneratorSv {
                     let field_name = field.name().to_casing(Snake);
                     let field_name_flat = field.name_flat().to_casing(Snake);
                     // Local field: for partial field ensure the current one is also local
-                    let field_path = if field_impl.is_local() && field.has_write_mod() && !reg.is_external() {
+                    let field_id = if field_impl.is_local() && field.has_write_mod() && !reg.is_external() {
                         format!("{group_name}{intr_suffix}{reg_idx}_{field_name_flat}__reg{partial_range}")
                     } else {
                         format!("rif_{group_name}{intr_suffix}{reg_idxb}.{field_name}{partial_range}")
                     };
                     let reg_field_name = format!("{group_name}{intr_suffix}{reg_idx}_{field_name_flat}");
 
-                    let reset_str = Self::field_reset_str(field, false, &rif_pkg_name, &reg.reg_type);
+                    let reset_expr = Self::field_reset_str(field, false, &rif_pkg_name, &reg.reg_type);
 
                     // Disabled field ? simply assign to its reset value
                     if field.is_disabled() && (field.sw_kind==FieldSwKind::ReadWrite || field.sw_kind==FieldSwKind::WriteOnly) {
-                        self.write(&format!("   assign {field_path} = {reset_str}; // Disabled\n"));
+                        self.write(&format!("   assign {field_id} = {reset_expr}; // Disabled\n"));
                         continue;
                     }
 
                     // Constant field
                     if field_impl.is_constant() {
-                        self.write(&format!("   assign {field_path} = {reset_str}; \n"));
+                        self.write(&format!("   assign {field_id} = {reset_expr}; \n"));
                         continue;
                     }
 
@@ -849,13 +840,13 @@ impl GeneratorSv {
                     // For external register combinatorial assign from the interface bus
                     // Also add logic for enum field with limit
                     if reg.is_external() && field.is_sw_write() {
-                        self.write(&format!("   assign {} = {};\n", field_path, field_val));
+                        self.write(&format!("   assign {} = {};\n", field_id, field_val));
                         continue;
                     }
 
                     // Combinatorial pulse : direct assign
                     if field.sw_kind.is_pulse_comb() {
-                        self.write(&format!("   assign {field_path} = "));
+                        self.write(&format!("   assign {field_id} = "));
                         self.write(&format!("{reg_name}__decode & if_rif.en & ~if_rif.rd_wrn ? "));
                         self.write(&format!("{field_val} : {}'b0;\n", field.width));
                         continue;
@@ -865,7 +856,7 @@ impl GeneratorSv {
                     if let Some(FieldHwKind::Counter(info)) = field.hw_kind.first() {
                         if info.sat || info.event {
                             let msb = field.width-1;
-                            self.write(&format!("   assign {}_event = ", field_path));
+                            self.write(&format!("   assign {}_event = ", field_id));
                             if field.is_sw_write() {
                                 let pol = if field.sw_kind==FieldSwKind::ReadClr {"~"} else {""};
                                 self.write(&format!("(~{reg_name}__decode | ~if_rif.en | {pol}if_rif.rd_wrn) & "));
@@ -876,13 +867,13 @@ impl GeneratorSv {
                                     field.width));
                             } else {
                                 if info.incr_val > 0 {
-                                    self.write(&format!("      (~{reg_field_name}__next[{msb}] & {field_path}[{msb}] & {field_path}_incr_en)"));
+                                    self.write(&format!("      (~{reg_field_name}__next[{msb}] & {field_id}[{msb}] & {field_id}_incr_en)"));
                                 }
                                 if info.decr_val > 0 {
                                     if info.incr_val > 0 {
                                         self.write(" |\n");
                                     }
-                                    self.write(&format!("      ({reg_field_name}__next[{msb}] & ~{field_path}[{msb}] & {field_path}_decr_en)"));
+                                    self.write(&format!("      ({reg_field_name}__next[{msb}] & ~{field_id}[{msb}] & {field_id}_decr_en)"));
                                 }
                             }
                             self.write(");\n");
@@ -913,11 +904,11 @@ impl GeneratorSv {
                         self.write(&format!(" |\n      ({reg_name}__decode & if_rif.en & "));
                         match intr_info.clear {
                             InterruptClr::Read => self.write(&format!("if_rif.rd_wrn ? {}'b0", field.width)),
-                            InterruptClr::Write0 => self.write(&format!("~if_rif.rd_wrn ? ({} & {})", field_val, field_path)),
-                            InterruptClr::Write1 => self.write(&format!("~if_rif.rd_wrn ? (~{} & {})", field_val, field_path)),
+                            InterruptClr::Write0 => self.write(&format!("~if_rif.rd_wrn ? ({} & {})", field_val, field_id)),
+                            InterruptClr::Write1 => self.write(&format!("~if_rif.rd_wrn ? (~{} & {})", field_val, field_id)),
                             InterruptClr::Hw => todo!(),
                         }
-                        self.write(&format!(" : {});\n", field_path));
+                        self.write(&format!(" : {});\n", field_id));
                         continue;
                     }
 
@@ -926,7 +917,7 @@ impl GeneratorSv {
                     if reg.is_intr_derived() && reg.intr_info.0 !=InterruptRegKind::Pending {
                         self.write(&format!("   assign {reg_field_name}__next{partial_range} = \n      "));
                         self.write(&format!("{reg_name}__decode & if_rif.en & ~if_rif.rd_wrn ? {field_val} :\n      "));
-                        self.write(&format!("{field_path};\n"));
+                        self.write(&format!("{field_id};\n"));
                         continue;
                     }
 
@@ -949,7 +940,7 @@ impl GeneratorSv {
 
                         // Handle registered pulse: need to maintain pulse high until clock enable is seen
                         if field.sw_kind.is_pulse() && !field_clken.is_empty() {
-                            self.write(&format!("{field_path} && {field_clken} ? 1'b0 :\n      "));
+                            self.write(&format!("{field_id} && {field_clken} ? 1'b0 :\n      "));
                         }
                         // Handle hardware access
                         if field.is_hw_write() {
@@ -970,7 +961,7 @@ impl GeneratorSv {
                                         if field.width == 1 {
                                             self.write("1'b1");
                                         } else {
-                                            self.write(&format!("{field_path} | {group_name_i}.{field_name}{partial_range}"));
+                                            self.write(&format!("{field_id} | {group_name_i}.{field_name}{partial_range}"));
                                         }
                                     },
                                     FieldHwKind::Clear(info) => {
@@ -979,16 +970,16 @@ impl GeneratorSv {
                                         if field.width == 1 {
                                             self.write("1'b0");
                                         } else {
-                                            self.write(&format!("{field_path} & ~{group_name_i}.{field_name}{partial_range}"));
+                                            self.write(&format!("{field_id} & ~{group_name_i}.{field_name}{partial_range}"));
                                         }
                                     },
                                     FieldHwKind::Toggle(info) => {
                                         let sig = Self::get_signal_name(info, suffix, &reg.group_type, &group_name, &reg_idxb, &field_name, &idx);
                                         self.write(&format!("{sig} ? "));
                                         if field.width == 1 {
-                                            self.write(&format!("~{field_path}"));
+                                            self.write(&format!("~{field_id}"));
                                         } else {
-                                            self.write(&format!("{field_path} ^ {group_name_i}.{field_name}{partial_range}"));
+                                            self.write(&format!("{field_id} ^ {group_name_i}.{field_name}{partial_range}"));
                                         }
                                     },
                                     // Counter : save the info for later implementation (counter has less prevalence than software access)
@@ -1005,6 +996,7 @@ impl GeneratorSv {
                             }
                         }
 
+                        // Handle Software access
                         if field.is_sw_write() {
                             self.write(&format!("{reg_name}__decode & if_rif.en "));
                             // Handle Software access
@@ -1017,7 +1009,7 @@ impl GeneratorSv {
                                     if field.width == 1 {
                                         self.write(&format!("& {field_val} ? 1'b0"));
                                     } else {
-                                        self.write(&format!("? {field_path} & ~{field_val}"));
+                                        self.write(&format!("? {field_id} & ~{field_val}"));
                                     }
                                 }
                                 FieldSwKind::W0Clr => {
@@ -1025,29 +1017,29 @@ impl GeneratorSv {
                                     if field.width == 1 {
                                         self.write(&format!("& ~{field_val} ? 1'b0"));
                                     } else {
-                                        self.write(&format!("{field_path} & {field_val}"));
+                                        self.write(&format!("{field_id} & {field_val}"));
                                     }
                                 }
                                 FieldSwKind::W1Set |
                                 FieldSwKind::W1Pulse(_,_) => {
                                     self.write("& ~if_rif.rd_wrn ? ");
                                     if field.width > 1 {
-                                        self.write(&format!("{field_path} | "));
+                                        self.write(&format!("{field_id} | "));
                                     }
                                     self.write(&field_val);
                                 }
                                 FieldSwKind::W1Tgl => {
                                     self.write("& ~if_rif.rd_wrn ? ");
                                     if field.width == 1 {
-                                        self.write(&format!("~{field_path}", ));
+                                        self.write(&format!("~{field_id}", ));
                                     } else {
-                                        self.write(&format!("{field_path} ^ {field_val}"));
+                                        self.write(&format!("{field_id} ^ {field_val}"));
                                     }
                                 }
                                 FieldSwKind::Password(info) => {
                                     self.write("& ~if_rif.rd_wrn");
                                     if info.protect || (info.once.is_some() && info.hold.is_some()) {
-                                        self.write(&format!("& ({field_path}_hold | ~{field_path}_locked)"));
+                                        self.write(&format!("& ({field_id}_hold | ~{field_id}_locked)"));
                                     }
                                     self.write("? (");
                                     if let Some(v) = &info.once {
@@ -1064,7 +1056,7 @@ impl GeneratorSv {
                                     if info.once.is_some() {
                                         self.write(" :\n      if_rif.en & ~if_rif.rd_wrn");
                                         if info.hold.is_some() {
-                                            self.write(&format!(" & ~{field_path}_hold"));
+                                            self.write(&format!(" & ~{field_id}_hold"));
                                         }
                                         self.write(" ? 2'd1");
                                     }
@@ -1078,12 +1070,12 @@ impl GeneratorSv {
                         // Handle Counter
                         if let Some(info) = cnt_info {
                             // println!("Counter {} : {:?}",field_name, info);
-                            let hw_path = &field_path[4..];
+                            let hw_path = &field_id[4..];
                             if info.clr {
-                                self.write(&format!("{hw_path}_clr ? {reset_str} :\n      "));
+                                self.write(&format!("{hw_path}_clr ? {reset_expr} :\n      "));
                             }
                             if info.is_up() {
-                                self.write(&format!("{hw_path}_incr_en ? {field_path} + "));
+                                self.write(&format!("{hw_path}_incr_en ? {field_id} + "));
                                 if info.incr_val <= 1 {
                                     self.write(&Self::value_to_str(1, field.width.into(), field.is_signed(), false));
                                 } else {
@@ -1092,7 +1084,7 @@ impl GeneratorSv {
                                 self.write(" :\n      ");
                             }
                             if info.is_down() {
-                                self.write(&format!("{hw_path}_decr_en ? {field_path} + "));
+                                self.write(&format!("{hw_path}_decr_en ? {field_id} + "));
                                 if info.decr_val <= 1 {
                                     self.write(&Self::value_to_str(1, field.width.into(), field.is_signed(), false));
                                 } else {
@@ -1107,13 +1099,13 @@ impl GeneratorSv {
                             FieldSwKind::W1Pulse(_,_) if field_clken.is_empty() => self.write("1'b0;\n"),
                             FieldSwKind::Password(info) => {
                                 if info.hold.is_some() {
-                                    self.write(&format!("{{{field_path}_hold,"))
+                                    self.write(&format!("{{{field_id}_hold,"))
                                 } else {
                                     self.write("{1'b0,");
                                 }
-                                self.write(&format!("{field_path}_locked}};\n"))
+                                self.write(&format!("{field_id}_locked}};\n"))
                             }
-                            _ => self.write(&format!("{field_path};\n"))
+                            _ => self.write(&format!("{field_id};\n"))
                         }
                     }
                     // Handle case of partial field where one part is read-only
@@ -1227,7 +1219,7 @@ impl GeneratorSv {
 
                         let reset = if field.is_password() {
                                 "1'b1".to_owned()
-                            } else if field.partial.0.is_some() {
+                            } else if field.is_partial() {
                                 // TODO: change
                                 let rst_val = field_impl.get_reset(reg.group_idx);
                                 Self::value_to_str(rst_val, field_impl.width, field_impl.signed, true)
@@ -1539,12 +1531,13 @@ impl GeneratorSv {
             PortDir::Modport((rif,ctrl)) => if is_ctrl {ctrl} else {rif},
         };
         self.write("   "); // Indentation
-        match &port.width {
-            PortWidth::Custom(type_name) => {
+        match &port.kind() {
+            &SignalKind::Custom((pkg_name,type_name)) => {
                 if port.is_intf() {
                     self.write(&format!("{type_name}.{dir} "));
                 } else {
-                    self.write(&format!("{dir} var {type_name} "));
+                    let scope = if let Some(n) = pkg_name {format!("{n}::")} else {"".to_owned()};
+                    self.write(&format!("{dir} var {scope}{type_name} "));
                 }
             }
             _ => {
@@ -1555,7 +1548,7 @@ impl GeneratorSv {
                 }
             }
         }
-        let name = port.name.to_casing(Snake);
+        let name = port.name().to_casing(Snake);
         let prefix = if let Some(n) = prefix {format!("{n}_")} else {"".to_owned()};
         if let Some(basename) = name.strip_prefix("rif_") {
             self.write(&format!("rif_{prefix}{basename}"));
@@ -1563,8 +1556,9 @@ impl GeneratorSv {
             self.write(&prefix);
             self.write(&name);
         }
-        if port.dim > 0 {
-            self.write(&format!("[{}]", port.dim));
+        self.write(&port.name().to_casing(Snake));
+        if port.dim() > 0 {
+            self.write(&format!("[{}]", port.dim()));
         }
         // Write separator
         self.write(if is_last {" "} else {","});
@@ -1914,14 +1908,14 @@ impl GeneratorSv {
         for rif in rifmux.components.iter().filter_map(|c| c.get_rif()) {
             nb_ctrl += rif.ports.clk_ens.len() + rif.ports.ctrls.len();
             for clk in rif.ports.clocks.iter().skip(1) {
-                if !self.names.contains(&clk.name) {
-                    self.names.push(clk.name.to_owned());
+                if !self.names.iter().any(|n| n==clk.name()) {
+                    self.names.push(clk.name().to_owned());
                     self.write_port(clk, None, 0, 0, false, false);
                 }
             }
             for rst in rif.ports.resets.iter().skip(1) {
-                if !self.names.contains(&rst.name) {
-                    self.names.push(rst.name.to_owned());
+                if !self.names.iter().any(|n| n==rst.name()) {
+                    self.names.push(rst.name().to_owned());
                     self.write_port(rst, None, 0, 0, false, false);
                 }
             }
@@ -1931,12 +1925,12 @@ impl GeneratorSv {
             self.write("   // Controls\n");
             for rif in rifmux.components.iter().filter_map(|c| c.get_rif()) {
                 for port in rif.ports.clk_ens.iter() {
-                    if !self.names.contains(&port.name) {
+                    if !self.names.iter().any(|n| n==port.name()) {
                         self.write_port(port, None, rif.addr_width, rif.data_width, false, false);
                     }
                 }
                 for port in rif.ports.ctrls.iter() {
-                    if !self.names.contains(&port.name) {
+                    if !self.names.iter().any(|n| n==port.name()) {
                         self.write_port(port, None, rif.addr_width, rif.data_width, false, false);
                     }
                 }
@@ -1984,7 +1978,7 @@ impl GeneratorSv {
         self.write(&format!("      .{sw_clk}({sw_clk}),\n"));
         self.write(&format!("      .{sw_rst}({sw_rst}),\n"));
         for p in intf_ports.iter() {
-            self.write(&format!("      .{0}({0}),\n", p.name));
+            self.write(&format!("      .{0}({0}),\n", p.name()));
         }
         // RIFs interface
         let mut comp_iter = rifmux.components.iter().peekable();
@@ -2009,33 +2003,33 @@ impl GeneratorSv {
             match &comp.inst {
                 Comp::Rif(rif) => {
                     if let Some(clk) = rif.ports.clocks.first() {
-                        self.write(&format!("      .{}({sw_clk}),\n", clk.name));
+                        self.write(&format!("      .{}({sw_clk}),\n", clk.name()));
                     }
                     if let Some(rst) = rif.ports.resets.first() {
-                        self.write(&format!("      .{}({sw_rst}),\n", rst.name));
+                        self.write(&format!("      .{}({sw_rst}),\n", rst.name()));
                     }
                     for p in rif.ports.clocks.iter().skip(1) {
-                        self.write(&format!("      .{0}({0}),\n", p.name));
+                        self.write(&format!("      .{0}({0}),\n", p.name()));
                     }
                     for p in rif.ports.resets.iter().skip(1) {
-                        self.write(&format!("      .{0}({0}),\n", p.name));
+                        self.write(&format!("      .{0}({0}),\n", p.name()));
                     }
                     for p in rif.ports.clk_ens.iter() {
-                        self.write(&format!("      .{0}({0}),\n", p.name));
+                        self.write(&format!("      .{0}({0}),\n", p.name()));
                     }
                     for p in rif.ports.ctrls.iter() {
-                        self.write(&format!("      .{0}({0}),\n", p.name));
+                        self.write(&format!("      .{0}({0}),\n", p.name()));
                     }
                     for p in rif.ports.regs.iter().filter(|p| p.dir.is_in()) {
-                        self.write(&format!("      .{0}({prefix}{0}),\n", p.name));
+                        self.write(&format!("      .{0}({prefix}{0}),\n", p.name()));
                     }
                     for p in rif.ports.regs.iter().filter(|p| p.dir.is_out()) {
                         // Output port are prefixed by rif_ : remove it to insert the configured prefixed
-                        let name_base = p.name.strip_prefix("rif_").unwrap_or(&p.name);
-                        self.write(&format!("      .{0}(rif_{prefix}{name_base}),\n", p.name));
+                        let name_base = p.name().strip_prefix("rif_").unwrap_or(p.name());
+                        self.write(&format!("      .{0}(rif_{prefix}{name_base}),\n", p.name()));
                     }
                     for p in rif.ports.irqs.iter() {
-                        self.write(&format!("      .{0}({0}),\n", p.name));
+                        self.write(&format!("      .{0}({0}),\n", p.name()));
                     }
                 }
                 Comp::Rifmux(_) => return Err("Rifmux inside RIF top not supported yet".into()),
