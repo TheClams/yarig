@@ -206,7 +206,7 @@ impl YarigCfg {
         if !rif_path.exists() && rif_path.is_relative() && self.path.is_some() {
             rif_path = [self.path.as_ref().unwrap(), &self.filename].iter().collect();
         }
-        let rif_src = RifGenSrc::from_file(&rif_path)
+        let rif_src = RifGenSrc::from_file(&rif_path, &self.include)
             .map_err(|e| format!("Error opening {:?} : {e:?}", rif_path))?;
         let mut rif_obj = Comp::compile(&rif_src, &self.suffixes, &params)
             .map_err(|e| format!("Compilation failed: {e}"))?;

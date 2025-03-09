@@ -72,7 +72,7 @@ impl RifGenSrc {
         }
     }
 
-    pub fn from_file<P>(filename: P) -> Result<RifGenSrc, RifError>
+    pub fn from_file<P>(filename: P, includes: &[String]) -> Result<RifGenSrc, RifError>
     where
         P: AsRef<Path>,
     {
@@ -80,10 +80,20 @@ impl RifGenSrc {
         let mut refs = src.parse_file(&filename)?;
         if !refs.is_empty() {
             // find all rifs file in current directory and import directories
-            let flist: HashMap<String, PathBuf> = if let Some(cwd) = filename.as_ref().parent() {
-                fs::read_dir(cwd)
-                    .unwrap()
-                    .filter(|p| {
+            let mut inc_paths = Vec::new();
+            let full_path = filename.as_ref().canonicalize()?;
+            if let Some(cwd) = full_path.parent() {
+                inc_paths.push(cwd.to_owned());
+            }
+            inc_paths.extend(includes.iter().map(|p| p.into()));
+            let mut flist: HashMap<String, PathBuf> = HashMap::new();
+            for path in inc_paths.iter() {
+                let Ok(files) = fs::read_dir(path) else {
+                    eprintln!("Unable to read include dir '{path:?}'");
+                    continue;
+                };
+                flist.extend(
+                    files.filter(|p| {
                         p.as_ref()
                             .unwrap()
                             .path()
@@ -95,10 +105,7 @@ impl RifGenSrc {
                         let path = p.unwrap().path();
                         let rifname = remove_rif(path.file_stem().unwrap().to_str().unwrap());
                         (rifname.to_owned(), path)
-                    })
-                    .collect()
-            } else {
-                HashMap::new()
+                    }));
             };
             let mut ref_done = false;
             while !ref_done {
