@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Display, ops::{Add, Sub}};
 
-use crate::{error::RifError, parser::parser_expr::ParamValues};
+use crate::{error::RifError, parser::parser_expr::{ExprTokens, ParamValues}};
 
 use super::{
     Context, Description, InterruptClr, InterruptDesc, InterruptInfoField, InterruptTrigger,
@@ -171,6 +171,31 @@ impl CounterInfo {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Default)]
+pub enum VisibilityRaw {#[default]
+    Full,
+    Hidden,
+    Reserved,
+    Disabled(ExprTokens),
+}
+
+impl VisibilityRaw {
+    pub fn compile(&self, params: &ParamValues) -> Visibility {
+        match self {
+            VisibilityRaw::Full => Visibility::Full,
+            VisibilityRaw::Hidden => Visibility::Hidden,
+            VisibilityRaw::Reserved => Visibility::Reserved,
+            VisibilityRaw::Disabled(expr_tokens) => {
+                if let Ok(v) = expr_tokens.eval(params) {
+                    if v==1 {Visibility::Disabled} else {Visibility::Full}
+                } else {
+                    Visibility::Full
+                }
+            }
+        }
+
+    }
+}
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub enum Visibility {#[default]
     Full,
@@ -181,6 +206,7 @@ pub enum Visibility {#[default]
 }
 
 impl Visibility {
+
     pub fn is_reserved(&self) -> bool {
         self == &Visibility::Reserved
     }
@@ -686,7 +712,7 @@ pub struct Field {
     /// Optional lock signal to prevent write access
     pub lock: Lock,
     /// Field visibility
-    pub visibility: Visibility,
+    pub visibility: VisibilityRaw,
     /// Optional description for interrupt derived register (enable/mask/pending)
     pub intr_desc: Option<InterruptDesc>,
     /// Optional limits on the value which can be writen
@@ -717,7 +743,7 @@ impl Default for Field {
             clk_en: ClkEn::Default,
             clear: None,
             lock: Lock(None),
-            visibility: Visibility::Full,
+            visibility: VisibilityRaw::Full,
             intr_desc: None,
             nb_frac : 0,
             limit: Limit::default(),
@@ -877,12 +903,17 @@ impl Field {
 
     /// Set visibility to hidden
     pub fn hidden(&mut self) {
-        self.visibility = Visibility::Hidden;
+        self.visibility = VisibilityRaw::Hidden;
     }
 
     /// Set visibility to reserved
     pub fn reserved(&mut self) {
-        self.visibility = Visibility::Reserved;
+        self.visibility = VisibilityRaw::Reserved;
+    }
+
+    /// Set visibility to reserved
+    pub fn disabled(&mut self, expr: ExprTokens) {
+        self.visibility = VisibilityRaw::Disabled(expr);
     }
 
     /// Update an interrupt description

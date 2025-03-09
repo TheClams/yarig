@@ -474,9 +474,7 @@ impl RifGenSrc {
                         Context::Partial => self.last_field_mut().partial.0 = Some(val_u16(&mut l)?),
                         Context::Hidden => self.last_field_mut().hidden(),
                         Context::Reserved => self.last_field_mut().reserved(),
-                        Context::Disabled => {
-                            return Err(RifError::unsupported(info, l));
-                        }
+                        Context::Disabled => self.last_field_mut().disabled(parse_expr(l)?),
                         Context::Optional => self.last_field_mut().optional = l.to_owned(),
                         Context::ArrayPosIncr => self.last_field_mut().array_pos_incr = val_u8(&mut l)?,
                         Context::ArrayPartial => self.last_field_mut().partial.1 = val_u16(&mut l)?,

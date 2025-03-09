@@ -999,7 +999,7 @@ impl RifFieldInst {
             sw_kind: field.sw_kind.to_owned(),
             hw_kind,
             hw_access: field.hw_acc,
-            visibility: field.visibility,
+            visibility: field.visibility.compile(params),
             enum_kind: field.enum_kind.clone(),
             limit: field.limit.clone(),
             partial: field.partial,

@@ -1543,11 +1543,14 @@ impl GeneratorSv {
                 }
             }
         }
-        if let Some(prefix) = prefix {
-            self.write("_");
-            self.write(prefix);
+        let name = port.name.to_casing(Snake);
+        let prefix = if let Some(n) = prefix {format!("{n}_")} else {"".to_owned()};
+        if let Some(basename) = name.strip_prefix("rif_") {
+            self.write(&format!("rif_{prefix}{basename}"));
+        } else {
+            self.write(&prefix);
+            self.write(&name);
         }
-        self.write(&port.name.to_casing(Snake));
         if port.dim > 0 {
             self.write(&format!("[{}]", port.dim));
         }

@@ -332,7 +332,6 @@ impl ExprTokens {
         ExprTokens(Vec::with_capacity(capacity))
     }
 
-    #[allow(dead_code)]
     pub fn eval(&self, variables: &ParamValues) -> Result<isize, ExprError> {
         if self.is_empty() {
             return Ok(0);
