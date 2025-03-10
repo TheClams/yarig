@@ -82,7 +82,7 @@ pub trait GeneratorDoc : GeneratorBase {
     /// Main generator function
     fn gen_all(&mut self, obj: &Comp) -> Result<(), Box<dyn std::error::Error>> {
         // Create output directory if it does not exist
-        create_dir_all(self.core().setting.path.clone())?;
+        create_dir_all(self.setting().path.clone())?;
         //
         self.write_header(remove_rif(obj.get_name()));
         let filename;
@@ -124,7 +124,8 @@ pub trait GeneratorDoc : GeneratorBase {
         }
         self.write_footer(obj.get_name());
         // Write file
-        self.save(&filename)
+        let fname = self.setting().fname.clone().unwrap_or(filename);
+        self.save(&fname)
     }
 
     /// Add rifmux row in a table composed of 4 column:

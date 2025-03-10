@@ -174,7 +174,7 @@ impl YarigCfg {
         Ok(cfg)
     }
 
-    pub fn get_output_path(&self, keys: &[&str], def: &str) -> PathBuf {
+    pub fn get_output_path(&self, keys: &[&str], def: &str) -> (PathBuf, Option<String>) {
         let mut path = format!("./{def}");
         for k in keys.iter() {
             if let Some(p) = self.outputs.get(*k) {
@@ -182,10 +182,19 @@ impl YarigCfg {
                 break;
             }
         }
-        let is_rel = path.starts_with('.');
-        match (&self.path, is_rel) {
+        let is_rel = path.starts_with('.') || !path.contains('/');
+        let path_buf : PathBuf = match (&self.path, is_rel) {
             (Some(cwd), true) => [cwd, &path].iter().collect(),
             _ => path.into()
+        };
+
+        match (path_buf.extension().is_some(),path_buf.file_name()) {
+            (true, Some(name)) => {
+                let fname = name.to_string_lossy().to_string();
+                let parent = path_buf.parent().unwrap_or(&path_buf).to_path_buf();
+                (parent, Some(fname))
+            }
+            _ => (path_buf, None)
         }
     }
 
@@ -193,6 +202,7 @@ impl YarigCfg {
 
         let base_setting = GeneratorBaseSetting {
             path: "".into(),
+            fname: None,
             casing: self.casing.unwrap_or(Casing::Snake),
             privacy: if self.public {Privacy::Public} else {Privacy::Internal},
             gen_inc: self.gen_inc.clone()
@@ -224,28 +234,28 @@ impl YarigCfg {
             let mut setting = base_setting.clone();
             match target {
                 RifGenTargets::C => {
-                    setting.path = self.get_output_path(&["c", "sw"],"c");
+                    setting.set_output(self.get_output_path(&["c", "sw"],"c"));
                     let mut g = GeneratorC::new(setting, self.c.base_offset.clone());
                     g.gen_all(&rif_obj).map_err(|e| format!("C generation failed: {e}"))?;
                 },
                 RifGenTargets::Html => {
-                    setting.path = self.get_output_path(&["html", "doc"],"doc");
+                    setting.set_output(self.get_output_path(&["html", "doc"],"doc"));
                     let mut g = GeneratorHtml::new(setting);
                     g.gen_all(&rif_obj).map_err(|e| format!("Html generation failed: {e}"))?;
                 }
                 RifGenTargets::Mif => {
-                    setting.path = self.get_output_path(&["mif", "doc"], "doc");
+                    setting.set_output(self.get_output_path(&["mif", "doc"], "doc"));
                     // TODO: support customization of paragraph style
                     let mut g = GeneratorMif::new(setting);
                     g.gen_all(&rif_obj).map_err(|e| format!("MIF generation failed: {e}"))?;
                 }
                 RifGenTargets::Latex => {
-                    setting.path = self.get_output_path(&["latex", "doc"], "doc");
+                    setting.set_output(self.get_output_path(&["latex", "doc"], "doc"));
                     let mut g = GeneratorLatex::new(setting);
                     g.gen_all(&rif_obj).map_err(|e| format!("Latex generation failed: {e}"))?;
                 }
                 RifGenTargets::Sv => {
-                    setting.path = self.get_output_path(&["sv", "rtl"], "rtl");
+                    setting.set_output(self.get_output_path(&["sv", "rtl"], "rtl"));
                     if self.suffix_rtl_only {
                         rif_obj.set_suffixes(&self.suffixes);
                     }
@@ -256,27 +266,27 @@ impl YarigCfg {
                     }
                 }
                 RifGenTargets::Ral => {
-                    setting.path = self.get_output_path(&["ral", "sim"], "sim");
+                    setting.set_output(self.get_output_path(&["ral", "sim"], "sim"));
                     let mut g = GeneratorRal::new(setting, self.ral.clone());
                     g.gen_all(&rif_obj).map_err(|e| format!("RAL generation failed: {e}"))?;
                 }
                 RifGenTargets::Py => {
-                    setting.path = self.get_output_path(&["py", "sw"], "py");
+                    setting.set_output(self.get_output_path(&["py", "sw"], "py"));
                     let mut g = GeneratorPy::new(setting, self.py.clone());
                     g.gen_all(&rif_obj).map_err(|e| format!("Python generation failed: {e}"))?;
                 }
                 RifGenTargets::Json => {
-                    setting.path = self.get_output_path(&["json", "doc"], "doc");
+                    setting.set_output(self.get_output_path(&["json", "doc"], "doc"));
                     let mut g = GeneratorJson::new(setting);
                     g.gen_all(&rif_obj).map_err(|e| format!("JSON generation failed: {e}"))?;
                 }
                 RifGenTargets::Adoc => {
-                    setting.path = self.get_output_path(&["adoc", "doc"], "doc");
+                    setting.set_output(self.get_output_path(&["adoc", "doc"], "doc"));
                     let mut g = GeneratorAdoc::new(setting);
                     g.gen_all(&rif_obj).map_err(|e| format!("AsciiDoctor generation failed: {e}"))?;
                 }
                 RifGenTargets::Svd => {
-                    setting.path = self.get_output_path(&["svd", "sw"], "sw");
+                    setting.set_output(self.get_output_path(&["svd", "sw"], "sw"));
                     let mut g = GeneratorSvd::new(setting, self.svd.clone());
                     g.gen_all(&rif_obj).map_err(|e| format!("SVD generation failed: {e}"))?;
                 }

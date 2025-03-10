@@ -93,6 +93,8 @@ impl Privacy {
 pub struct GeneratorBaseSetting {
     /// Output directory path
     pub path: PathBuf,
+    /// Top filename
+    pub fname: Option<String>,
     /// Casing used on register/field
     pub casing: Casing,
     /// Confidentality: confidential or public
@@ -102,6 +104,12 @@ pub struct GeneratorBaseSetting {
 }
 
 impl GeneratorBaseSetting {
+
+    pub fn set_output(&mut self, info: (PathBuf, Option<String>) ) {
+        self.path = info.0;
+        self.fname = info.1;
+    }
+
     pub fn is_gen_inc(&self, rif: &RifInst) -> bool {
         let names = [&rif.inst_name, &rif.type_name, &remove_rif(&rif.type_name).to_owned()];
         names.iter().any(|n| self.gen_inc.contains(n))

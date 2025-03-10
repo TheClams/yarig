@@ -1,7 +1,7 @@
 # Change Log
 
 
-## [0.7.0] - 2025-03-07
+## [0.7.0] - 2025-03-10
 
 ### Changed
   - Configuration:
@@ -9,6 +9,7 @@
     * Support override of HDL interface
     * New option "suffix_rtl_only" to add suffix only on RTL file
     * Casing is now configurable
+    * Support specifying the filename in the output path for the top target
   - Generator HTML:
     * Enum description can be changed via CSS and by default is displayed with smaller font
     * Field description now has breaking line only after a dot or colon
@@ -24,7 +25,9 @@
   - Generator RAL:
     * Fix issue with register arrays
     * Fix handling of multiple pages
-  - Generator C: add missing include stdint.h
+  - Generator C:
+    * add missing include stdint.h
+    * add missing define for group address
 
 ## [0.6.0] - 2025-03-02
 ### Added

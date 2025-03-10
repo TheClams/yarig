@@ -1,5 +1,5 @@
 use crate::{
-    comp::comp_inst::{RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxInst},
+    comp::comp_inst::{RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxGroupInst, RifmuxInst},
     parser::remove_rif,
     rifgen::{Description, EnumDef, EnumEntry}
 };
@@ -326,5 +326,20 @@ impl GeneratorSw for GeneratorC {
             self.write("\n");
         }
     }
+
+    /// Write definition associated with a group
+    fn write_rifmux_group(&mut self, group: &RifmuxGroupInst, is_last: bool) {
+        self.write(&format!("/// Base address of group {}: {}\n",
+            group.name.to_casing(Casing::Title),
+            group.description.get_short()));
+        self.write(&format!("#define {0}_{1} ({0} + 0x{2:08X})\n",
+            self.base_addr_name.to_uppercase(),
+            group.name.to_uppercase(),
+            group.addr));
+        if is_last {
+            self.write("\n");
+        }
+    }
+
 
 }

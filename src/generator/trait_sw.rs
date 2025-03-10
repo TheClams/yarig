@@ -1,7 +1,7 @@
 use std::fs::create_dir_all;
 
 use crate::{
-    comp::comp_inst::{Comp, RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxInst},
+    comp::comp_inst::{Comp, RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxGroupInst, RifmuxInst},
     parser::remove_rif, rifgen::{Access, Description, EnumDef, EnumEntry}
 };
 
@@ -183,7 +183,12 @@ pub trait GeneratorSw : GeneratorBase {
         self.write_rif_footer();
         // Write file if top or one file per component
         if !Self::SINGLE_FILE || is_top {
-            self.save(&self.filename_rif(rif))?;
+            let fname = if is_top && self.setting().fname.is_some() {
+                self.setting().fname.clone().unwrap()
+            } else {
+                self.filename_rif(rif)
+            };
+            self.save(&fname)?;
         }
         Ok(())
     }
@@ -289,9 +294,16 @@ pub trait GeneratorSw : GeneratorBase {
             .filter_map(|c| if let Comp::Rifmux(m) = &c.inst {Some(m)} else {None})
             .collect();
         self.write_rifmux_header(rifmux, rif_list, &rifmux_list);
+        let mut groups = rifmux.groups.iter().peekable();
+        while let Some(group) = groups.next() {
+            self.write_rifmux_group(group, groups.peek().is_none());
+        }
         self.scan_rifmux(rifmux, "", 0, true )?;
         self.write_rifmux_footer(rifmux);
-        self.save(&self.filename_rifmux(rifmux))
+        // Save file
+        let fname = self.setting().fname.clone()
+            .unwrap_or(self.filename_rifmux(rifmux));
+        self.save(&fname)
     }
 
     /// Scan rifmux components
@@ -340,6 +352,9 @@ pub trait GeneratorSw : GeneratorBase {
 
     /// Write RIF end of declaration
     fn write_rifmux_footer(&mut self, rifmux: &RifmuxInst) {}
+
+    /// Write definition associated with a group
+    fn write_rifmux_group(&mut self, group: &RifmuxGroupInst, is_last: bool) {}
 
     /// Write RIF instance
     fn write_rif_inst(&mut self, rif_inst: &RifInst, cntxt: RifContext, desc: &Description, last_page: bool, last_comp: bool) {}
