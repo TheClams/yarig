@@ -823,6 +823,16 @@ impl Field {
 
     }
 
+    pub fn set_hw_acc(&mut self, acc: Access) {
+        // Handle case when trying to set hardware access as read-only
+        // when there is already a hardware write access defined
+        self.hw_acc = if !self.hw_kind.is_empty() && acc==Access::RO {
+            Access::RW
+        } else {
+            acc
+        };
+    }
+
     pub fn set_sw_kind(&mut self, kind: FieldSwKind) -> Result<(), RifError> {
         match kind {
             FieldSwKind::W1Pulse(_,_) => {

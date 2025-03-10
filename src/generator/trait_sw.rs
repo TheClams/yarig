@@ -57,7 +57,7 @@ pub trait GeneratorSw : GeneratorBase {
             Comp::Rifmux(rifmux) => {
                 let riflist = RifList::new(rifmux, !Self::IS_HIERARCHICAL);
                 if !Self::SINGLE_FILE && !self.setting().gen_inc.is_empty() {
-                    let gen_all = self.setting().gen_inc.first()==Some(&"*".to_owned());
+                    let gen_all = self.setting().is_gen_all();
                     for rif in riflist.iter() {
                         if !gen_all && !self.setting().is_gen_inc(rif) {
                             continue;

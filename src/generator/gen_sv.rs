@@ -79,9 +79,10 @@ impl GeneratorSv {
                 self.gen_rifmux(rifmux)?;
                 // Generate include file
                 if !self.base_settings.gen_inc.is_empty() {
+                    let gen_all = self.base_settings.is_gen_all();
                     let rif_list = RifList::new(rifmux, true);
                     for rif in rif_list.iter() {
-                        if !self.base_settings.gen_inc.contains(&rif.inst_name) && self.base_settings.gen_inc.first()!=Some(&"*".to_owned()) {
+                        if !gen_all && !self.base_settings.is_gen_inc(rif) {
                             continue;
                         }
                         self.gen_pkg(rif)?;
@@ -394,7 +395,7 @@ impl GeneratorSv {
 
         // Interrupt lines
         for irq in interrupts {
-            self.write(&format!("   output var logic rif_{0}_irq, // High when one interrupt field of {0} is asserted\n",irq));
+            self.write(&format!("   output var logic rif_{0}_irq, // High when one interrupt field of {0} is asserted\n", irq));
         }
 
         // Add control to external pages
@@ -452,8 +453,12 @@ impl GeneratorSv {
                 // Interrupt register
                 if hw_reg_def.is_interrupt() {
                     for intr_info in hw_reg_def.interrupt.iter() {
-                        let name = if intr_info.name.is_empty() {&group_name} else {&intr_info.name};
-                        // println!("Interrupt {}: {:?}", name, hw_reg_def.port);
+                        let name = if intr_info.name.is_empty() {
+                            group_name.to_owned()
+                        } else {
+                            format!("{}_{}", group_name, intr_info.name)
+                        };
+                        // println!("Interrupt {name}: {:?} | {intr_info:?}", hw_reg_def.port);
                         if !hw_reg.port.is_out() {
                             self.write(&format!("   {pkg_name}_pkg::t_{group_type}_sw rif_{name}{idx};\n"));
                         }
@@ -880,10 +885,11 @@ impl GeneratorSv {
                     // Generate intermediate signal for interrupt
                     if reg.is_intr() {
                         let intr_info = reg_impl.intr_info(reg)?;
+                        let group_name_base = reg.group_name.to_casing(Snake);
                         // Local signal where interrupt vector is and with the optional enable signals
-                        self.write(&format!("   assign {0}_l.{1} = {0}.{1}", group_name, field_name));
+                        self.write(&format!("   assign {group_name}_l.{0} = {group_name_base}.{0}", field_name));
                         if intr_info.enable.is_some() {
-                            self.write(&format!(" & rif_{}_en.{}", group_name, field_name));
+                            self.write(&format!(" & rif_{group_name}_en.{field_name}"));
                         }
                         self.write(";\n");
                         // Next
@@ -1171,7 +1177,7 @@ impl GeneratorSv {
                         let mut value = format!("{group_name}{intr_suffix}{reg_idx}_{field_name_flat}__next");
                         // Enable
                         let mut enable = if reg.is_intr() {
-                            format!("clk_en_intr_{group_name_i}")
+                            format!("clk_en_intr_{group_name}")
                         } else if let ClkEn::Signal(clk_en) = &field_impl.clk_en {
                             clk_en.clone()
                         } else if let ClkEn::Signal(clk_en) = &reg_impl.clk_en {
@@ -1354,28 +1360,27 @@ impl GeneratorSv {
                 // Interrupt registers signals : clock enable and IRQ
                 if reg.is_intr() {
                     let intr_info = reg_impl.intr_info(reg)?;
-                    // Clock enable : or of all interrupts events (only the base one, not the alternate)
-                    if intr_info.name.is_empty() {
-                        self.write(&format!("   assign clk_en_intr_{group_name} ="));
-                        if let ClkEn::Signal(clk_en) = &reg_impl.clk_en {
-                            self.write(&format!(" {clk_en} || "));
-                        } else {
-                            self.write("\n      ");
-                            for field in reg.fields.iter() {
-                                if let Some(FieldHwKind::Interrupt(intr_trig)) = field.hw_kind.first() {
-                                    let field_name = field.name().to_casing(Snake);
-                                    match intr_trig {
-                                        // Level Trigger
-                                        InterruptTrigger::High => self.write(&format!("{group_name}.{field_name}!=0 ||\n      ")),
-                                        InterruptTrigger::Low  => self.write(&format!("~{group_name}.{field_name}!=0 ||\n      ")),
-                                        // Edge trigger : enable on change
-                                        _ => self.write(&format!("{0}.{1}!={0}_d1.{1} ||\n      ", group_name, field_name)),
-                                    }
+                    // Enable clock of interrupt register when there is an event or when accessed from RIF
+                    // Replace the event by a the register clock enable if defined
+                    self.write(&format!("   assign clk_en_intr_{group_name} ="));
+                    if let ClkEn::Signal(clk_en) = &reg_impl.clk_en {
+                        self.write(&format!(" {clk_en} || "));
+                    } else {
+                        self.write("\n      ");
+                        for field in reg.fields.iter() {
+                            if let Some(FieldHwKind::Interrupt(intr_trig)) = field.hw_kind.first() {
+                                let field_name = field.name().to_casing(Snake);
+                                match intr_trig {
+                                    // Level Trigger
+                                    InterruptTrigger::High => self.write(&format!("{group_name}_l.{field_name}!=0 ||\n      ")),
+                                    InterruptTrigger::Low  => self.write(&format!("~{group_name}_l.{field_name}!=0 ||\n      ")),
+                                    // Edge trigger : enable on change
+                                    _ => self.write(&format!("{0}_l.{1}!={0}_d1.{1} ||\n      ", group_name, field_name)),
                                 }
                             }
                         }
-                        self.write("if_rif.en;\n\n");
                     }
+                    self.write("if_rif.en;\n\n");
                     // IRQ: or of all interrupts status and-ed with the mask
                     for field in reg.fields.iter() {
                         let field_name = field.name().to_casing(Snake);
@@ -1383,7 +1388,7 @@ impl GeneratorSv {
                         if field.is_disabled() {
                             self.write(&Self::field_reset_str(field, false, &rif_pkg_name, &reg.reg_type));
                         } else {
-                            self.write(&format!("rif_{group_name_i}.{field_name}"));
+                            self.write(&format!("rif_{group_name}.{field_name}"));
                             if intr_info.mask.is_some() {
                                 self.write(&format!(" & rif_{group_name}_mask.{field_name}"));
                             }
@@ -1575,7 +1580,8 @@ impl GeneratorSv {
         self.write(&format!("   rif_if#({addr_w}, {data_w}) if_rif({sw_clk}, {sw_rst});\n"));
         self.write("\n");
         let name = intf.name();
-        self.write(&format!("   bridge_{name}_rif#({addr_w}, {data_w}) i_bridge(.*);\n"));
+        // TODO: maybe need to handle the reset polarity ...
+        self.write(&format!("   bridge_{name}_rif#({addr_w}, {data_w}) i_bridge(.clk({sw_clk}), .rst_n({sw_rst}), .*);\n"));
     }
 
 

@@ -1,5 +1,5 @@
 use crate::rifgen::{
-    Context, InterruptClr, InterruptInfo, InterruptPropTuple, InterruptTrigger, RegDef, ResetVal,
+    Context, InterruptClr, InterruptPropTuple, InterruptTrigger, RegDef, ResetVal,
 };
 
 use winnow::{
@@ -139,7 +139,7 @@ pub fn reg_interrupt_perm<'a>(input: &mut &'a str) -> Res<'a, InterruptPropTuple
     .parse_next(input)
 }
 
-pub fn reg_interrupt<'a>(input: &mut &'a str, name: &str ) -> Res<'a, InterruptInfo> {
+pub fn reg_interrupt<'a>(input: &mut &'a str) -> Res<'a, InterruptPropTuple> {
     let mut info = reg_interrupt_perm(input)?;
     let mut r_tmp;
     let mut cont;
@@ -171,7 +171,8 @@ pub fn reg_interrupt<'a>(input: &mut &'a str, name: &str ) -> Res<'a, InterruptI
             break;
         }
     }
-    Ok(InterruptInfo::new(name,info))
+    Ok(info)
+    // Ok(InterruptInfo::new(name,info))
 }
 
 pub fn reg_pulse_info<'a>(input: &mut &'a str, reg_clk: &str, init: bool) -> Res<'a, String> {
@@ -195,52 +196,46 @@ pub fn reg_pulse_info<'a>(input: &mut &'a str, reg_clk: &str, init: bool) -> Res
 #[cfg(test)]
 mod tests_parsing {
     use super::*;
-    use crate::rifgen::{InterruptDesc, ResetVal};
+    use crate::rifgen::{InterruptDesc, InterruptInfo, ResetVal};
 
     #[test]
     fn test_interrupt() {
         assert_eq!(
-            reg_interrupt(&mut "edge w1clr enable=0x1337 mask=0xCAFE pending", ""),
-            Ok(
-                InterruptInfo {
-                    name: "".to_owned(),
-                    trigger: InterruptTrigger::Edge,
-                    clear: InterruptClr::Write1,
-                    description: InterruptDesc::default(),
-                    enable: Some(ResetVal::Unsigned(0x1337)),
-                    mask: Some(ResetVal::Unsigned(0xCAFE)),
-                    pending: true,
-                }
-            )
+            InterruptInfo::new("",reg_interrupt(&mut "edge w1clr enable=0x1337 mask=0xCAFE pending").unwrap()),
+            InterruptInfo {
+                name: "".to_owned(),
+                trigger: InterruptTrigger::Edge,
+                clear: InterruptClr::Write1,
+                description: InterruptDesc::default(),
+                enable: Some(ResetVal::Unsigned(0x1337)),
+                mask: Some(ResetVal::Unsigned(0xCAFE)),
+                pending: true,
+            }
         );
         assert_eq!(
-            reg_interrupt(&mut "high mask pending en=0xCAFE hwclr", "event"),
-            Ok(
-                InterruptInfo {
-                    name: "event".to_owned(),
-                    trigger: InterruptTrigger::High,
-                    clear: InterruptClr::Hw,
-                    description: InterruptDesc::default(),
-                    enable: Some(ResetVal::Unsigned(0xCAFE)),
-                    mask: Some(ResetVal::Unsigned(0)),
-                    pending: true,
-                }
-            )
+            InterruptInfo::new("event",reg_interrupt(&mut "high mask pending en=0xCAFE hwclr").unwrap()),
+            InterruptInfo {
+                name: "event".to_owned(),
+                trigger: InterruptTrigger::High,
+                clear: InterruptClr::Hw,
+                description: InterruptDesc::default(),
+                enable: Some(ResetVal::Unsigned(0xCAFE)),
+                mask: Some(ResetVal::Unsigned(0)),
+                pending: true,
+            }
         );
         // Check default values
         assert_eq!(
-            reg_interrupt(&mut "en", "intr"),
-            Ok(
-                InterruptInfo {
-                    name: "intr".to_owned(),
-                    trigger: InterruptTrigger::High,
-                    clear: InterruptClr::Read,
-                    description: InterruptDesc::default(),
-                    enable: Some(ResetVal::Unsigned(0)),
-                    mask: None,
-                    pending: false,
-                }
-            )
+            InterruptInfo::new("intr",reg_interrupt(&mut "en").unwrap()),
+            InterruptInfo {
+                name: "intr".to_owned(),
+                trigger: InterruptTrigger::High,
+                clear: InterruptClr::Read,
+                description: InterruptDesc::default(),
+                enable: Some(ResetVal::Unsigned(0)),
+                mask: None,
+                pending: false,
+            }
         );
     }
 }

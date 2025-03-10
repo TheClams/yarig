@@ -255,7 +255,7 @@ impl GeneratorSw for GeneratorRal {
 
     fn write_rif_inst(&mut self, rif_inst: &RifInst, cntxt: RifContext, _desc: &Description, _last_page: bool, _last_comp: bool) {
         let instname = remove_rif(&rif_inst.inst_name);
-        let typename = &rif_inst.type_name;
+        let typename = remove_rif(&rif_inst.type_name);
         let macroname = self.ral_macro.clone().unwrap_or("ral_create_reg_block".to_owned());
         self.write(&format!("   ral_block_{typename} m_ral_block_{instname};\n"));
         self.push_stash(0,&format!("      `{macroname}({instname}, {typename}, 'h{:08x})\n", cntxt.addr));
@@ -263,7 +263,7 @@ impl GeneratorSw for GeneratorRal {
 
     fn write_rifmux_inst(&mut self, rifmux_inst: &RifmuxInst, addr: u64, _last_comp: bool) {
         let instname = remove_rif(&rifmux_inst.inst_name);
-        let typename = &rifmux_inst.type_name;
+        let typename = remove_rif(&rifmux_inst.type_name);
         let macroname = self.ral_macro.clone().unwrap_or("ral_create_reg_block".to_owned());
         self.write(&format!("   ral_block_{typename} m_ral_block_{instname};\n"));
         self.push_stash(0,&format!("      `{macroname}({instname}, {typename}, 'h{addr:08x})\n"));

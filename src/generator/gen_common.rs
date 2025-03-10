@@ -114,6 +114,10 @@ impl GeneratorBaseSetting {
         let names = [&rif.inst_name, &rif.type_name, &remove_rif(&rif.type_name).to_owned()];
         names.iter().any(|n| self.gen_inc.contains(n))
     }
+
+    pub fn is_gen_all(&self) -> bool {
+        self.gen_inc.first().map(|c| c.as_str())==Some("*")
+    }
 }
 
 #[derive(Clone, Debug)]

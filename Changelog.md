@@ -15,6 +15,9 @@
     * Field description now has breaking line only after a dot or colon
     * A tooltip is displayed for reset value with a fractional number of bits,
       or when the field is part of a registered instantiated multiple times with different values
+  - Syntax:
+    * Setting a read access to a hardwrae field which already has write access promote it to RW
+    * Alternate interrupt inherit all its property from the main interrupt
 
 ### Bug Fixes
   - Generator SV:
@@ -22,9 +25,13 @@
     * Fix issue with only one external register inside a group
     * Fix registered pulse using clock enable
     * Change handling of field with clear and clk_en: both condition are split (might need to have an option allowing to have clear gated by the enable)
+    * Fix some cases where the gen_include check was more restratictive than in other generators
+    * Fix signal naming of alternate interrupt
+    * Improve Interrupt clock enable
   - Generator RAL:
     * Fix issue with register arrays
     * Fix handling of multiple pages
+    * Fix naming for the rimux top
   - Generator C:
     * add missing include stdint.h
     * add missing define for group address

@@ -11,10 +11,7 @@ use crate::parser::{
     bool_or_default, clk_en, enum_kind, generic_def, intr_desc, limit_def, password_info, path_val, reg_incl_or_decl, reg_inst_array_properties, reg_inst_properties, reg_pulse_info, rif_inst_suffix, rifmux_group, rifmux_map, signal_or_expr, val_isize, val_u16
 };
 use crate::rifgen::{
-    Access, ClockingInfo, Context, DataWidth, EnumDef, EnumKind, ExternalKind,
-    Field, FieldHwKind, FieldSwKind, Interface, Lock, OverrideIndex,
-    RegDef, RegDefOrIncl, RegInst, RegPulseKind, ResetDef,
-    Rif, RifPage, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility
+    Access, ClockingInfo, Context, DataWidth, EnumDef, EnumKind, ExternalKind, Field, FieldHwKind, FieldSwKind, Interface, InterruptInfo, Lock, OverrideIndex, RegDef, RegDefOrIncl, RegInst, RegPulseKind, ResetDef, Rif, RifPage, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility
 };
 
 use super::{
@@ -381,11 +378,21 @@ impl RifGenSrc {
                             self.last_reg_mut().pulse.push(RegPulseKind::Access(n));
                         },
                         Context::Interrupt => {
-                            self.last_reg_mut().interrupt.push(reg_interrupt(&mut l, "")?)
+                            let info = reg_interrupt(&mut l)?;
+                            self.last_reg_mut().interrupt.push(InterruptInfo::new("", info));
                         },
                         Context::InterruptAlt => {
                             let name = identifier(&mut l)?;
-                            self.last_reg_mut().interrupt.push(reg_interrupt(&mut l, name)?);
+                            let mut info = reg_interrupt(&mut l)?;
+                            // Inherit from first defined interrupt
+                            if let Some(intf_def) = self.last_reg().interrupt.first() {
+                                if info.0.is_none() {info.0 = Some(intf_def.trigger);}
+                                if info.1.is_none() {info.1 = Some(intf_def.clear);}
+                                if info.2.is_none() {info.2 = intf_def.enable.clone();}
+                                if info.3.is_none() {info.3 = intf_def.mask.clone();}
+                                if info.4.is_none() {info.4 = Some(intf_def.pending);}
+                            }
+                            self.last_reg_mut().interrupt.push(InterruptInfo::new(name, info));
                         },
                         Context::Optional => self.last_reg_mut().optional = l.to_owned(),
                         Context::Hidden => self.last_reg_mut().hidden(),
@@ -428,7 +435,7 @@ impl RifGenSrc {
                         Context::HwClear => {
                             self.last_field_mut().clear = Some(signal_name_last(l)?.to_owned())
                         }
-                        Context::HwAccess => self.last_field_mut().hw_acc = field_acc(&mut l)?,
+                        Context::HwAccess => self.last_field_mut().set_hw_acc(field_acc(&mut l)?),
                         Context::HwSet => {
                             self.last_field_mut()
                                 .set_hw_kind(FieldHwKind::Set(opt_signal_or_expr(l)?.map(|v| v.to_owned())))?;
