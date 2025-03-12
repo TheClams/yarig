@@ -1,4 +1,6 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{collections::{BTreeMap, BTreeSet}, fs::File, io::Write};
+
+use serde_derive::Deserialize;
 
 use crate::{
     cfg::CfgPy,
@@ -13,12 +15,47 @@ use super::{
     trait_sw::{GeneratorSw, RifContext}
 };
 
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd)]
+pub enum PyVersion {
+    V3_10,
+    V3_11,
+    V3Recent
+}
+
+impl std::str::FromStr for PyVersion {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut v = s.split('.');
+        let (Some(major),Some(minor)) = (v.next(), v.next()) else {
+            return Err("Expecting python version like '3.11'".to_owned())
+        };
+        let major : u8 = major.parse().map_err(|_| "Invalid major version number".to_owned())?;
+        let minor : u8 = minor.parse().map_err(|_| "Invalid minor version number".to_owned())?;
+        match (major,minor) {
+            (3,10) => Ok(PyVersion::V3_10),
+            (3,11) => Ok(PyVersion::V3_11),
+            (3,m) if m > 11 => Ok(PyVersion::V3Recent),
+            _ => Err("Python version not supported: expecting 3.10+".to_owned())
+        }
+    }
+}
+
+// impl<'de> serde::Deserialize<'de> for PyVersion {
+//     fn deserialize<D: serde::Deserializer<'de> >(d: D) -> Result<Self, D::Error> {
+//         let s = String::deserialize(d)?;
+//         Ok(s.as_ref().into())
+//     }
+// }
+
 
 pub struct GeneratorPy {
     /// Base structure of all generators
     core: GeneratorCore,
     /// Base python module defining Peripheral, Register and Field classes
     base_module : String,
+    /// Python version
+    version : PyVersion,
     /// Current Component name (Rifmux or rif)
     comp_name : String,
     /// Current RIF data bus width
@@ -37,6 +74,7 @@ impl GeneratorPy {
         GeneratorPy {
             core: GeneratorCore::new(2,setting),
             comp_name: "".to_owned(),
+            version: extra.version.unwrap_or(PyVersion::V3_11),
             data_width: 32,
             base_module: extra.class.unwrap_or(".regmap".to_owned()),
             field_parent: BTreeMap::new(),
@@ -103,7 +141,16 @@ impl GeneratorSw for GeneratorPy {
                 self.setting().path.clone(),
                 "regmap.py".into()
             ].iter().collect();
-            std::fs::write(path, Self::DEFAULT_BASECLASS.as_bytes())?;
+            match self.version {
+                PyVersion::V3_10 => {
+                    let mut file = File::create(path)?;
+                    for l in Self::DEFAULT_BASECLASS.lines() {
+                        if l=="    @typing.final" { continue; }
+                        file.write_all(l.as_bytes())?;
+                    }
+                }
+                _ => std::fs::write(path, Self::DEFAULT_BASECLASS.as_bytes())?,
+            }
         }
         Ok(())
     }
@@ -236,7 +283,7 @@ impl GeneratorSw for GeneratorPy {
     fn write_rifmux_header(&mut self,  rifmux: &RifmuxInst, rif_list: &RifList, _rifmux_list: &[&RifmuxInst]) {
         self.write("from typing import final\n");
         self.write(&format!("from {} import Peripheral\n\n", self.base_module));
-        for rif_inst in rif_list.iter() {
+        for (rif_inst,_) in rif_list.iter() {
             self.write(&format!("from .{} import {}\n",
                 rif_inst.name(false).to_lowercase(),
                 remove_rif(&rif_inst.type_name).to_casing(Casing::Pascal)

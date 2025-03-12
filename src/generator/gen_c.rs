@@ -106,7 +106,7 @@ impl GeneratorSw for GeneratorC {
         self.write(&format!("// Register definition for P_{rifname_uc}\n"));
         self.write(&format!("#ifndef __{rifname_uc}_H__\n"));
         self.write(&format!("#define __{rifname_uc}_H__\n\n"));
-        self.write(&format!("#include <stdint.h>\n\n"));
+        self.write(         "#include <stdint.h>\n\n");
     }
 
     /// Write RIF end of ifdef
@@ -288,7 +288,7 @@ impl GeneratorSw for GeneratorC {
         self.write(&format!("#define __{name_uc}_H__\n\n"));
         // Includes
         self.write("// Includes Register File definition\n");
-        for rif in rif_list.iter() {
+        for (rif,_) in rif_list.iter() {
             self.write(&format!("#include \"{}.h\"\n", rif.name(false).to_lowercase()));
         }
         self.write("\n");

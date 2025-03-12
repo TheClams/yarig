@@ -14,7 +14,7 @@ use crate::{
         trait_sw::GeneratorSw,
         gen_c::GeneratorC,
         gen_json::GeneratorJson,
-        gen_py::GeneratorPy,
+        gen_py::{GeneratorPy, PyVersion},
         gen_ral::GeneratorRal,
         gen_svd::GeneratorSvd,
         gen_sv::GeneratorSv,
@@ -143,6 +143,7 @@ pub struct CfgRal {
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct CfgPy {
     pub class: Option<String>,
+    pub version: Option<PyVersion>
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]

@@ -203,7 +203,7 @@ impl GeneratorSw for GeneratorRal {
                 panic!("[ERROR] Field {fieldname} == {} with index {:?} (reg {:?}): Unable to find amongst {:?}",
                     field.name, field.array, reg_1st.array, reg_1st.fields.iter().map(|fi| (&fi.name, fi.array)).collect::<Vec<_>>());
             };
-            let base_field_name = self.get_field_name(&reg_1st, &base_field);
+            let base_field_name = self.get_field_name(reg_1st, base_field);
             self.push_stash(1, &format!("   {rand_s}uvm_reg_field {regname}_{fieldname};\n"));
             self.push_stash(2, &format!("      this.{regname}_{fieldname} = this.{regname}.{base_field_name};\n"));
             let rst = field.reset();
@@ -230,7 +230,7 @@ impl GeneratorSw for GeneratorRal {
             self.write("   this.default_map.add_submap(this.m_``PREFIX````BLOCK``.default_map, OFFSET);");
             self.write("`endif\n\n");
         }
-        for rif in rif_list.iter() {
+        for (rif,_) in rif_list.iter() {
             self.write(&format!("`include \"ral_{}.sv\"\n", rif.name(false).to_lowercase()));
         }
         for rifmux in rifmux_list.iter() {

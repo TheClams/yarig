@@ -3,7 +3,7 @@ use std::error::Error;
 use clap::Parser;
 use yarig::{
     cfg::{RifGenTargets, YarigCfg},
-    generator::casing::Casing,
+    generator::{casing::Casing, gen_py::PyVersion},
     rifgen::{Interface, SuffixInfo}
 };
 
@@ -25,6 +25,7 @@ struct RifGenArgs{
     /// List of targets
     #[arg(short, long, num_args = 1..)]
     targets: Vec<RifGenTargets>,
+    /// List of included component to generate. Use "*" to select all.
     #[arg(long, num_args = 0..)]
     gen_inc: Vec<String>,
     /// Output path for C header
@@ -66,6 +67,9 @@ struct RifGenArgs{
     /// Base class for python target
     #[arg(long)]
     py_class: Option<String>,
+    /// Python version (default 3.11)
+    #[arg(long)]
+    py_version: Option<PyVersion>,
     /// Base class for RAL target
     #[arg(long)]
     ral_class: Option<String>,
@@ -109,6 +113,10 @@ fn main() {
 
     // Update configuration with command line arguments
     if let Some(fname) = args.rif {cfg.filename = fname.to_owned()};
+    if cfg.filename.is_empty() {
+        eprintln!("A RIF file must be specified ! (argument -r/--rif");
+        return;
+    }
     if !args.include.is_empty() {cfg.include = args.include.clone()};
     if !args.gen_inc.is_empty() {cfg.gen_inc = args.gen_inc.clone()};
     if !args.targets.is_empty() {cfg.targets = args.targets.to_owned()};
@@ -119,6 +127,7 @@ fn main() {
     if args.casing.is_some() {cfg.casing = args.casing};
     if args.interface.is_some() {cfg.interface = args.interface};
     if args.suffix_rtl_only {cfg.suffix_rtl_only = true;}
+
     //
     let outputs = [
         ("c"  , args.output_c),

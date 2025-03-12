@@ -111,13 +111,13 @@ pub trait GeneratorDoc : GeneratorBase {
                 self.write_table_footer(TableKind::Rifmux);
                 // Add description of all rif types
                 let rif_list = RifList::new(rifmux, true);
-                for (i,rif) in rif_list.iter().enumerate() {
-                    self.add_rif(rif, i+1, true)?;
+                for (i,(rif,info)) in rif_list.iter().enumerate() {
+                    self.add_rif(rif, i+1, info)?;
                 }
             }
             Comp::Rif(rif) => {
                 filename = self.filename_rif(rif);
-                self.add_rif(rif, 1, false)?;
+                self.add_rif(rif, 1, &[])?;
             },
             // Nothing todo for external RIF
             Comp::External(_) => return Ok(()),
@@ -162,7 +162,7 @@ pub trait GeneratorDoc : GeneratorBase {
     }
 
     /// Add RIF description
-    fn add_rif(&mut self, rif: &RifInst, idx: usize, has_top: bool) -> Result<(), String> {
+    fn add_rif(&mut self, rif: &RifInst, idx: usize, info: &[(u64,String)]) -> Result<(), String> {
         let rif_name = remove_rif(&rif.type_name);
         let desc = rif.base_description.get_split();
         self.set_rif_info(rif.addr_width, rif.data_width, rif.pages.len());
@@ -171,15 +171,15 @@ pub trait GeneratorDoc : GeneratorBase {
             let desc_detail = self.sanitize(desc_detail);
             self.write_info(&desc_detail);
         }
-        self.add_reg_summary(rif);
-        if has_top {
+        self.add_reg_summary(rif, info);
+        if !info.is_empty() {
             self.add_link(LinkKind::Top, "rifSummary");
         }
         self.add_reg_detail(rif, idx)
     }
 
     /// Add register summary and build disctionnary of instance (TBC if still needed)
-    fn add_reg_summary(&mut self, rif: &RifInst) {
+    fn add_reg_summary(&mut self, rif: &RifInst, info: &[(u64,String)]) {
         let rif_name = remove_rif(&rif.type_name);
         let addr_w = ((rif.addr_width+3)>>2) as usize;
         let data_w = ((rif.data_width+3)>>2) as usize;
@@ -231,7 +231,7 @@ pub trait GeneratorDoc : GeneratorBase {
         let is_public = self.core().setting.privacy.is_public();
         let reg_headers = [CellKind::Addr, CellKind::Inst, CellKind::Reset, CellKind::Desc];
         let inst_dict = InstDict::new(&rif.pages, is_public);
-        self.write_reg_summary_header(rif);
+        self.write_reg_detail_header(rif);
         for (idx_p, page) in rif.pages.iter().enumerate() {
             let page_name = &page.name;
             let mut id_page = format!("regmap.{rif_name}");
@@ -243,8 +243,10 @@ pub trait GeneratorDoc : GeneratorBase {
             let desc = page.description.get_split();
             self.write_page_title((rif_name, idx_c), (page_name, idx_p+1), desc);
             let mut idx_r = 0;
-            let regs = page.regs.iter().filter(|r| !(is_public && r.visibility.is_hidden()));
-            for (idx_ri,reg) in regs.enumerate() {
+            let regs = page.regs.iter()
+                .enumerate()
+                .filter(|(_,r)| !(is_public && r.visibility.is_hidden()));
+            for (idx_ri,reg) in regs {
                 // Check not already defined
                 let reg_type = reg.expanded_type_name();
                 let Some(instances) = inst_dict.get(&reg_type) else {
@@ -385,16 +387,14 @@ pub trait GeneratorDoc : GeneratorBase {
                         let mut rst = f.reset_str();
                         let mut f_inst_reset = f.reset.clone();
                         for inst_rst in resets.iter().skip(1) {
-                            if *inst_rst != f.reset {
-                                if *inst_rst != f_inst_reset {
-                                    rst.push('/');
-                                    if f_inst_reset == f.reset {
-                                        rst.push_str(&val_str(inst_rst.to_u128(f.width), f.width.into(), f.is_signed()));
-                                        f_inst_reset = inst_rst.clone();
-                                    } else {
-                                        rst.push('…');
-                                        break;
-                                    }
+                            if *inst_rst != f.reset && *inst_rst != f_inst_reset {
+                                rst.push('/');
+                                if f_inst_reset == f.reset {
+                                    rst.push_str(&val_str(inst_rst.to_u128(f.width), f.width.into(), f.is_signed()));
+                                    f_inst_reset = inst_rst.clone();
+                                } else {
+                                    rst.push('…');
+                                    break;
                                 }
                             }
                         }

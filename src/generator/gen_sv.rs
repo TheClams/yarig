@@ -81,7 +81,7 @@ impl GeneratorSv {
                 if !self.base_settings.gen_inc.is_empty() {
                     let gen_all = self.base_settings.is_gen_all();
                     let rif_list = RifList::new(rifmux, true);
-                    for rif in rif_list.iter() {
+                    for (rif,_) in rif_list.iter() {
                         if !gen_all && !self.base_settings.is_gen_inc(rif) {
                             continue;
                         }
@@ -431,7 +431,9 @@ impl GeneratorSv {
         for page in rif.pages.iter().filter(|p| p.external.is_none()) {
             for reg in page.regs.iter() {
                 let name = reg.name().to_casing(Snake);
-                self.write(&format!("   logic {name}__decode;\n"));
+                if reg.has_decode() {
+                    self.write(&format!("   logic {name}__decode;\n"));
+                }
                 self.write(&format!("   logic [{}:0] {name}__read_data;\n", rif.data_width - 1));
             }
         }
@@ -623,8 +625,9 @@ impl GeneratorSv {
             }
             self.write(";\n");
         }
+        // Set the decode signal default value
         for page in rif.pages.iter().filter(|p| p.external.is_none()) {
-            for reg in page.regs.iter() {
+            for reg in page.regs.iter().filter(|r| r.has_decode()) {
                 self.write(&format!("      {}__decode = 1'b0;\n", reg.name().to_casing(Snake)));
             }
         }
@@ -638,31 +641,35 @@ impl GeneratorSv {
                     rif.addr_width - addr_shift,
                     (reg.addr + page.addr) >> addr_shift
                 ));
-                self.write(&format!("            {name_flat}__decode = "));
+                // Set the decode signal high when matching address and the register contains
+                // no field with limit or all limit check pass
                 let field_limit: Vec<(String, String)> = reg
                     .fields
                     .iter()
                     .filter(|field| field.limit.value != LimitValue::None)
                     .map(|field| (field.name.to_owned(), field.limit.bypass.to_owned()))
                     .collect();
-                if !field_limit.is_empty() {
-                    self.write("if_rif.rd_wrn || (");
-                    for (i, fl) in field_limit.iter().enumerate() {
-                        if i != 0 {
-                            self.write(" && ");
+                if reg.has_decode() {
+                    self.write(&format!("            {name_flat}__decode = "));
+                    if !field_limit.is_empty() {
+                        self.write("if_rif.rd_wrn || (");
+                        for (i, fl) in field_limit.iter().enumerate() {
+                            if i != 0 {
+                                self.write(" && ");
+                            }
+                            if fl.1.is_empty() {
+                                self.write(&format!("{group_name}_{}__check", fl.0));
+                            } else {
+                                self.write(&format!("({group_name}_{}__check || {})", fl.0, fl.1));
+                            }
                         }
-                        if fl.1.is_empty() {
-                            self.write(&format!("{group_name}_{}__check", fl.0));
-                        } else {
-                            self.write(&format!("({group_name}_{}__check || {})", fl.0, fl.1));
-                        }
+                        self.write(");\n");
+                    } else {
+                        self.write("1'b1;\n");
                     }
-                    self.write(");\n");
-                } else {
-                    self.write("1'b1;\n");
                 }
                 self.write(&format!("            rif_read_data_l   = {name_flat}__read_data;\n"));
-                self.write("            rif_err_addr_l    = 1'b0;\n");
+                self.write(         "            rif_err_addr_l    = 1'b0;\n");
                 // Access error when writing a read-only field, reading a write only field,
                 //  or writing one field outside its set value (when limits are defined)
                 self.write("            rif_err_access_l  = ");

@@ -831,6 +831,15 @@ impl RifRegInst {
         self.intr_info.0.is_derived()
     }
 
+    /// Flag when a register needs a decode signal
+    /// The decode signal is not needed when the whole register is read-only,
+    /// not external, without pulse access
+    pub fn has_decode(&self) -> bool {
+        self.sw_access.is_writable() ||
+        !self.pulse.is_empty() ||
+        !self.external.is_none()
+    }
+
     /// Flag when a register needs to implement a sequential process
     pub fn has_proc(&self) -> bool {
         for field in self.fields.iter() {

@@ -58,7 +58,7 @@ pub trait GeneratorSw : GeneratorBase {
                 let riflist = RifList::new(rifmux, !Self::IS_HIERARCHICAL);
                 if !Self::SINGLE_FILE && !self.setting().gen_inc.is_empty() {
                     let gen_all = self.setting().is_gen_all();
-                    for rif in riflist.iter() {
+                    for (rif,_) in riflist.iter() {
                         if !gen_all && !self.setting().is_gen_inc(rif) {
                             continue;
                         }
@@ -112,8 +112,8 @@ pub trait GeneratorSw : GeneratorBase {
             let page_name = if Self::INST_BY_PAGE {&prefix} else {rif_name};
             let is_last_page = idx==rif.pages.len()-1;
             // Parse all register instance to get length, for pretty formatting
-            let len_name = page.regs.iter().map(|r| r.reg_name.len()).max().expect("Page should have registers");
-            let len_type = 6+page.regs.iter().map(|r| r.reg_type.len()).max().expect("Page should have registers");
+            let len_name = page.regs.iter().map(|r| self.casing(&r.reg_name).len()).max().expect("Page should have registers");
+            let len_type = 6+page.regs.iter().map(|r| self.casing(&r.reg_type).len()).max().expect("Page should have registers");
             self.set_max_reg_name_len(len_name, len_type);
             //
             if Self::HAS_REG_DECL {
@@ -131,7 +131,7 @@ pub trait GeneratorSw : GeneratorBase {
             // Instantiate all registers
             // Call page header only once on first page if instance are not grouped by page
             if idx==0 || Self::INST_BY_PAGE {
-                self.write_page_header(&page_name, &page.description);
+                self.write_page_header(page_name, &page.description);
             }
             let mut overlap = false;
             let mut addr = 0;
@@ -176,7 +176,7 @@ pub trait GeneratorSw : GeneratorBase {
                 self.write_reginst_overlap_footer();
             }
             if is_last_page || Self::INST_BY_PAGE {
-                self.write_page_footer(&page_name, is_last_page);
+                self.write_page_footer(page_name, is_last_page);
             }
         }
         // End the RIF declaration

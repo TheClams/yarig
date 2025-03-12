@@ -13,7 +13,7 @@ impl InstDict {
     pub fn new(pages: &[RifPageInst], is_public: bool) -> Self {
         let mut dict : HashMap<String,Vec<u16>> = HashMap::new();
         for page in pages.iter() {
-            for (idx,reg) in page.regs.iter().filter(|r| !(is_public && r.visibility.is_hidden())).enumerate() {
+            for (idx,reg) in page.regs.iter().enumerate().filter(|(_,r)| !(is_public && r.visibility.is_hidden())) {
                 let n = reg.expanded_type_name();
                 dict.entry(n).or_default().push(idx as u16);
             }
@@ -40,32 +40,37 @@ impl Deref for InstDict {
     }
 }
 
-pub struct RifList<'a>(Vec<&'a RifInst>);
+pub struct RifList<'a>(Vec<(&'a RifInst,Vec<(u64, String)>)>);
 
 impl<'a> RifList<'a> {
 
     pub fn new(rifmux: &'a RifmuxInst, deep: bool) -> Self {
         let mut rd = RifList(Vec::with_capacity(rifmux.components.len()));
-        rd.scan(rifmux, deep);
+        rd.scan(rifmux, deep, 0);
         rd
     }
 
-    pub fn scan(&mut self, rifmux: &'a RifmuxInst, deep: bool) {
+    pub fn scan(&mut self, rifmux: &'a RifmuxInst, deep: bool, base_addr: u64) {
         for comp in rifmux.components.iter() {
+            let addr = base_addr + comp.addr;
             match &comp.inst {
                 Comp::Rifmux(c) => if deep {
-                    self.scan(c, true)
+                    self.scan(c, true, addr)
                 },
-                Comp::Rif(c) =>
-                    if !self.0.iter().any(|x| x.type_name==c.type_name) {
-                        self.0.push(c);
+                Comp::Rif(c) => {
+                    let info = (addr, c.inst_name.to_owned());
+                    if let Some(ri) = self.0.iter_mut().find(|x| x.0.type_name==c.type_name) {
+                        ri.1.push(info);
+                    } else {
+                        self.0.push((c, vec![info]));
                     }
+                }
                 Comp::External(_) => {}
             }
         }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item=&&RifInst> {
+    pub fn iter(&self) -> impl Iterator<Item=&(&RifInst,Vec<(u64, String)>)> {
         self.0.iter()
     }
 }
