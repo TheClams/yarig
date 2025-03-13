@@ -24,6 +24,8 @@ pub struct GeneratorMif {
     is_rifmux: bool,
     /// Flag when current document is for a RIFMux
     multipage: bool,
+    /// Current compoment address width
+    addr_width: u8,
     /// Flag when current document is for a RIFMux
     pgf_name: HashMap<PgfKind, String>,
     /// Table index
@@ -46,6 +48,7 @@ impl GeneratorMif {
         pgf_name.insert(PgfKind::TableCell   , "CellBodyLeft".to_owned());
         GeneratorMif {
             core: GeneratorCore::new(1,setting),
+            addr_width: 8,
             is_rifmux: false,
             multipage: false,
             tbl_idx: 1,
@@ -88,6 +91,7 @@ impl GeneratorMif {
         match kind {
             // RifMux/Page: Offset, Name, Description
             TableKind::Rifmux  => &[2.5, 3.4, 11.1],
+            TableKind::RifInst => &[2.5, 3.4, 11.1],
             TableKind::Page    => &[2.5, 3.4, 11.1],
             // Register instances: Offset, Name, Reset, Description
             TableKind::RegInst => &[2.5, 3.4, 2.1, 9.4],
@@ -124,7 +128,8 @@ impl GeneratorDoc for GeneratorMif {
     const SHOW_SINGLE_REG : bool = false;
     const SHOW_UNUSED : bool = true;
 
-    fn set_rif_info(&mut self, _addr_w: u8, _data_w: u8, nb_page: usize) {
+    fn set_rif_info(&mut self, _name: &str, addr_w: u8, _data_w: u8, nb_page: usize) {
+        self.addr_width = addr_w;
         self.multipage = nb_page > 1;
     }
 
@@ -178,25 +183,32 @@ impl GeneratorDoc for GeneratorMif {
         }
     }
 
-    fn write_reg_title(&mut self, _idx_rif: (&str,usize), _idx_page: (&str, usize), idx_reg: (&str, usize), desc: &str) {
-        let title = if desc.is_empty() {idx_reg.0.to_owned()}
+    fn write_reg_title(&mut self, _idx_rif: (&str,usize), _idx_page: (&str, usize), idx_reg: (&str, usize), desc: &str, base_addr: Option<u64>) {
+        let mut title = if desc.is_empty() {idx_reg.0.to_owned()}
                     else {format!("{} ({})", desc, idx_reg.0)};
+        if let Some(addr) = base_addr {
+            let w = ((self.addr_width+3) >> 2) as usize;
+            title.push_str(&format!(" @ 0x{addr:0w$x}"));
+        }
         self.write_mif_heading(&title, idx_reg.1, PgfKind::Heading3);
     }
 
     fn write_table_title(&mut self, kind: TableKind, title: &str, _id: &str) {
         let widths = self.get_col_width(kind);
-        let caption = if kind==TableKind::Page {
-            if self.multipage {
-                format!("{} registers address mapping", title.to_casing(Casing::Title))
-            } else {
-                "Registers address mapping".to_owned()
+        let caption = match kind {
+            TableKind::Page => {
+                if self.multipage {
+                    format!("{} registers address mapping", title.to_casing(Casing::Title))
+                } else {
+                    "Registers address mapping".to_owned()
+                }
             }
-        } else {
-            self.sanitize(title)
+            TableKind::Field => format!("Register {title}"),
+            _ => self.sanitize(title),
         };
         let pgf_kind = match kind {
             TableKind::Rifmux  => PgfKind::RifmuxTable,
+            TableKind::RifInst => PgfKind::RifmuxTable,
             TableKind::Page    => PgfKind::MappingTable,
             TableKind::RegInst => PgfKind::MappingTable,
             TableKind::Field   => PgfKind::RegTable,

@@ -6,6 +6,8 @@ use super::{casing::Casing, gen_common::{GeneratorBase, GeneratorBaseSetting, Ge
 pub struct GeneratorLatex {
     /// Base structure of all generators
     core: GeneratorCore,
+    /// Current component address width
+    addr_width: u8,
     /// Flag when next table column is the first of a row
     first_col: bool,
     /// Flag when current document is for a RIFMux
@@ -20,6 +22,7 @@ impl GeneratorLatex {
     pub fn new(setting: GeneratorBaseSetting) -> Self {
         GeneratorLatex {
             core: GeneratorCore::new(0,setting),
+            addr_width: 8,
             first_col: true,
             is_rifmux: false,
             multipage: false,
@@ -48,7 +51,8 @@ impl GeneratorDoc for GeneratorLatex {
     const SHOW_SINGLE_REG : bool = false;
     const SHOW_UNUSED : bool = true;
 
-    fn set_rif_info(&mut self, _addr_w: u8, _data_w: u8, nb_page: usize) {
+    fn set_rif_info(&mut self, _name: &str, addr_w: u8, _data_w: u8, nb_page: usize) {
+        self.addr_width = addr_w;
         self.multipage = nb_page > 1;
     }
 
@@ -99,13 +103,17 @@ impl GeneratorDoc for GeneratorLatex {
         }
     }
 
-    fn write_reg_title(&mut self, _idx_rif: (&str,usize), _idx_page: (&str, usize), idx_reg: (&str, usize), desc: &str) {
+    fn write_reg_title(&mut self, _idx_rif: (&str,usize), _idx_page: (&str, usize), idx_reg: (&str, usize), desc: &str, base_addr: Option<u64>) {
         self.write("\t\\subsubsection{");
         let name = self.sanitize(idx_reg.0);
         if desc.is_empty() {
             self.write(&name);
         } else {
             self.write(&format!("{desc} ({name})"));
+        }
+        if let Some(addr) = base_addr {
+            let w = ((self.addr_width+3) >> 2) as usize;
+            self.write(&format!(" @ 0x{addr:0w$x}"));
         }
         self.write("}\n");
     }
@@ -125,6 +133,7 @@ impl GeneratorDoc for GeneratorLatex {
         self.write("{rowhead=1,row{1}={bg=colorTableHeading,c,font=\\bfseries},hlines,vlines" );
         match kind {
             TableKind::Rifmux  => self.write(",colspec={p{1.80cm}p{4.30cm}p{9.0cm}}}"),
+            TableKind::RifInst => self.write(",colspec={p{1.80cm}p{4.30cm}p{9.0cm}}}"),
             TableKind::Page    => self.write(",colspec={p{1.80cm}p{4.30cm}p{9.00cm}}}"),
             TableKind::RegInst => self.write(",colspec={p{1.80cm}p{2.90cm}p{1.80cm}p{8.50cm}}}"),
             TableKind::Field   => self.write(",colspec={p{0.90cm}p{2.90cm}p{1.30cm}p{1.80cm}p{8.00cm}}}"),

@@ -129,13 +129,11 @@ impl GeneratorSw for GeneratorJson {
         let inst_name = self.casing(remove_rif(&rif_inst.inst_name));
         let type_name = self.casing(remove_rif(&rif_inst.type_name));
         self.write(&format!("   \"{inst_name}\" : {{\n"));
-        self.write(&format!("      \"type\" : {type_name},\n"));
-        self.write(&format!("      \"group\" : {},\n", cntxt.group));
+        self.write(&format!("      \"type\" : \"{type_name}\",\n"));
+        self.write(&format!("      \"group\" : \"{}\",\n", cntxt.group));
         self.write(&format!("      \"addr\" : {},\n", cntxt.addr));
-        self.write(&format!("      \"desc\" : {desc},\n"));
+        self.write(&format!("      \"desc\" : \"{desc}\"\n"));
         let sep = if last_comp {""} else {","};
-        self.write("      }\n");
         self.write(&format!("   }}{sep}\n"));
     }
-
 }

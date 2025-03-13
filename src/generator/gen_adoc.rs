@@ -8,6 +8,10 @@ pub struct GeneratorAdoc {
     core: GeneratorCore,
     /// Flag when current document is for a RIFMux
     is_rifmux: bool,
+    /// Name of the current component
+    comp_name: String,
+    /// Current compoment address width
+    addr_width: u8,
     /// Flag when current RIF has multiple pages
     multipage: bool,
 }
@@ -18,6 +22,8 @@ impl GeneratorAdoc {
     pub fn new(setting: GeneratorBaseSetting) -> Self {
         GeneratorAdoc {
             core: GeneratorCore::new(0,setting),
+            addr_width: 8,
+            comp_name: "".to_owned(),
             is_rifmux: false,
             multipage: false,
         }
@@ -45,7 +51,9 @@ impl GeneratorDoc for GeneratorAdoc {
     const SHOW_SINGLE_REG : bool = false;
     const SHOW_UNUSED : bool = true;
 
-    fn set_rif_info(&mut self, _addr_w: u8, _data_w: u8, nb_page: usize) {
+    fn set_rif_info(&mut self, name: &str, addr_w: u8, _data_w: u8, nb_page: usize) {
+        self.addr_width = addr_w;
+        self.comp_name = name.to_owned();
         self.multipage = nb_page > 1;
     }
 
@@ -90,7 +98,7 @@ impl GeneratorDoc for GeneratorAdoc {
         }
     }
 
-    fn write_reg_title(&mut self, idx_rif: (&str,usize), _idx_page: (&str, usize), idx_reg: (&str, usize), desc: &str) {
+    fn write_reg_title(&mut self, idx_rif: (&str,usize), _idx_page: (&str, usize), idx_reg: (&str, usize), desc: &str, base_addr: Option<u64>) {
         self.write("\n");
         if self.is_rifmux {
             self.write("=");
@@ -106,6 +114,10 @@ impl GeneratorDoc for GeneratorAdoc {
         } else {
             self.write(&format!("{desc} ({name})"));
         }
+        if let Some(addr) = base_addr {
+            let w = ((self.addr_width+3) >> 2) as usize;
+            self.write(&format!(" @ 0x{addr:0w$x}"));
+        }
         self.write("\n");
     }
 
@@ -118,21 +130,25 @@ impl GeneratorDoc for GeneratorAdoc {
     }
 
     fn write_table_title(&mut self, kind: TableKind, title: &str, id: &str) {
-        let caption = if kind==TableKind::Page {
-            if self.multipage {
-                format!("{} registers address mapping", title.to_casing(Casing::Title))
-            } else {
-                "Registers address mapping".to_owned()
+        let caption = match kind {
+            TableKind::Page => {
+                if self.multipage {
+                    format!("{} registers address mapping", title.to_casing(Casing::Title))
+                } else {
+                    "Registers address mapping".to_owned()
+                }
             }
-        } else {
-            self.sanitize(title)
+            TableKind::Field => format!("Register {}.{title}", self.comp_name),
+            _ => self.sanitize(title)
         };
+
         self.write(".");
         self.write(&caption);
         self.write("\n[grid=rows,frame=none]\n");
         self.write("[%header, cols=\"");
         match kind {
             TableKind::Rifmux  => self.write("2,4,9"),
+            TableKind::RifInst => self.write("2,4,9"),
             TableKind::Page    => self.write("2,4,9"),
             TableKind::RegInst => self.write("2,3,2,9"),
             TableKind::Field   => self.write("1,3,1,2,8"),
@@ -170,7 +186,7 @@ impl GeneratorDoc for GeneratorAdoc {
             }
         } else {
             let has_link = kind.1==CellKind::Inst && !id.is_empty()
-                && (kind.0==TableKind::Rifmux || kind.0==TableKind::Page);
+                && (kind.0==TableKind::Rifmux || kind.0==TableKind::RifInst || kind.0==TableKind::Page);
             if kind.1 == CellKind::Desc || has_link {
                 self.write("a");
             }

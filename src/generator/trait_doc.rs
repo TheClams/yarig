@@ -6,23 +6,24 @@ use crate::{
     rifgen::{EnumDef, FieldSwKind, ResetVal}
 };
 
-use super::gen_common::{GeneratorBase, InstDict, RifList};
+use super::gen_common::{GeneratorBase, InstDict, RifInstInfo, RifList};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[allow(dead_code)]
 pub enum TableKind {
-    Rifmux, Page, RegInst, Layout, Field, FieldRsvd
+    Rifmux, RifInst, Page, RegInst, Layout, Field, FieldRsvd
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum CellKind {
-    Addr, RifType, RegType, Inst, Reset, Desc, Field, Bits, Access
+    Addr, Offset, RifType, RegType, Inst, Reset, Desc, Field, Bits, Access
 }
 
 impl CellKind {
     pub fn label(&self) -> &str {
         match self {
-            CellKind::Addr    => "Offset",
+            CellKind::Addr    => "Address",
+            CellKind::Offset  => "Offset",
             CellKind::RifType => "Type",
             CellKind::RegType => "Type",
             CellKind::Inst    => "Name",
@@ -98,7 +99,7 @@ pub trait GeneratorDoc : GeneratorBase {
                 }
                 // Table with all RIF instances
                 let w = ((rifmux.addr_width+3) >> 2) as usize;
-                self.write_table_title(TableKind::Rifmux, "Summary", "rifSummary");
+                self.write_table_title(TableKind::Rifmux, "Summary", "topSummary");
                 self.write_table_row_top_header(TableKind::Rifmux);
                 for k in [CellKind::Addr, CellKind::RifType, CellKind::Inst, CellKind::Desc] {
                     if !Self::SHOW_TYPE  && k==CellKind::RifType {continue;}
@@ -149,23 +150,28 @@ pub trait GeneratorDoc : GeneratorBase {
             },
             inst => {
                 let tn = remove_rif(inst.get_type());
-                self.write_table_row_header(None);
-                self.write_table_cell((TableKind::Rifmux, CellKind::Addr   ), 0, &format!("0x{addr:0w$X}"), "", None);
-                if Self::SHOW_TYPE {
-                    self.write_table_cell((TableKind::Rifmux, CellKind::RifType), 0, tn, tn, None);
-                }
-                self.write_table_cell((TableKind::Rifmux, CellKind::Inst   ), 0, &instname, tn, None);
-                self.write_table_cell((TableKind::Rifmux, CellKind::Desc   ), 0, &self.sanitize(inst.get_desc_short()), "", None);
-                self.write_table_row_footer();
+                self.write_rifmux_entry(&instname, tn, (addr,w), inst.get_desc_short(), Self::SHOW_TYPE);
             }
         }
     }
 
+    fn write_rifmux_entry(&mut self, inst_name: &str, type_name: &str, addr: (u64, usize), desc: &str, show_type: bool) {
+        self.write_table_row_header(None);
+        let w = addr.1;
+        self.write_table_cell((TableKind::Rifmux, CellKind::Addr   ), 0, &format!("0x{:0w$X}", addr.0), "", None);
+        if show_type {
+            self.write_table_cell((TableKind::Rifmux, CellKind::RifType), 0, type_name, type_name, None);
+        }
+        self.write_table_cell((TableKind::Rifmux, CellKind::Inst   ), 0, inst_name, type_name, None);
+        self.write_table_cell((TableKind::Rifmux, CellKind::Desc   ), 0, &self.sanitize(desc), "", None);
+        self.write_table_row_footer();
+    }
+
     /// Add RIF description
-    fn add_rif(&mut self, rif: &RifInst, idx: usize, info: &[(u64,String)]) -> Result<(), String> {
+    fn add_rif(&mut self, rif: &RifInst, idx: usize, info: &[RifInstInfo]) -> Result<(), String> {
         let rif_name = remove_rif(&rif.type_name);
         let desc = rif.base_description.get_split();
-        self.set_rif_info(rif.addr_width, rif.data_width, rif.pages.len());
+        self.set_rif_info(rif_name, rif.addr_width, rif.data_width, rif.pages.len());
         self.write_rif_title((rif_name, idx), desc.0);
         if let Some(desc_detail) = desc.1 {
             let desc_detail = self.sanitize(desc_detail);
@@ -173,17 +179,24 @@ pub trait GeneratorDoc : GeneratorBase {
         }
         self.add_reg_summary(rif, info);
         if !info.is_empty() {
-            self.add_link(LinkKind::Top, "rifSummary");
+            self.add_link(LinkKind::Top, "topSummary");
         }
-        self.add_reg_detail(rif, idx)
+        let base_addr = if info.len() == 1 {Some(info[0].0)} else {None};
+        self.add_reg_detail(rif, idx, base_addr)
     }
 
     /// Add register summary and build disctionnary of instance (TBC if still needed)
-    fn add_reg_summary(&mut self, rif: &RifInst, info: &[(u64,String)]) {
+    fn add_reg_summary(&mut self, rif: &RifInst, info: &[RifInstInfo]) {
         let rif_name = remove_rif(&rif.type_name);
         let addr_w = ((rif.addr_width+3)>>2) as usize;
         let data_w = ((rif.data_width+3)>>2) as usize;
         let is_public = self.core().setting.privacy.is_public();
+        // Extract a base address if there is only one
+        let offset = if info.len() == 1 {info[0].0} else {0};
+        let addr_col = if info.len() > 1 {CellKind::Offset} else {CellKind::Addr};
+        if info.len() > 1 {
+            self.add_rif_summary(rif, info);
+        }
         self.write_reg_summary_header(rif);
         for page in rif.pages.iter() {
             // TODO: check hidden
@@ -194,7 +207,7 @@ pub trait GeneratorDoc : GeneratorBase {
             }
             self.write_table_title(TableKind::Page, &page.name, &id_page);
             self.write_table_row_top_header(TableKind::Page);
-            for k in [CellKind::Addr, CellKind::RifType, CellKind::Inst, CellKind::Reset, CellKind::Desc] {
+            for k in [addr_col, CellKind::RifType, CellKind::Inst, CellKind::Reset, CellKind::Desc] {
                 if !Self::SHOW_RESET && k==CellKind::Reset {continue;}
                 if !Self::SHOW_TYPE  && k==CellKind::RifType {continue;}
                 self.write_table_cell_top((TableKind::Rifmux, k), 0, k.label(), "");
@@ -203,7 +216,7 @@ pub trait GeneratorDoc : GeneratorBase {
             for reg in page.regs.iter().filter(|r| !(is_public && r.visibility.is_hidden())) {
                 let reg_type = self.casing(&reg.expanded_type_name());
                 let reg_name = self.casing(&reg.name_i());
-                let addr = page.addr+reg.addr;
+                let addr = offset + page.addr + reg.addr;
                 let id_reg = &format!("{rif_name}.{reg_type}");
                 self.write_table_row_header(None);
                 self.write_table_cell((TableKind::Page, CellKind::Addr), 0, &format!("0x{addr:0addr_w$X}"), "", None);
@@ -223,13 +236,31 @@ pub trait GeneratorDoc : GeneratorBase {
 
     fn write_reg_summary_header(&mut self, rif: &RifInst) {}
 
+    /// Summary of RIF instances when there is more than one
+    fn add_rif_summary(&mut self, rif: &RifInst, infos: &[RifInstInfo]) {
+        let w = ((rif.addr_width+3) >> 2) as usize;
+        self.write_table_title(TableKind::RifInst, "RIF instances", "rifInstSummary");
+        self.write_table_row_top_header(TableKind::RifInst);
+        for k in [CellKind::Addr, CellKind::Inst, CellKind::Desc] {
+            self.write_table_cell_top((TableKind::RifInst, k), 0, k.label(), "");
+        }
+        self.write_table_row_top_footer();
+        let type_name = remove_rif(&rif.type_name);
+        for info in infos.iter() {
+            self.write_rifmux_entry(&info.1, type_name, (info.0,w), &info.2, false);
+        }
+        self.write_table_footer(TableKind::RifInst);
+    }
+
     /// Add register details: table with register instance followed by table with fields description
-    fn add_reg_detail(&mut self, rif: &RifInst, idx_c: usize)  -> Result<(),String> {
+    fn add_reg_detail(&mut self, rif: &RifInst, idx_c: usize, base_addr: Option<u64>)  -> Result<(),String> {
         let rif_name = remove_rif(&rif.type_name);
         let addr_w = ((rif.addr_width+3)>>2) as usize;
         let data_w = ((rif.data_width+3)>>2) as usize;
         let is_public = self.core().setting.privacy.is_public();
-        let reg_headers = [CellKind::Addr, CellKind::Inst, CellKind::Reset, CellKind::Desc];
+        let addr_col = if base_addr.is_none() {CellKind::Offset} else {CellKind::Addr};
+        let offset = base_addr.unwrap_or(0);
+        let reg_headers = [addr_col, CellKind::Inst, CellKind::Reset, CellKind::Desc];
         let inst_dict = InstDict::new(&rif.pages, is_public);
         self.write_reg_detail_header(rif);
         for (idx_p, page) in rif.pages.iter().enumerate() {
@@ -261,7 +292,9 @@ pub trait GeneratorDoc : GeneratorBase {
                 idx_r += 1;
                 let desc = reg.base_description.get_split();
                 let reg_type = self.casing(&reg_type);
-                self.write_reg_title((rif_name, idx_c), (page_name, idx_p+1), (&reg_type, idx_r), &self.sanitize(desc.0));
+                // let addr = if let Some(ba) = base_addr {Some(ba+reg.addr)} else {None};
+                let addr = base_addr.map(|ba| ba+reg.addr);
+                self.write_reg_title((rif_name, idx_c), (page_name, idx_p+1), (&reg_type, idx_r), &self.sanitize(desc.0), addr);
                 if let Some(desc_detail) = desc.1 {
                     self.write_info(&self.sanitize(desc_detail));
                 }
@@ -281,7 +314,7 @@ pub trait GeneratorDoc : GeneratorBase {
                         };
                         let reg_name = self.casing(&inst.name_i());
                         let id_name = format!("inst.{rif_name}.{reg_name}");
-                        let addr = page.addr+inst.addr;
+                        let addr = offset + page.addr + inst.addr;
                         self.write_table_row_header(Some(&id_name));
                         self.write_table_cell((TableKind::RegInst, CellKind::Addr ), 0, &format!("0x{addr:0addr_w$X}"), "", None);
                         self.write_table_cell((TableKind::RegInst, CellKind::Inst ), 0, &reg_name, &reg_type, None);
@@ -334,7 +367,7 @@ pub trait GeneratorDoc : GeneratorBase {
                 // No details for derived interrupt register except if there is no layout summarizing the fields
                 let is_intr_derived = reg.intr_info.0.is_derived();
                 if !is_intr_derived || !Self::HAS_LAYOUT {
-                    self.write_table_title(TableKind::Field, &format!("Register {reg_type}"), &format!("fields.{id_reg}") );
+                    self.write_table_title(TableKind::Field, &reg_type, &format!("fields.{id_reg}") );
                     self.write_table_row_top_header(TableKind::Field);
                     for k in [CellKind::Bits, CellKind::Inst, CellKind::Access, CellKind::Reset, CellKind::Desc] {
                         self.write_table_cell_top((TableKind::Field, k), 0, k.label(), "");
@@ -366,15 +399,6 @@ pub trait GeneratorDoc : GeneratorBase {
                         // if multiple value display the first two, and an ellipsis if at least a third value exists
                         let resets : Vec<ResetVal> = instances.iter().filter_map(|idx| {
                                 let reg_inst = page.regs.get(*idx as usize).unwrap(); // Case were this does not exist already checked before
-                                // let reg_idx = if reg_inst.is_reg_def() {reg_inst.array.idx()} else {0};
-                                // if let Some(f_inst) = reg_inst.fields.iter().find(|fi| fi.name==f.name && (fi.array.idx() - reg_idx*fi.array.dim())==f.array.idx()) {
-                                //     Some(f_inst.reset.clone())
-                                // } else {
-                                //     // Should never happen, but print a clear message to debug library if I mess something in the future
-                                //     eprintln!("[ERROR] Field {fieldname} == {} with index {:?} (reg {:?} -> {reg_idx}): Unable to find amongst {:?}",
-                                //         f.name, f.array, reg_inst.array, reg_inst.fields.iter().map(|fi| (&fi.name, fi.array)).collect::<Vec<_>>());
-                                //     None
-                                // }
                                 if let Some(f_inst) = reg_inst.find_field(&f.name, f.array.idx()) {
                                     Some(f_inst.reset.clone())
                                 } else {
@@ -471,7 +495,7 @@ pub trait GeneratorDoc : GeneratorBase {
     }
 
     /// Set the width of address/data for current RIF
-    fn set_rif_info(&mut self, addr_w: u8, data_w: u8, nb_page: usize) {}
+    fn set_rif_info(&mut self, name: &str, addr_w: u8, data_w: u8, nb_page: usize) {}
 
     /// Write file header
     /// No header by default
@@ -487,7 +511,7 @@ pub trait GeneratorDoc : GeneratorBase {
     fn write_page_title(&mut self, idx_rif: (&str,usize), idx_page: (&str, usize), desc: (&str, Option<&str>)) {}
 
     /// Write register title
-    fn write_reg_title(&mut self, idx_rif: (&str,usize), idx_page: (&str, usize), idx_reg: (&str, usize), desc: &str) {}
+    fn write_reg_title(&mut self, idx_rif: (&str,usize), idx_page: (&str, usize), idx_reg: (&str, usize), desc: &str, base_addr: Option<u64>) {}
 
     /// Write component/page information
     fn write_info(&mut self, info: &str) {

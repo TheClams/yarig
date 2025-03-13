@@ -40,7 +40,9 @@ impl Deref for InstDict {
     }
 }
 
-pub struct RifList<'a>(Vec<(&'a RifInst,Vec<(u64, String)>)>);
+pub type RifInstInfo = (u64, String, String);
+
+pub struct RifList<'a>(Vec<(&'a RifInst,Vec<RifInstInfo>)>);
 
 impl<'a> RifList<'a> {
 
@@ -52,13 +54,13 @@ impl<'a> RifList<'a> {
 
     pub fn scan(&mut self, rifmux: &'a RifmuxInst, deep: bool, base_addr: u64) {
         for comp in rifmux.components.iter() {
-            let addr = base_addr + comp.addr;
+            let addr = base_addr + comp.full_addr(&rifmux.groups);
             match &comp.inst {
                 Comp::Rifmux(c) => if deep {
                     self.scan(c, true, addr)
                 },
                 Comp::Rif(c) => {
-                    let info = (addr, c.inst_name.to_owned());
+                    let info = (addr, c.inst_name.to_owned(), c.description.get_short().to_owned());
                     if let Some(ri) = self.0.iter_mut().find(|x| x.0.type_name==c.type_name) {
                         ri.1.push(info);
                     } else {
@@ -70,7 +72,7 @@ impl<'a> RifList<'a> {
         }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item=&(&RifInst,Vec<(u64, String)>)> {
+    pub fn iter(&self) -> impl Iterator<Item=&(&RifInst,Vec<RifInstInfo>)> {
         self.0.iter()
     }
 }

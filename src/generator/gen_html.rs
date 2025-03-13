@@ -6,6 +6,8 @@ use super::{casing::{Casing, ToCasing}, gen_common::{GeneratorBase, GeneratorBas
 pub struct GeneratorHtml {
     /// Base structure of all generators
     core: GeneratorCore,
+    /// Current component address width
+    addr_width: u8,
     /// Number of column per bit for each register
     nb_col : usize,
     /// Flag when current RIF has multiple pages
@@ -19,6 +21,7 @@ impl GeneratorHtml {
     pub fn new(setting: GeneratorBaseSetting) -> Self {
         GeneratorHtml {
             core: GeneratorCore::new(0,setting),
+            addr_width: 8,
             nb_col: 1,
             multipage: false
         }
@@ -45,7 +48,8 @@ impl GeneratorDoc for GeneratorHtml {
     const SHOW_TYPE : bool = false;
     const SHOW_SINGLE_REG : bool = true;
 
-    fn set_rif_info(&mut self, _addr_w: u8, data_w: u8, nb_page: usize) {
+    fn set_rif_info(&mut self, _name: &str, addr_w: u8, data_w: u8, nb_page: usize) {
+        self.addr_width = addr_w;
         self.nb_col = 32 / data_w as usize;
         self.multipage = nb_page > 1;
     }
@@ -106,11 +110,11 @@ impl GeneratorDoc for GeneratorHtml {
         }
     }
 
-    fn write_reg_title(&mut self, idx_rif: (&str,usize), idx_page: (&str, usize), idx_reg: (&str, usize), desc: &str) {
+    fn write_reg_title(&mut self, idx_rif: (&str,usize), idx_page: (&str, usize), idx_reg: (&str, usize), desc: &str, _base_addr: Option<u64>) {
         self.write(&format!("<h3 id=\"{}.{}\">", idx_rif.0, idx_reg.0));
         self.write(&format!("{}.{}.{} ", idx_rif.1, idx_page.1, idx_reg.1));
         if desc.is_empty() {
-            self.write(idx_page.0);
+            self.write(idx_reg.0);
         } else {
             self.write(&format!("{desc} ({})", idx_reg.0));
         }
@@ -128,7 +132,7 @@ impl GeneratorDoc for GeneratorHtml {
             self.write(&format!(" id=\"{id}\""));
         }
         self.write(">");
-        if !title.is_empty() && (kind==TableKind::Rifmux || kind==TableKind::Page) {
+        if !title.is_empty() && (kind==TableKind::Rifmux || kind==TableKind::RifInst || kind==TableKind::Page) {
             self.write("<caption>");
             self.write(&title.to_casing(Casing::Title));
             if kind==TableKind::Page {

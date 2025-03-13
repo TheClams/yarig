@@ -1,6 +1,4 @@
-use std::{collections::{BTreeMap, BTreeSet}, fs::File, io::Write};
-
-use serde_derive::Deserialize;
+use std::{collections::{BTreeMap, BTreeSet}, fs::File, io::Write, str::FromStr};
 
 use crate::{
     cfg::CfgPy,
@@ -15,7 +13,7 @@ use super::{
     trait_sw::{GeneratorSw, RifContext}
 };
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub enum PyVersion {
     V3_10,
     V3_11,
@@ -41,12 +39,12 @@ impl std::str::FromStr for PyVersion {
     }
 }
 
-// impl<'de> serde::Deserialize<'de> for PyVersion {
-//     fn deserialize<D: serde::Deserializer<'de> >(d: D) -> Result<Self, D::Error> {
-//         let s = String::deserialize(d)?;
-//         Ok(s.as_ref().into())
-//     }
-// }
+impl<'de> serde::Deserialize<'de> for PyVersion {
+    fn deserialize<D: serde::Deserializer<'de> >(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        PyVersion::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
 
 
 pub struct GeneratorPy {
@@ -147,6 +145,7 @@ impl GeneratorSw for GeneratorPy {
                     for l in Self::DEFAULT_BASECLASS.lines() {
                         if l=="    @typing.final" { continue; }
                         file.write_all(l.as_bytes())?;
+                        file.write_all(b"\n")?;
                     }
                 }
                 _ => std::fs::write(path, Self::DEFAULT_BASECLASS.as_bytes())?,
