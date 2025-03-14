@@ -241,13 +241,17 @@ impl GeneratorDoc for GeneratorHtml {
             let l = line.trim();
             // Insert a line return after each line
             if !txt.is_empty() {
-                let need_br = ['.', ':'].iter().any(|c| last_char==*c) || l.chars().next().unwrap_or('a').is_uppercase();
+                let first_char = l.chars().next().unwrap_or('a');
+                let need_br = ['.', ':', '"'].iter().any(|c| last_char==*c)
+                    || first_char.is_uppercase()
+                    || first_char.is_digit(10)
+                    || first_char=='-';
                 txt.push_str(if need_br {"<br/>"} else {" "});
             }
             // Replace starting indentation by &nbsp; to
             let nb_spc = line.chars().take_while(|c| c.is_whitespace()).count();
             txt.push_str(&"&nbsp;".repeat(nb_spc));
-            //
+            // Save last char and replace by . if empty to ensure a new line is inserted next time
             last_char = l.chars().last().unwrap_or('.');
             txt.push_str(l);
         }

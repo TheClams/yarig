@@ -58,16 +58,16 @@ pub trait GeneratorSw : GeneratorBase {
                 let riflist = RifList::new(rifmux, !Self::IS_HIERARCHICAL);
                 if !Self::SINGLE_FILE && !self.setting().gen_inc.is_empty() {
                     let gen_all = self.setting().is_gen_all();
-                    for (rif,_) in riflist.iter() {
+                    for (rif, info) in riflist.iter() {
                         if !gen_all && !self.setting().is_gen_inc(rif) {
                             continue;
                         }
-                        self.gen_rif(rif, false)?;
+                        self.gen_rif(rif, info.first().map(|e| e.0))?;
                     }
                 }
                 self.gen_rifmux(rifmux, &riflist)
             }
-            Comp::Rif(rif) => self.gen_rif(rif, true),
+            Comp::Rif(rif) => self.gen_rif(rif, None),
             // Nothing todo for external RIF
             Comp::External(_) => Ok(())
         }
@@ -79,9 +79,9 @@ pub trait GeneratorSw : GeneratorBase {
     }
 
     /// Generate structure associated to a RIF
-    fn gen_rif(&mut self, rif: &RifInst, is_top: bool) -> Result<(), Box<dyn std::error::Error>> {
+    fn gen_rif(&mut self, rif: &RifInst, base_addr: Option<u64>) -> Result<(), Box<dyn std::error::Error>> {
         self.set_rif_info(rif);
-        self.write_rif_header(rif, is_top);
+        self.write_rif_header(rif, base_addr);
         let rif_name = remove_rif(&rif.type_name);
         let nb_byte = (rif.data_width >> 3) as u64;
         let is_public = self.setting().privacy.is_public();
@@ -182,6 +182,7 @@ pub trait GeneratorSw : GeneratorBase {
         // End the RIF declaration
         self.write_rif_footer();
         // Write file if top or one file per component
+        let is_top = base_addr.is_none();
         if !Self::SINGLE_FILE || is_top {
             let fname = if is_top && self.setting().fname.is_some() {
                 self.setting().fname.clone().unwrap()
@@ -203,7 +204,7 @@ pub trait GeneratorSw : GeneratorBase {
     fn set_max_reg_name_len(&mut self, name_len: usize, type_len: usize) {}
 
     /// Write RIF start of declaration statement
-    fn write_rif_header(&mut self, rif: &RifInst, is_top: bool) {}
+    fn write_rif_header(&mut self, rif: &RifInst, base_addr: Option<u64>) {}
 
     /// Write RIF end of declaration
     fn write_rif_footer(&mut self) {}
@@ -338,7 +339,7 @@ pub trait GeneratorSw : GeneratorBase {
                         }
                     }
                     if Self::SINGLE_FILE {
-                        self.gen_rif(r,false)?;
+                        self.gen_rif(r,Some(addr))?;
                     }
                 }
                 Comp::External(_) => {},

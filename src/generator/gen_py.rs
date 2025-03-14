@@ -143,7 +143,7 @@ impl GeneratorSw for GeneratorPy {
                 PyVersion::V3_10 => {
                     let mut file = File::create(path)?;
                     for l in Self::DEFAULT_BASECLASS.lines() {
-                        if l=="    @typing.final" { continue; }
+                        if l=="    @typing.override" { continue; }
                         file.write_all(l.as_bytes())?;
                         file.write_all(b"\n")?;
                     }
@@ -154,7 +154,7 @@ impl GeneratorSw for GeneratorPy {
         Ok(())
     }
 
-    fn write_rif_header(&mut self, rif: &RifInst, _is_top: bool) {
+    fn write_rif_header(&mut self, rif: &RifInst, _base_addr: Option<u64>) {
         let rif_name = remove_rif(&self.comp_name).to_casing(Casing::Pascal);
         self.write("from typing import final\n");
         self.write(&format!("from {} import Field, Register, Peripheral\n\n", self.base_module));

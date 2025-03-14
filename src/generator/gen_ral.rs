@@ -98,7 +98,7 @@ impl GeneratorSw for GeneratorRal {
         self.comp_name = rif.type_name.to_owned().to_lowercase();
     }
 
-    fn write_rif_header(&mut self, _rif: &RifInst, _is_top: bool) {
+    fn write_rif_header(&mut self, _rif: &RifInst, _base_addr: Option<u64>) {
         let name_uc = self.comp_name.to_uppercase();
         self.write(&format!("`ifndef RAL_{name_uc}\n"));
         self.write(&format!("`define RAL_{name_uc}\n"));

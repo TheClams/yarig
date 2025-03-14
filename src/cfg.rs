@@ -48,7 +48,7 @@ pub enum RifGenTargets {
     Json,
     /// AsciiDoctor
     Adoc,
-    /// AsciiDoctor
+    /// IP-XACT
     IpXact,
     /// Custom target
     Custom(String),

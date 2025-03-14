@@ -75,7 +75,7 @@ sim = "../yarig/sim"
 vhdl = "../yarig/vhdl"
 ```
 
-All settings from the configruation file can be overriden by command-line arguments. Run `yarig -h` to list all available options.
+All settings from the configuration file can be overriden by command-line arguments. Run `yarig -h` to list all available options.
 
 ## Generator Traits
 
@@ -105,6 +105,9 @@ The exact behavior of each traits can be tweaked with some associated constant.
    - [x] ral
  - [ ] Implement base generator for hardware (from SV):
    - [ ] VHDL
+
+## API
+ - [ ] Add derive macro to omplement the generator base part (core field, and function to access it)
 
 ## Feature
  - [ ] Improve nb_frac support:

@@ -86,8 +86,8 @@ impl GeneratorSw for GeneratorSvd {
     const IS_HIERARCHICAL : bool = false;
     const HAS_REG_DECL    : bool = false;
 
-    fn write_rif_header(&mut self, rif: &RifInst, is_top: bool) {
-        if is_top {
+    fn write_rif_header(&mut self, rif: &RifInst, base_addr: Option<u64>) {
+        if base_addr.is_none() {
             self.write_svd_header(remove_rif(&rif.type_name), &rif.description, rif.data_width);
             self.rif_top = true;
             let cntxt = RifContext {prefix: "", group: "", page: "", addr: 0};

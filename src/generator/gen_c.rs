@@ -101,7 +101,7 @@ impl GeneratorSw for GeneratorC {
     // - 1 : Structure containing registers (one per page)
     // - 2 : Define of register Offset/reset
     /// Write RIF header start of file
-    fn write_rif_header(&mut self, _rif: &RifInst, _is_top: bool) {
+    fn write_rif_header(&mut self, _rif: &RifInst, _base_addr: Option<u64>) {
         let rifname_uc = self.comp_name.to_uppercase();
         self.write(&format!("// Register definition for P_{rifname_uc}\n"));
         self.write(&format!("#ifndef __{rifname_uc}_H__\n"));

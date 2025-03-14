@@ -15,7 +15,6 @@ pub struct GeneratorIpXact {
     pub vendor: String,
     pub version: String,
     pub library: String,
-    pub rif_top: bool,
     pub data_width: u8,
     pub addr_width: u8,
     pub page_range: Vec<u64>,
@@ -29,7 +28,6 @@ impl GeneratorIpXact {
             vendor : cfg.vendor.map_or("Unknown".to_owned(), |s| s),
             version : cfg.version.map_or("1.0".to_owned(), |s| s),
             library : cfg.library.map_or("IP".to_owned(), |s| s),
-            rif_top: false,
             page_range: Vec::new(),
             data_width: 32,
             addr_width: 8,
@@ -73,7 +71,7 @@ impl GeneratorSw for GeneratorIpXact {
     const IS_HIERARCHICAL : bool = false;
     const HAS_REG_DECL    : bool = false;
 
-    fn write_rif_header(&mut self, rif: &RifInst, _is_top: bool) {
+    fn write_rif_header(&mut self, rif: &RifInst, _base_addr: Option<u64>) {
         self.data_width = rif.data_width;
         self.addr_width = rif.addr_width;
         self.page_range = rif.pages.iter().rev()

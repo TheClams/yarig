@@ -48,7 +48,7 @@ impl GeneratorSw for GeneratorJson {
     const IS_HIERARCHICAL : bool = false;
     const HAS_REG_DECL    : bool = false;
 
-    fn write_rif_header(&mut self, _rif: &RifInst, _is_top: bool) {
+    fn write_rif_header(&mut self, _rif: &RifInst, _base_addr: Option<u64>) {
         self.write("{\n");
     }
 
