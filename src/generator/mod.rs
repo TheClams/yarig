@@ -9,9 +9,10 @@ pub mod gen_mif;
 // Software generators
 pub mod trait_sw;
 pub mod gen_c;
-pub mod gen_ral;
-pub mod gen_py;
+pub mod gen_ipxact;
 pub mod gen_json;
+pub mod gen_py;
+pub mod gen_ral;
+pub mod gen_svd;
 // Hardware Generators
 pub mod gen_sv;
-pub mod gen_svd;

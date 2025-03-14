@@ -100,7 +100,7 @@ The exact behavior of each traits can be tweaked with some associated constant.
  - [x] Implement base generator for software (from C) :
    - [x] json
    - [x] svd
-   - [ ] IP-XACT
+   - [x] IP-XACT
    - [x] python
    - [x] ral
  - [ ] Implement base generator for hardware (from SV):
@@ -109,7 +109,7 @@ The exact behavior of each traits can be tweaked with some associated constant.
 ## Feature
  - [ ] Improve nb_frac support:
    - [ ] Support reset value in floating-point
-   - [ ] Use floating-point value in documentation when nb_frac is non-zero (and use a tool-tip in html to display corresponding integer value)
+   - [x] Use floating-point value in documentation when nb_frac is non-zero (and use a tool-tip in html to display corresponding integer value)
  - [x] Support casing option
  - [ ] Support pipe option RTL
  - [ ] Support option to repeat field description for interrupt derived register

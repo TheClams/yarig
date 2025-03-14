@@ -1,11 +1,16 @@
-use crate::rifgen::EnumDef;
+use crate::{cfg::CfgHtml, rifgen::EnumDef};
 
-use super::{casing::{Casing, ToCasing}, gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore}, trait_doc::{CellKind, GeneratorDoc, LinkKind, TableKind}};
+use super::{
+    casing::{Casing, ToCasing},
+    gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore},
+    trait_doc::{CellKind, GeneratorDoc, LinkKind, TableKind}
+};
 
-#[allow(dead_code)]
 pub struct GeneratorHtml {
     /// Base structure of all generators
     core: GeneratorCore,
+    /// Optional name of CSS file used instead of default one
+    css: Option<String>,
     /// Current component address width
     addr_width: u8,
     /// Number of column per bit for each register
@@ -18,9 +23,10 @@ pub struct GeneratorHtml {
 impl GeneratorHtml {
     const DEFAULT_CSS : &'static str = include_str!("resources/style.css");
 
-    pub fn new(setting: GeneratorBaseSetting) -> Self {
+    pub fn new(setting: GeneratorBaseSetting, cfg: CfgHtml) -> Self {
         GeneratorHtml {
             core: GeneratorCore::new(0,setting),
+            css: cfg.css,
             addr_width: 8,
             nb_col: 1,
             multipage: false
@@ -70,9 +76,16 @@ impl GeneratorDoc for GeneratorHtml {
         self.write("\t}\n");
         self.write("</script>\n");
         // CSS
-        self.write("<style type=\"text/css\">\n");
-        self.write(Self::DEFAULT_CSS);
-        self.write("</style>\n");
+        if let Some(css) = self.css.clone() {
+            self.write("<link rel=\"stylesheet\" href=\"");
+            self.write(&css);
+            self.write("\">\n");
+
+        } else {
+            self.write("<style type=\"text/css\">\n");
+            self.write(Self::DEFAULT_CSS);
+            self.write("</style>\n");
+        }
         //
         self.write("</head><body><div class=\"fulldoc\" id=\"top\">\n");    }
 

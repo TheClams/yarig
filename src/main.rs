@@ -37,6 +37,9 @@ struct RifGenArgs{
     /// Output path for documentation output (HTML, latex, ...)
     #[arg(long)]
     output_doc: Option<String>,
+    /// Output path for JSON output
+    #[arg(long)]
+    output_json: Option<String>,
     /// Output path for hardware output (SV, VHDL)
     #[arg(long)]
     output_rtl: Option<String>,
@@ -124,6 +127,7 @@ fn main() {
     if !args.targets.is_empty() {cfg.targets = args.targets.to_owned()};
     if !args.parameters.is_empty() {cfg.parameters.extend(args.parameters)};
     if let Some(suffix) = args.suffix {cfg.suffixes.insert("".to_owned(), suffix);};
+    if args.py_version.is_some() {cfg.py.version = args.py_version};
     if args.casing.is_some() {cfg.casing = args.casing};
     if args.interface.is_some() {cfg.interface = args.interface};
     if args.suffix_rtl_only {cfg.suffix_rtl_only = true;}
@@ -133,6 +137,7 @@ fn main() {
         ("c"  , args.output_c),
         ("py" , args.output_py),
         ("doc", args.output_doc),
+        ("json", args.output_json),
         ("rtl", args.output_rtl),
         ("sim", args.output_sim)];
     for (k,v) in outputs.iter() {

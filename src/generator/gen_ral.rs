@@ -159,7 +159,7 @@ impl GeneratorSw for GeneratorRal {
 
     // This is called only once on first page (INST_BY_PAGE=false)
     // All pages are merged into one to create a block of register
-    fn write_page_header(&mut self, name: &str, _desc: &Description) {
+    fn write_page_header(&mut self, name: &str, _page: &RifPageInst) {
         self.push_stash(1, &format!("class ral_block_{name} extends {};\n", self.ral_class));
     }
 

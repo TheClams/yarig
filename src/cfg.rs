@@ -13,6 +13,7 @@ use crate::{
         gen_mif::GeneratorMif,
         trait_sw::GeneratorSw,
         gen_c::GeneratorC,
+        gen_ipxact::GeneratorIpXact,
         gen_json::GeneratorJson,
         gen_py::{GeneratorPy, PyVersion},
         gen_ral::GeneratorRal,
@@ -47,6 +48,8 @@ pub enum RifGenTargets {
     Json,
     /// AsciiDoctor
     Adoc,
+    /// AsciiDoctor
+    IpXact,
     /// Custom target
     Custom(String),
 }
@@ -117,11 +120,18 @@ pub struct YarigCfg {
     /// Specify casing used in all targets
     pub casing: Option<Casing>,
     //-- Target specific settings--//
+    pub html  : CfgHtml,
     pub c  : CfgC,
     pub ral: CfgRal,
     pub rtl: CfgRtl,
     pub py : CfgPy,
     pub svd: CfgSvd,
+    pub ipxact: CfgIpXact,
+}
+
+#[derive(Deserialize, Debug, Clone, Default)]
+pub struct CfgHtml {
+    pub css: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -149,6 +159,13 @@ pub struct CfgPy {
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct CfgSvd {
     pub vendor: Option<String>,
+    pub version: Option<String>,
+}
+
+#[derive(Deserialize, Debug, Clone, Default)]
+pub struct CfgIpXact {
+    pub vendor: Option<String>,
+    pub library: Option<String>,
     pub version: Option<String>,
 }
 
@@ -241,7 +258,7 @@ impl YarigCfg {
                 },
                 RifGenTargets::Html => {
                     setting.set_output(self.get_output_path(&["html", "doc"],"doc"));
-                    let mut g = GeneratorHtml::new(setting);
+                    let mut g = GeneratorHtml::new(setting, self.html.clone());
                     g.gen_all(&rif_obj).map_err(|e| format!("Html generation failed: {e}"))?;
                 }
                 RifGenTargets::Mif => {
@@ -290,6 +307,11 @@ impl YarigCfg {
                     setting.set_output(self.get_output_path(&["svd", "sw"], "sw"));
                     let mut g = GeneratorSvd::new(setting, self.svd.clone());
                     g.gen_all(&rif_obj).map_err(|e| format!("SVD generation failed: {e}"))?;
+                }
+                RifGenTargets::IpXact => {
+                    setting.set_output(self.get_output_path(&["ipxact", "sw"], "sw"));
+                    let mut g = GeneratorIpXact::new(setting, self.ipxact.clone());
+                    g.gen_all(&rif_obj).map_err(|e| format!("IP XACT generation failed: {e}"))?;
                 }
                 _ => {},
             }

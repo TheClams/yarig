@@ -1,6 +1,30 @@
 # Change Log
 
 
+## [0.8.1] - 2025-03-14
+
+### Added
+  - New output target: IP-XACT (still need some validation)
+  - HTML: add option to specify an external css file
+  - CLI option to specify directory for JSON (previously was using the more genric doc one)
+
+### Changed
+  - SW Trait: write_page_footer description argument now replace by reference to page to provide access to all the page properties
+
+## [0.8.0] - 2025-03-13
+### Added
+  - Add possibility to specify a python version (support 3.10 to 3.12 currently)
+
+### Changed
+  - Generator doc (HTML, latex, Mif, adoc): display absolute address when possible
+  - SystemVerilog: avoid declaring unused `__decode` signals
+
+### Bug Fixes
+  - JSON: add missing double quote in rifmux
+
+### Internal
+  - RifList: object now contains the list of all instance of rif with their name and address:
+
 ## [0.7.0] - 2025-03-10
 
 ### Changed

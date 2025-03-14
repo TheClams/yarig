@@ -131,7 +131,7 @@ pub trait GeneratorSw : GeneratorBase {
             // Instantiate all registers
             // Call page header only once on first page if instance are not grouped by page
             if idx==0 || Self::INST_BY_PAGE {
-                self.write_page_header(page_name, &page.description);
+                self.write_page_header(page_name, page);
             }
             let mut overlap = false;
             let mut addr = 0;
@@ -270,7 +270,7 @@ pub trait GeneratorSw : GeneratorBase {
     }
 
     /// Write register start of declaration statement
-    fn write_page_header(&mut self, name: &str, desc: &Description) {}
+    fn write_page_header(&mut self, name: &str, page: &RifPageInst) {}
 
     /// Write register end of declaration
     fn write_page_footer(&mut self, name: &str, is_last: bool) {}

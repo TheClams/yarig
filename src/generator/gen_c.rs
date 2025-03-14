@@ -193,9 +193,9 @@ impl GeneratorSw for GeneratorC {
     }
 
     /// Write register start of declaration statement
-    fn write_page_header(&mut self, name: &str, desc: &Description) {
+    fn write_page_header(&mut self, name: &str, page: &RifPageInst) {
         self.push_stash(1, &format!("/// {} module struct\n", name.to_casing(Casing::Title)));
-        for l in desc.get().lines() {
+        for l in page.description.get().lines() {
             self.push_stash(1, &format!("/// {l}\n"));
         }
         self.push_stash(1, &format!("typedef struct {}_regs {{\n", name.to_lowercase()));

@@ -119,14 +119,16 @@ impl GeneratorDoc for GeneratorLatex {
     }
 
     fn write_table_title(&mut self, kind: TableKind, title: &str, id: &str) {
-        let caption = if kind==TableKind::Page {
-            if self.multipage {
-                format!("{} registers address mapping", title.to_casing(Casing::Title))
-            } else {
-                "Registers address mapping".to_owned()
+        let caption = match kind {
+            TableKind::Page => {
+                if self.multipage {
+                    format!("{} registers address mapping", title.to_casing(Casing::Title))
+                } else {
+                    "Registers address mapping".to_owned()
+                }
             }
-        } else {
-            self.sanitize(title)
+            TableKind::Field => format!("Register {title}"),
+            _ => self.sanitize(title)
         };
         let id_short = id.strip_prefix("fields.").unwrap_or(id);
         self.write(&format!("\t\\begin{{longtblr}}[caption={{{caption}}},label={{rif:{id_short}}}]"));
