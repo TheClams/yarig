@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{generator::casing::{Casing, ToCasing}, rifgen::{EnumDef, FieldSwKind}};
+use crate::{cfg::CfgMif, generator::casing::{Casing, ToCasing}, rifgen::{EnumDef, FieldSwKind}};
 
 use super::{
     gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore},
@@ -28,6 +28,8 @@ pub struct GeneratorMif {
     addr_width: u8,
     /// Flag when current document is for a RIFMux
     pgf_name: HashMap<PgfKind, String>,
+    /// Tables dimension: 0..2 for Rifmux, 3..6 for Reg, 7..11 for fields
+    table_dim: Vec<f32>,
     /// Table index
     tbl_idx: usize
 }
@@ -35,23 +37,28 @@ pub struct GeneratorMif {
 #[allow(dead_code)]
 impl GeneratorMif {
 
-    pub fn new(setting: GeneratorBaseSetting) -> Self {
+    pub fn new(setting: GeneratorBaseSetting, cfg: CfgMif) -> Self {
         let mut pgf_name = HashMap::new();
-        pgf_name.insert(PgfKind::Anchor      , "Body".to_owned());
-        pgf_name.insert(PgfKind::Heading2    , "2heading".to_owned());
-        pgf_name.insert(PgfKind::Heading3    , "3headingReg".to_owned());
-        pgf_name.insert(PgfKind::RifmuxTable , "Mapping Table".to_owned());
-        pgf_name.insert(PgfKind::MappingTable, "Mapping Table".to_owned());
-        pgf_name.insert(PgfKind::RegTable    , "Register".to_owned());
-        pgf_name.insert(PgfKind::TableTitle  , "TableTitle".to_owned());
-        pgf_name.insert(PgfKind::TableHeading, "CellHeading".to_owned());
-        pgf_name.insert(PgfKind::TableCell   , "CellBodyLeft".to_owned());
+        pgf_name.insert(PgfKind::Anchor      , cfg.anchor.unwrap_or("Body".to_owned()));
+        pgf_name.insert(PgfKind::Heading2    , cfg.h2.unwrap_or("2heading".to_owned()));
+        pgf_name.insert(PgfKind::Heading3    , cfg.h3.unwrap_or("3headingReg".to_owned()));
+        pgf_name.insert(PgfKind::RifmuxTable , cfg.table_title.unwrap_or("Mapping Table".to_owned()));
+        pgf_name.insert(PgfKind::MappingTable, cfg.table_heading.unwrap_or("Mapping Table".to_owned()));
+        pgf_name.insert(PgfKind::RegTable    , cfg.table_cell.unwrap_or("Register".to_owned()));
+        pgf_name.insert(PgfKind::TableTitle  , cfg.table_kind_rifmux.unwrap_or("TableTitle".to_owned()));
+        pgf_name.insert(PgfKind::TableHeading, cfg.table_kind_mapping.unwrap_or("CellHeading".to_owned()));
+        pgf_name.insert(PgfKind::TableCell   , cfg.table_kind_reg.unwrap_or("CellBodyLeft".to_owned()));
+        let mut table_dim: Vec<f32> = Vec::with_capacity(12);
+        table_dim.extend(cfg.width_3col.unwrap_or([2.5, 3.4, 11.1]));
+        table_dim.extend(cfg.width_4col.unwrap_or([2.5, 3.4, 2.1, 9.4]));
+        table_dim.extend(cfg.width_5col.unwrap_or([1.4, 3.4, 2.0, 2.1, 8.5]));
         GeneratorMif {
             core: GeneratorCore::new(1,setting),
             addr_width: 8,
             is_rifmux: false,
             multipage: false,
             tbl_idx: 1,
+            table_dim,
             pgf_name
         }
     }

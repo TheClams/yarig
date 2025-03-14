@@ -1,6 +1,15 @@
 # Change Log
 
 
+## [0.8.2] - 2025-03-14
+
+### Added
+ - MIF: options to control paragrah style and table dimension
+
+### Bug Fixes
+ - HTML: Fix some missing return line
+ - Python: Fix output for version 3.10 (need to skip override decorator, not final)
+
 ## [0.8.1] - 2025-03-14
 
 ### Added

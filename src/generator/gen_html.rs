@@ -244,7 +244,7 @@ impl GeneratorDoc for GeneratorHtml {
                 let first_char = l.chars().next().unwrap_or('a');
                 let need_br = ['.', ':', '"'].iter().any(|c| last_char==*c)
                     || first_char.is_uppercase()
-                    || first_char.is_digit(10)
+                    || first_char.is_ascii_digit()
                     || first_char=='-';
                 txt.push_str(if need_br {"<br/>"} else {" "});
             }

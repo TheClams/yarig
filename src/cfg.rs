@@ -127,6 +127,7 @@ pub struct YarigCfg {
     pub py : CfgPy,
     pub svd: CfgSvd,
     pub ipxact: CfgIpXact,
+    pub mif: CfgMif,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -167,6 +168,25 @@ pub struct CfgIpXact {
     pub vendor: Option<String>,
     pub library: Option<String>,
     pub version: Option<String>,
+}
+
+#[derive(Deserialize, Debug, Clone, Default)]
+pub struct CfgMif {
+    pub anchor             : Option<String>,
+    pub h2                 : Option<String>,
+    pub h3                 : Option<String>,
+    pub table_title        : Option<String>,
+    pub table_heading      : Option<String>,
+    pub table_cell         : Option<String>,
+    pub table_kind_rifmux  : Option<String>,
+    pub table_kind_mapping : Option<String>,
+    pub table_kind_reg     : Option<String>,
+    /// Dimension of the table for Rifmux, Pages (3 columns)
+    pub width_3col     : Option<[f32;3]>,
+    /// Dimension of the table for registers (4 columns)
+    pub width_4col     : Option<[f32;4]>,
+    /// Dimension of the table for fields (5 columns)
+    pub width_5col     : Option<[f32;5]>,
 }
 
 impl FromStr for YarigCfg {
@@ -264,7 +284,7 @@ impl YarigCfg {
                 RifGenTargets::Mif => {
                     setting.set_output(self.get_output_path(&["mif", "doc"], "doc"));
                     // TODO: support customization of paragraph style
-                    let mut g = GeneratorMif::new(setting);
+                    let mut g = GeneratorMif::new(setting, self.mif.clone());
                     g.gen_all(&rif_obj).map_err(|e| format!("MIF generation failed: {e}"))?;
                 }
                 RifGenTargets::Latex => {
