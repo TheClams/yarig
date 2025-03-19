@@ -300,7 +300,7 @@ impl GeneratorSw for GeneratorPy {
     }
 
     fn write_rif_inst(&mut self, rif_inst: &RifInst, cntxt: RifContext, _desc: &Description, _last_page: bool, _last_comp: bool) {
-        self.write(&format!("      self.{} = {}({:#x})\n",
+        self.write(&format!("      self.{} = {}({:#x} + addr)\n",
             remove_rif(&rif_inst.inst_name).to_casing(Casing::Snake),
             remove_rif(&rif_inst.type_name).to_casing(Casing::Pascal),
             cntxt.addr

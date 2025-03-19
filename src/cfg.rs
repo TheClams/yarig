@@ -20,11 +20,11 @@ use crate::{
         gen_svd::GeneratorSvd,
         gen_sv::GeneratorSv,
     },
-    parser::{parser_expr::ParamValues, RifGenSrc},
+    parser::{parser_expr::ParamValues, RifGenSrc, RsvdKeywordSel},
     rifgen::{Interface, SuffixInfo}
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum RifGenTargets {
     /// SystemVerilog
     Sv,
@@ -119,6 +119,8 @@ pub struct YarigCfg {
     pub suffixes: HashMap<String, SuffixInfo>,
     /// Specify casing used in all targets
     pub casing: Option<Casing>,
+    /// Specify reserved keywords
+    pub keywords: RsvdKeywordSel,
     //-- Target specific settings--//
     pub html  : CfgHtml,
     pub c  : CfgC,
@@ -254,8 +256,8 @@ impl YarigCfg {
         if !rif_path.exists() && rif_path.is_relative() && self.path.is_some() {
             rif_path = [self.path.as_ref().unwrap(), &self.filename].iter().collect();
         }
-        let rif_src = RifGenSrc::from_file(&rif_path, &self.include)
-            .map_err(|e| format!("Error opening {:?} : {e:?}", rif_path))?;
+        let rif_src = RifGenSrc::from_file(&rif_path, &self.include, self.keywords)
+            .map_err(|e| format!("Parsing Error : {e}"))?;
         let mut rif_obj = Comp::compile(&rif_src, &self.suffixes, &params)
             .map_err(|e| format!("Compilation failed: {e}"))?;
         // Handle case where suffixes are enabled only for RTL targets

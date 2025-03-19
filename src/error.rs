@@ -60,6 +60,8 @@ pub enum RifErrorKind {
     Unsupported,
     /// Duplicated register/field definition
     Duplicated,
+    /// Use of reserved keyword for a name
+    Keyword,
     /// Generic errror
     Generic,
 }
@@ -150,6 +152,15 @@ impl RifError {
         }
     }
 
+    pub fn keyword(name: &str) -> Self {
+        RifError {
+            kind: RifErrorKind::Keyword,
+            name: ERROR_CONTEXT.with(|c| c.borrow().name.to_owned()),
+            line_num: ERROR_CONTEXT.with(|c| c.borrow().line_num),
+            txt: name.to_owned()
+        }
+    }
+
     pub fn unsupported(cntxt: Context, line: &str) -> Self {
         RifError {
             kind: RifErrorKind::Unsupported,
@@ -192,6 +203,7 @@ impl Display for RifError {
             RifErrorKind::MissingDef    => write!(f, "{}.{} | Missing register definition for {}", self.name, self.line_num, self.txt),
             RifErrorKind::Unsupported   => write!(f, "{}.{} | Unsupported feature {}", self.name, self.line_num, self.txt),
             RifErrorKind::Duplicated    => write!(f, "{}.{} | {} duplicated !", self.name, self.line_num, self.txt),
+            RifErrorKind::Keyword       => write!(f, "{}.{} | Field name '{}' is a reserved keyword !", self.name, self.line_num, self.txt),
             RifErrorKind::Generic       => write!(f, "{}", self.txt),
         }
     }

@@ -3,6 +3,7 @@ use std::fs::{self, File};
 use std::io::{self, BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
+use serde_derive::Deserialize;
 use winnow::Parser;
 
 use crate::error::{RifError, RifErrorKind, ERROR_CONTEXT};
@@ -41,6 +42,23 @@ pub struct RifGenSrc {
     last_group: String,
 }
 
+#[derive(Deserialize, Debug, Clone, Copy)]
+pub struct RsvdKeywordSel {
+    /// Prevent use of a list of SystemVerilog Keyword
+    pub sv: bool,
+    /// Prevent use of a list of VHDL Keyword
+    pub vhdl: bool,
+    /// Generate an error if a field matches a reserved keyword.
+    /// Otherwise simply generate a warning and prefix name with underscore
+    pub error: bool,
+}
+
+impl Default for RsvdKeywordSel {
+    fn default() -> Self {
+        RsvdKeywordSel {sv: true, vhdl: false, error: true}
+    }
+}
+
 fn read_lines<P>(filename: P) -> io::Result<io::Lines<BufReader<File>>>
 where
     P: AsRef<Path>,
@@ -69,12 +87,23 @@ impl RifGenSrc {
         }
     }
 
-    pub fn from_file<P>(filename: P, includes: &[String]) -> Result<RifGenSrc, RifError>
+    /// Generrate a source object from a file
+    /// the includes path are used to find and parse any included/referenced RIF
+    /// The reserved_keyword selection
+    pub fn from_file<P>(filename: P, includes: &[String], rsvd_keywords_sel: RsvdKeywordSel) -> Result<RifGenSrc, RifError>
     where
         P: AsRef<Path>,
     {
         let mut src = RifGenSrc::new();
-        let mut refs = src.parse_file(&filename)?;
+        let mut rsvd_kw = Vec::new();
+        if rsvd_keywords_sel.sv {
+            rsvd_kw.extend(["logic", "signed", "wire", "reg", "buf","event", "soft", "break", "module", "process", "type", "priority", "disable", "longint", "int", "release", "repeat", "if", "always", "default"]);
+        }
+        if rsvd_keywords_sel.vhdl {
+            rsvd_kw.extend(["array", "buffer", "map", "out", "in", "on","generic", "block", "type", "rem", "if"]);
+        }
+        let rsvd_keywords = (rsvd_kw.as_slice(), rsvd_keywords_sel.error);
+        let mut refs = src.parse_file(&filename,rsvd_keywords)?;
         if !refs.is_empty() {
             // find all rifs file in current directory and import directories
             let mut inc_paths = Vec::new();
@@ -111,7 +140,7 @@ impl RifGenSrc {
                 for r in refs.iter() {
                     if let Some(rif_file) = flist.get(remove_rif(r)) {
                         // println!("  Parsing referenced {:?}", rif_file);
-                        refs_next.extend(src.parse_file(rif_file)?);
+                        refs_next.extend(src.parse_file(rif_file,rsvd_keywords)?);
                     }
                 }
                 // print!(" => New refs = {:?} ", refs_next);
@@ -122,7 +151,7 @@ impl RifGenSrc {
         Ok(src)
     }
 
-    pub fn parse_file<P>(&mut self, filename: P) -> Result<HashSet<String>, RifError>
+    pub fn parse_file<P>(&mut self, filename: P, rsvd_keywords: (&[&str],bool)) -> Result<HashSet<String>, RifError>
     where
         P: AsRef<Path>,
     {
@@ -401,6 +430,14 @@ impl RifGenSrc {
                             let mut f = field_decl(&mut l)?;
                             if !self.last_reg().interrupt.is_empty() {
                                 f.hw_acc = Access::WO;
+                            }
+                            if rsvd_keywords.0.iter().any(|&kw| f.name==kw) {
+                                if rsvd_keywords.1 {
+                                    return Err(RifError::keyword(&f.name));
+                                } else {
+                                    f.name = format!("_{}", f.name);
+                                    println!("[WARNING] Field name {} is a reserved keyword !", f.name);
+                                }
                             }
                             self.last_reg_mut().add_field(f);
                             context_stack.push((Context::Field, ilvl + 1));

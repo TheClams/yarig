@@ -1,6 +1,14 @@
 # Change Log
 
 
+## [0.8.3] - 2025-03-19
+
+### Changed
+ - Now check field name are not using reserved keyword from SV, and optionnaly VHDL (if it is a target )
+   An option allows to automatically rename the field by prepending an underscore.
+ - Python: add a peripheral base address to its element
+ - Latex: add missing sanitize call for register chapters
+
 ## [0.8.2] - 2025-03-14
 
 ### Added

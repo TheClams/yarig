@@ -52,12 +52,15 @@ struct RifGenArgs{
     /// Set parameters value
     #[arg(short = 'P', value_parser = parse_key_val::<String, isize>)]
     parameters: Vec<(String, isize)>,
-    /// Use suffix only  for RTL outputs
-    #[arg(long, action)]
-    suffix_rtl_only: bool,
     /// Set suffix value
     #[arg(short = 'S', long)]
     suffix: Option<SuffixInfo>,
+    /// Rename field using reserved keyword
+    #[arg(long, action)]
+    keyword_rename: bool,
+    /// Use suffix only  for RTL outputs
+    #[arg(long, action)]
+    suffix_rtl_only: bool,
     /// Specify an HDL interface
     #[arg(long)]
     interface: Option<Interface>,
@@ -131,6 +134,9 @@ fn main() {
     if args.casing.is_some() {cfg.casing = args.casing};
     if args.interface.is_some() {cfg.interface = args.interface};
     if args.suffix_rtl_only {cfg.suffix_rtl_only = true;}
+    if args.keyword_rename {cfg.keywords.error = false;}
+    if args.targets.contains(&RifGenTargets::Sv) {cfg.keywords.sv = true;}
+    if args.targets.contains(&RifGenTargets::Vhdl) {cfg.keywords.vhdl = true;}
 
     //
     let outputs = [

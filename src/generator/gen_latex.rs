@@ -119,6 +119,7 @@ impl GeneratorDoc for GeneratorLatex {
     }
 
     fn write_table_title(&mut self, kind: TableKind, title: &str, id: &str) {
+        let title = self.sanitize(title);
         let caption = match kind {
             TableKind::Page => {
                 if self.multipage {
@@ -128,7 +129,7 @@ impl GeneratorDoc for GeneratorLatex {
                 }
             }
             TableKind::Field => format!("Register {title}"),
-            _ => self.sanitize(title)
+            _ => title
         };
         let id_short = id.strip_prefix("fields.").unwrap_or(id);
         self.write(&format!("\t\\begin{{longtblr}}[caption={{{caption}}},label={{rif:{id_short}}}]"));
