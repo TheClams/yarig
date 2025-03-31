@@ -121,7 +121,7 @@ The exact behavior of each traits can be tweaked with some associated constant.
  - [ ] Implement a TUI ? (ratatui)
  - [x] Implement a GUI (eGui Based, in an external crate, visualizer only)
  - [ ] Support overlapping register in hardware: need to check exclusive access (RO/WO)
- - [ ] Check enum size fit the field size
+ - [ ] Check enum size matches the field size
  - [ ] Option to add representation value for enum. Syntax could be 'NAME = VAL (repr) "description"'. Could be usefull when enum is representing a limited set of integer or real values.
  - [ ] Option to control if clear works without clock enable or not
 

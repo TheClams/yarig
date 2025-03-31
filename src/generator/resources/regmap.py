@@ -6,6 +6,14 @@ class Peripheral(object):
     def __init__(self, addr: int = 0) :
         self.base : int = addr
 
+    def regs(self):
+        '''Iterator over all registers'''
+        for attr_name in vars(self):
+            obj = getattr(self, attr_name)
+            if isinstance(obj, Register):
+                yield obj
+
+
 class Register(object):
     '''Register definition: address and collection of fields'''
 
@@ -34,6 +42,7 @@ class Register(object):
         return s
 
     def fields(self):
+        '''Iterator over all fields'''
         for attr_name in vars(self):
             obj = getattr(self, attr_name)
             if isinstance(obj, Field):

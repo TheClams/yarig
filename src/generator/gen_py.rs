@@ -4,7 +4,7 @@ use crate::{
     cfg::CfgPy,
     comp::comp_inst::{RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxInst},
     parser::remove_rif,
-    rifgen::{Description, EnumDef}
+    rifgen::{Description, EnumDef, EnumEntry}
 };
 
 use super::{
@@ -58,6 +58,8 @@ pub struct GeneratorPy {
     comp_name : String,
     /// Current RIF data bus width
     data_width : u8,
+    /// Flag when current RIF has enum definition
+    has_enum : bool,
     /// Dictionary containing the register owning a field array definition
     field_parent : BTreeMap<String,String>,
     /// Dictionary containing the list of field array in a register
@@ -74,6 +76,7 @@ impl GeneratorPy {
             comp_name: "".to_owned(),
             version: extra.version.unwrap_or(PyVersion::V3_11),
             data_width: 32,
+            has_enum: false,
             base_module: extra.class.unwrap_or(".regmap".to_owned()),
             field_parent: BTreeMap::new(),
             field_array: BTreeSet::new(),
@@ -130,6 +133,7 @@ impl GeneratorSw for GeneratorPy {
     fn set_rif_info(&mut self, rif: &RifInst) {
         self.comp_name = rif.type_name.to_owned().to_lowercase();
         self.data_width = rif.data_width;
+        self.has_enum = rif.enum_defs.iter().any(|d| !d.name.starts_with("doc:"))
     }
 
     /// Create the regmap.py containing base class if not defined in another python module
@@ -157,19 +161,40 @@ impl GeneratorSw for GeneratorPy {
     fn write_rif_header(&mut self, rif: &RifInst, _base_addr: Option<u64>) {
         let rif_name = remove_rif(&self.comp_name).to_casing(Casing::Pascal);
         self.write("from typing import final\n");
+        if self.has_enum {
+            self.write("from enum import IntEnum\n");
+        }
         self.write(&format!("from {} import Field, Register, Peripheral\n\n", self.base_module));
         self.write("@final\n");
         self.write(&format!("class {rif_name}(Peripheral):\n"));
         if let Some(desc) = self.desc_to_string(&rif.description,1) {
             self.write(&desc);
         }
+        self.write("\n");
         // Cleanup field parent dictionnary
         self.field_parent.clear();
     }
 
+    /// Write enum start of declaration statement
+    fn write_enum_header(&mut self, type_name: &str, desc: &str) {
+        self.write(&format!("   class e_{type_name}(IntEnum):\n"));
+        self.write(&format!("      '''{desc}'''\n"));
+    }
+
+    /// Write enum entry
+    fn write_enum_entry(&mut self, entry: &EnumEntry , is_last: bool) {
+        self.write(&format!("      {} = {}\n", entry.name, entry.value));
+        if let Some(desc) = self.desc_to_string(&entry.description,2) {
+            self.write(&desc);
+        }
+        if is_last {
+            self.write("\n");
+        }
+    }
+
     fn write_reg_header(&mut self, _basename: &str, reg: &RifRegInst) {
         let typename = reg.reg_type.to_casing(Casing::Pascal);
-        self.write(       "\n   @final\n");
+        self.write(       "   @final\n");
         self.write(&format!("   class {typename}(Register):\n"));
         if let Some(desc) = self.desc_to_string(&reg.base_description,2) {
             self.write(&desc);
@@ -195,6 +220,7 @@ impl GeneratorSw for GeneratorPy {
         let ro = if reg.sw_access.is_writable() {"False"} else {"True"};
         self.write(&format!("         super().__init__(parent, name, addr, {ro}, init)\n"));
         self.pop_stash(0);
+        self.write("\n");
     }
 
     fn write_field_decl(&mut self, _basename: &str, reg: &RifRegInst, field: &RifFieldInst, _enum_def: Option<&EnumDef>, _is_last: bool) {
@@ -241,7 +267,7 @@ impl GeneratorSw for GeneratorPy {
     }
 
     fn write_page_footer(&mut self, _name: &str, _is_last: bool) {
-        self.write("\n\n   def __init__(self, addr: int):\n");
+        self.write("\n   def __init__(self, addr: int):\n");
         self.write("      super().__init__(addr)\n");
         self.pop_stash(1)
     }
