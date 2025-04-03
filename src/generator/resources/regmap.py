@@ -1,24 +1,51 @@
+from collections.abc import Generator
+from enum import IntEnum
 import typing
 
 class Peripheral(object):
     '''address and collection of registers'''
 
-    def __init__(self, addr: int = 0) :
-        self.base : int = addr
+    def __init__(self, name: str = '', addr: int = 0) :
+        self.__addr__ : int = addr
+        self.__name__ : str = name
 
-    def regs(self):
+    def rifs(self) -> Generator['Peripheral']:
+        '''Iterator over all rifs'''
+        for attr_name in vars(self):
+            obj = getattr(self, attr_name)
+            if isinstance(obj, Peripheral):
+                yield obj
+
+    def regs(self) -> Generator['Register']:
         '''Iterator over all registers'''
         for attr_name in vars(self):
             obj = getattr(self, attr_name)
             if isinstance(obj, Register):
                 yield obj
 
+    def address(self) -> int:
+        '''Address of the peripheral'''
+        return self.__addr__
+
+    def name(self) -> str:
+        '''Instance name of the peripheral'''
+        return self.__name__
+
+    def by_name(self, path: str) -> 'None|Peripheral|Register|Field':
+        '''Retrieve an element or sub-element of the peripheral by name
+        Accept path such as 'rif.reg.field' '''
+        obj = self
+        for n in path.split('.'):
+            o = getattr(obj, n)
+            if isinstance(o, (Peripheral,Register,Field)):
+                obj = o
+            else:
+                return None
+        return obj
+
 
 class Register(object):
     '''Register definition: address and collection of fields'''
-
-    flags : list[str] = []
-    '''Register flags: interrupt, external, ...'''
 
     @typing.final
     class regInfo:
@@ -28,6 +55,7 @@ class Register(object):
             self.name = name
             self.address = address
             self.readonly = readonly
+            self.flags : list[str] = []
 
     def __init__(self, parent: None | Peripheral, name: str, addr: int, readonly: bool, init: None|int = None) :
         self.__reg_info__ : Register.regInfo = Register.regInfo(parent, name, addr, readonly)
@@ -49,17 +77,34 @@ class Register(object):
                 yield obj
 
     def parent(self) -> None | Peripheral:
+        '''Return peripheral which owns the register'''
         return self.__reg_info__.parent
 
     def name(self) -> str:
+        '''Instance name of the register'''
         return self.__reg_info__.name
 
+    def readonly(self) -> bool:
+        '''Return true when register is read-only'''
+        return self.__reg_info__.readonly
+
+    def flags(self) -> list[str]:
+        '''Register flags: interrupt, external, ...'''
+        return self.__reg_info__.flags
+
+    def by_name(self, name: str) -> 'None|Field':
+        '''Retrieve a field by name'''
+        obj = getattr(self, name)
+        return obj if isinstance(obj, Field) else None
+
     def address(self) -> int:
+        '''Absolute address of the register'''
         if self.__reg_info__.parent is not None:
-            return self.__reg_info__.parent.base + self.__reg_info__.address
+            return self.__reg_info__.parent.__addr__ + self.__reg_info__.address
         return self.__reg_info__.address
 
     def set_value(self, value_all_fields: int):
+        '''Set value for the register'''
         for field in self.fields():
             reg_val = value_all_fields >> field.pos
             mask = (1<<field.width) - 1
@@ -67,6 +112,7 @@ class Register(object):
             field.value = reg_val
 
     def get_value(self) -> int:
+        '''Get value for the register'''
         reg_val = 0
         for field in self.fields():
             mask = (1 << field.width) - 1
@@ -80,6 +126,7 @@ class Field(object):
     width  : int = 0
     pos    : int = 0
     name   : str = ""
+    kind   : str = ""
     signed : bool = False
     nb_frac: int = 0
 
@@ -90,12 +137,15 @@ class Field(object):
             self.value = init
 
     def parent(self) -> Register:
+        '''Return register owning the field'''
         return self.__parent__
 
     def mask(self) -> int:
+        '''Return mask corresponding to the field in the register'''
         return ((1<<self.width) - 1) << self.pos
 
     def set_value(self, value: int | float):
+        '''Set the field value, either as internal integer representation or the corresponding fixed-point value'''
         if isinstance(value, int):
             self.value = value
         else :
@@ -105,12 +155,14 @@ class Field(object):
                 self.value = int(value * (1 << self.nb_frac))
 
     def get_value(self) -> int:
+        '''Return the field value (internal integer representation)'''
         v = self.value
         if self.signed and v > 1<<(self.width-1):
             v -= (1<<self.width)
         return v
 
     def get_float(self) -> float:
+        '''Return the field value (fixed-point representation)'''
         v = float(self.get_value())
         if self.nb_frac < 0:
             v = v * (1 << (-self.nb_frac))
@@ -119,6 +171,10 @@ class Field(object):
         return v
 
     def address(self) -> int:
+        '''Return address of the register owning the field'''
         if self.__parent__ :
             return self.__parent__.address()
         return 0
+
+    def enum_kind(self) -> None| type[IntEnum]:
+        return None

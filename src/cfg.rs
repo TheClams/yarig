@@ -155,8 +155,12 @@ pub struct CfgRal {
 
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct CfgPy {
+    /// Name of python class definition (Peripheral/Register/Field)
     pub class: Option<String>,
-    pub version: Option<PyVersion>
+    /// Python version
+    pub version: Option<PyVersion>,
+    /// List of included reference to generate (use ["*"] for all)
+    pub gen_inc: Vec<String>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]

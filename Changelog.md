@@ -1,6 +1,24 @@
 # Change Log
 
 
+## [0.8.5] - 2025-04-03
+
+### Changed
+ - Python:
+   * Field can noe return their enum class (function enum_kind())
+   * Configuration: gen_inc can be defined in the py parameter to override top gen_inc
+   * All field definition now have a docstring
+   * Add iterator on rifs inside a peripheral
+   * Add name to peripherals
+   * Add function to find rif/register/field by name (e.g. my_top.by_name("rif.reg.field"))
+   * Move flags inside reginfo and add function to get flags and readonly info for a register
+
+## [0.8.4] - 2025-03-31
+
+### Changed
+ - Python: add enum definition and iterator over all registers
+
+
 ## [0.8.3] - 2025-03-19
 
 ### Changed
