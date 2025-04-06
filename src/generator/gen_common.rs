@@ -165,7 +165,7 @@ impl From<&Comp> for CompInfo {
             Comp::External(_) => 0,
         };
         CompInfo {
-            name: comp.get_type().to_owned(),
+            name: comp.get_name().to_owned(),
             addr_width: comp.get_addr_width(),
             data_width: comp.get_data_width(),
             cnt

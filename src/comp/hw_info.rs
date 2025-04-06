@@ -1,6 +1,6 @@
 use crate::{
     generator::casing::{Casing, ToCasing},
-    rifgen::{ClkEn, EnumKind, FieldHwKind, Interface, ResetVal, Rif, SuffixInfo}
+    rifgen::{ClkEn, FieldHwKind, Interface, ResetVal, Rif, SuffixInfo}
 };
 
 use super::{comp_inst::{ArrayIdx, RifFieldInst, RifPageInst}, reg_impl::{FieldImpl, HwRegs, MissingFieldInfo, RegImplDict}};
@@ -32,19 +32,24 @@ impl SignalKind {
         }
     }
 
-    pub fn from_field(f: &FieldImpl, scope: &str, reg_type: &str) -> Self {
-        match &f.enum_kind {
-            EnumKind::Type(t) => {
-                let mut ts = t.split("::");
-                match (ts.next(), ts.next()) {
-                    (Some(s), Some(n))   => SignalKind::Custom((Some(s.to_owned()),n.to_owned())),
-                    (Some("type"), None) => SignalKind::Custom((Some(scope.to_owned()), format!("e_{reg_type}_{}", f.name))),
-                    (Some(n), None)      => SignalKind::Custom((Some(scope.to_owned()),n.to_owned())),
-                    _ => unreachable!("Invalid enum type {t}"),
-                }
+    pub fn from_field(f: &FieldImpl, base_scope: &str, reg_type: &str) -> Self {
+        if let Some((scope,name)) = f.enum_kind.get_type(base_scope, reg_type, &f.name) {
+            SignalKind::Custom((Some(scope), name))
+        } else {
+            let w = if f.sw_kind.is_password() {2} else {f.width};
+            if f.signed {
+                SignalKind::Signed(w)
+            } else {
+                SignalKind::Unsigned(w)
             }
-            _ if f.signed => SignalKind::Signed(f.width),
-            _             => SignalKind::Unsigned(f.width),
+        }
+    }
+
+    pub fn set_width(&mut self, width: u16) {
+        match self {
+            SignalKind::Unsigned(w) => *w = width,
+            SignalKind::Signed(w) => *w = width,
+            _ => {}
         }
     }
 }
@@ -149,64 +154,6 @@ impl From<(&str, u16)> for SignalDecl {
 }
 
 pub struct SignalInfo {
-    pub name: String,
-    pub width: u8,
-    pub reset: String,
-    pub value: String,
-    pub enable: Option<String>,
-    pub clear: Option<String>,
-}
-
-impl SignalInfo {
-    pub fn new(name: &str, width: u8, reset: &str, value: &str) -> SignalInfo {
-        SignalInfo {
-            name: name.to_owned(),
-            width,
-            reset: reset.to_owned(),
-            value: value.to_owned(),
-            enable: None,
-            clear: None,
-        }
-    }
-
-    pub fn new_with_en(
-        name: &str,
-        width: u8,
-        reset: &str,
-        value: &str,
-        enable: &str,
-    ) -> SignalInfo {
-        SignalInfo {
-            name: name.to_owned(),
-            width,
-            reset: reset.to_owned(),
-            value: value.to_owned(),
-            enable: if enable.is_empty() {None} else {Some(enable.to_owned())},
-            clear: None,
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn new_with_en_clr(
-        name: &str,
-        width: u8,
-        reset: &str,
-        value: &str,
-        enable: &str,
-        clear: &str,
-    ) -> SignalInfo {
-        SignalInfo {
-            name: name.to_owned(),
-            width,
-            reset: reset.to_owned(),
-            value: value.to_owned(),
-            enable: if enable.is_empty() {None} else {Some(enable.to_owned())},
-            clear: if clear.is_empty() {None} else {Some(clear.to_owned())},
-        }
-    }
-}
-
-pub struct SignalInfoN {
     pub name: ExprId,
     pub reset: LogicExpr,
     pub value: LogicExpr,
@@ -214,9 +161,9 @@ pub struct SignalInfoN {
     pub clear: Option<LogicExpr>,
 }
 
-impl SignalInfoN {
-    pub fn new(name: ExprId, reset: LogicExpr, value: LogicExpr) -> SignalInfoN {
-        SignalInfoN {
+impl SignalInfo {
+    pub fn new(name: ExprId, reset: LogicExpr, value: LogicExpr) -> SignalInfo {
+        SignalInfo {
             name: name.to_owned(),
             reset, value,
             enable: None,
@@ -224,8 +171,8 @@ impl SignalInfoN {
         }
     }
 
-    pub fn new_with_en( name: ExprId, reset: LogicExpr, value: LogicExpr, enable: Option<LogicExpr>) -> SignalInfoN {
-        SignalInfoN {
+    pub fn new_with_en( name: ExprId, reset: LogicExpr, value: LogicExpr, enable: Option<LogicExpr>) -> SignalInfo {
+        SignalInfo {
             name: name.to_owned(),
             reset,
             value,
@@ -235,8 +182,8 @@ impl SignalInfoN {
     }
 
     #[allow(dead_code)]
-    pub fn new_with_en_clr(name: ExprId, reset: LogicExpr, value: LogicExpr, enable: Option<LogicExpr>, clear: Option<LogicExpr>) -> SignalInfoN {
-        SignalInfoN {
+    pub fn new_with_en_clr(name: ExprId, reset: LogicExpr, value: LogicExpr, enable: Option<LogicExpr>, clear: Option<LogicExpr>) -> SignalInfo {
+        SignalInfo {
             name: name.to_owned(),
             reset,
             value,
@@ -270,10 +217,10 @@ impl PortInfo {
         }
     }
 
-    pub fn new_intf(name: String, if_name: String, desc: String) -> Self {
+    pub fn new_intf(name: String, if_name: String, modport: String, desc: String) -> Self {
         PortInfo {
             def: SignalDef::new(name, SignalKind::Custom((None,if_name)), 0),
-            dir: PortDir::Modport(("rif".to_owned(), "ctrl".to_owned())),
+            dir: PortDir::Modport(modport),
             desc,
         }
     }
@@ -324,7 +271,7 @@ pub enum PortDir {
     /// Output port
     Out,
     /// Defines the names of the two possible modport
-    Modport((String,String))
+    Modport(String)
 }
 
 impl PortDir {
@@ -333,6 +280,9 @@ impl PortDir {
     }
     pub fn is_out(&self) -> bool {
         self == &PortDir::Out
+    }
+    pub fn is_modport(&self) -> bool {
+        matches!(self, PortDir::Modport(_))
     }
 }
 
@@ -426,7 +376,7 @@ impl PortList {
             .filter(|p| p.is_external())
             .map(|p| PortInfo::new_intf(
                 p.name.to_owned(),
-                "rif_if".to_owned(),
+                "rif_if".to_owned(), "rif".to_owned(),
                 format!("Interface to access register from page {}", p.name)))
             .collect();
         let rif_pkg_name = if let Some(suffix) = suffix {
@@ -443,8 +393,8 @@ impl PortList {
         let rif_pkg_name = rif_pkg_name.to_casing(Casing::Snake);
         for (group_name, hw_reg) in hw_regs.items() {
             let hw_reg_def = regs_impls.get(&hw_reg.group).unwrap();
-            let pkg_name = if let Some(pkg) = &hw_reg_def.pkg {pkg} else {&rif_pkg_name};
-            let pkg_name = pkg_name.to_casing(Casing::Snake);
+            let pkg_base = if let Some(pkg) = &hw_reg_def.pkg {pkg} else {&rif_pkg_name};
+            let pkg_name = format!("{}_pkg", pkg_base.to_casing(Casing::Snake));
             let group_type = hw_reg.group.to_casing(Casing::Snake);
             let desc = hw_reg_def.description.get_short();
             if hw_reg.port.is_in() {
@@ -504,7 +454,7 @@ impl RifIntfPorts {
             Interface::Default => vec![
                 PortInfo::new_intf(
                     "if_rif".to_owned(),
-                    "rif_if".to_owned(),
+                    "rif_if".to_owned(), "rif".to_owned(),
                     "SW register interface".to_owned())
             ],
             Interface::Apb => vec![
@@ -537,7 +487,7 @@ impl RifIntfPorts {
             Interface::Custom(name) => vec![
                 PortInfo::new_intf(
                     format!("if_{}", name.strip_suffix("_if").unwrap_or(name)),
-                    name.to_owned(),
+                    name.to_owned(), "rif".to_owned(),
                     "SW register interface".to_owned())
             ],
         };
@@ -549,7 +499,7 @@ impl RifIntfPorts {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct SignalRange {
     pub lsb: u8,
     pub msb: Option<u8>
@@ -568,14 +518,15 @@ impl SignalRange {
     }
 
     pub fn from_field(field: &RifFieldInst, fallback: bool) -> Option<SignalRange> {
-        if field.is_partial() {
+        if let (Some(lsb),_) = &field.partial {
+            let lsb = *lsb as u8;
             if field.width > 1 {
                 Some(SignalRange {
-                    lsb: field.lsb,
-                    msb: Some(field.width - 1 + field.lsb) }
+                    lsb,
+                    msb: Some(field.width - 1 + lsb) }
                 )
             } else {
-                Some(SignalRange::new_bit(field.lsb))
+                Some(SignalRange::new_bit(lsb))
             }
         } else if fallback {
             if let ArrayIdx::Inst(idx,_) = field.array {
@@ -590,7 +541,7 @@ impl SignalRange {
 }
 
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 /// Hardware Identifier with optional array selection, field and range selection
 pub struct ExprId {
     pub name: String,
@@ -632,6 +583,16 @@ impl ExprId {
             name: self.name.clone(),
             idx: self.idx,
             field,
+            range: self.range.clone()
+        }
+    }
+
+    /// Create a new ExprId by replacing the field name
+    pub fn with_name(&self, name: String) -> Self {
+        ExprId {
+            name,
+            idx: self.idx,
+            field: self.field.clone(),
             range: self.range.clone()
         }
     }
@@ -701,7 +662,7 @@ impl From<(String,String)> for ExprId {
 
 
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub enum CastInfo { #[default]
     /// No casting
     None,
@@ -714,12 +675,15 @@ pub enum CastInfo { #[default]
 }
 
 impl CastInfo {
+    pub fn is_none(&self) -> bool {
+        *self==CastInfo::None
+    }
     pub fn is_custom(&self) -> bool {
         matches!(self, CastInfo::Custom(_,_))
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum LogicExpr {
     /// Identifier with optional range information
     Id(ExprId),
@@ -903,4 +867,54 @@ impl LogicExpr {
             _ => 0,
         }
     }
+
+    pub fn is_value(&self) -> bool {
+        matches!(*self,LogicExpr::ValueU(_,_) | LogicExpr::ValueI(_,_))
+    }
+
+    pub fn is_ite(&self) -> bool {
+        matches!(*self, LogicExpr::Ite(_,_))
+    }
+
+    pub fn is_else_value(&self) -> bool {
+        match self {
+            LogicExpr::Ite(_, else_expr) => else_expr.is_value(),
+            _ => false
+        }
+    }
+
+    pub fn is_and(&self) -> bool {
+        matches!(*self, LogicExpr::And(_))
+    }
+
+    pub fn has_vec(&self) -> bool {
+        matches!(*self, LogicExpr::Ite(_,_) | LogicExpr::Or(_) | LogicExpr::And(_) )
+    }
+
+    /// Number of expressions
+    pub fn nb(&self) -> usize {
+        match self {
+            LogicExpr::Or(vec)     => vec.len(),
+            LogicExpr::And(vec)    => vec.len(),
+            LogicExpr::Ite(vec, _) => vec.len(),
+            LogicExpr::Concat(vec) => vec.len(),
+            LogicExpr::Id(_)       |
+            LogicExpr::Cast(_,_)   |
+            LogicExpr::ValueU(_,_) |
+            LogicExpr::ValueI(_,_) |
+            LogicExpr::Not(_)      |
+            LogicExpr::NotB(_)     => 1,
+            LogicExpr::Add(_,_)  |
+            LogicExpr::Sub(_,_)  |
+            LogicExpr::Eq(_,_)   |
+            LogicExpr::Neq(_,_)  |
+            LogicExpr::Xor(_,_)  |
+            LogicExpr::OrB(_,_)  |
+            LogicExpr::AndB(_,_) |
+            LogicExpr::Gte(_,_)  |
+            LogicExpr::Lte(_,_)  |
+            LogicExpr::Lt(_,_)   => 2,
+        }
+    }
+
 }

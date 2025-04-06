@@ -957,10 +957,13 @@ impl RifFieldInst {
             FieldPos::LsbSize((l, w)) => (l.value(params), w.value(params)),
             FieldPos::Size(w) => (*next_lsb, w.value(params)),
         };
-        let mut reset = field.reset.first().unwrap_or_default().clone();
+        let mut reset = field.reset.first()
+            .unwrap_or_default()
+            .compile(field.signed,params)
+            .unwrap_or_default(); // TODO: handle error
         let idx : ArrayIdx;
         // Create format string for description
-        let s = if matches!(reset, ResetVal::Signed(_)) {'s'} else {'u'};
+        let s = if field.signed {'s'} else {'u'};
         let format_str = format!("{s}{}.{}", width, field.nb_frac);
         let desc: Description;
         // For array, adjust the increment when needed
@@ -977,7 +980,10 @@ impl RifFieldInst {
             let rst_idx = array.idx() as usize
                         + if array.is_def() {array.dim() as usize} else {0};
             if field.reset.len() > rst_idx {
-                reset = field.reset.get(rst_idx).unwrap().clone();
+                reset = field.reset.get(rst_idx)
+                    .unwrap_or_default()
+                    .compile(field.signed,params)
+                    .unwrap_or_default();
             }
             let i = array.dim() + array.idx();
             idx = ArrayIdx::Def(i,field.array.value(params).into());
@@ -997,16 +1003,13 @@ impl RifFieldInst {
                 field.description.with_format(&format_str)
             };
         }
-        if let ResetVal::Param(p) = reset {
-            let v = params.get(&p).expect("Undefined parameter in reset value");
-            reset = if *v < 0 {ResetVal::Signed(*v as i128)} else {ResetVal::Unsigned(*v as u128)};
-        }
         //
         let mut hw_kind = field.hw_kind.to_owned();
         if let Some(kind) = field.get_auto_hw_kind(params) {
             hw_kind.push(kind);
         }
         //
+        let limit = field.limit.compile(field.signed, params).expect("Unknown parameter in limit !");
         *next_lsb += width;
         RifFieldInst {
             name: field.name.to_owned(),
@@ -1018,7 +1021,7 @@ impl RifFieldInst {
             hw_access: field.hw_acc,
             visibility: field.visibility.compile(params),
             enum_kind: field.enum_kind.clone(),
-            limit: field.limit.clone(),
+            limit,
             partial: field.partial,
             nb_frac: field.nb_frac,
             lsb,
@@ -1125,7 +1128,7 @@ impl RifFieldInst {
         self.lsb + self.width - 1
     }
 
-    /// Return the field position MSB
+    /// Return the field partial LSB
     pub fn partial_lsb(&self) -> u16 {
         self.partial.0.unwrap_or(0)
     }

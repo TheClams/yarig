@@ -12,6 +12,7 @@ use crate::{
         gen_latex::GeneratorLatex,
         gen_mif::GeneratorMif,
         trait_sw::GeneratorSw,
+        trait_hw::GeneratorHw,
         gen_c::GeneratorC,
         gen_ipxact::GeneratorIpXact,
         gen_json::GeneratorJson,

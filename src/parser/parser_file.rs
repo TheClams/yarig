@@ -506,7 +506,7 @@ impl RifGenSrc {
                             return Err(RifError::unsupported(info, l));
                         }
                         Context::Signed => {
-                            self.last_field_mut().signed();
+                            self.last_field_mut().set_signed();
                         }
                         Context::HwWe => {
                             self.last_field_mut().set_hw_kind(FieldHwKind::WriteEn(

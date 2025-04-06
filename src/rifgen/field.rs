@@ -423,6 +423,21 @@ impl EnumKind {
     pub fn is_none(&self) -> bool {
         matches!(self,EnumKind::None)
     }
+
+    pub fn get_type(&self, scope: &str, reg_type: &str, name: &str) -> Option<(String, String)> {
+        if let EnumKind::Type(t) = self {
+            let mut ts = t.split("::");
+            match (ts.next(), ts.next()) {
+                (Some(s), Some(n))   => Some((s.to_owned(), n.to_owned())),
+                (Some("type"), None) => Some((format!("{scope}_pkg"), format!("e_{reg_type}_{name}"))),
+                (Some(n), None)      => Some((format!("{scope}_pkg"), n.to_owned())),
+                _ => unreachable!("Invalid enum type {t}"),
+            }
+        } else {
+            None
+        }
+
+    }
 }
 
 
@@ -467,6 +482,25 @@ impl ResetVal {
     //
     pub fn is_signed(&self) -> bool {
         matches!(self,ResetVal::Signed(_))
+    }
+
+    //
+    pub fn compile(&self, signed: bool, params: &ParamValues) -> Result<ResetVal,String> {
+        match self {
+            ResetVal::Param(p) => {
+                if let Some(v) = params.get(p) {
+                    if signed {
+                        Ok(ResetVal::Signed(*v as i128))
+                    } else {
+                        Ok(ResetVal::Unsigned(*v as u128))
+                    }
+                } else {
+                    Err(p.to_owned())
+                }
+            }
+            ResetVal::Unsigned(v) if signed => Ok(ResetVal::Signed(*v as i128)),
+            _ => Ok(self.clone())
+        }
     }
 }
 
@@ -614,8 +648,35 @@ impl Limit {
     pub fn is_none(&self) -> bool {
         self.value == LimitValue::None
     }
+
+    pub fn compile(&self, signed: bool, params: &ParamValues) -> Result<Limit,String> {
+        let value = self.value.compile(signed, params)?;
+        Ok(Limit{value, bypass:self.bypass.to_owned()})
+    }
 }
 
+impl LimitValue {
+
+    /// Create a new limit by setting value to all ResetVal from
+    pub fn compile(&self, signed: bool, params: &ParamValues) -> Result<LimitValue,String> {
+        match self {
+            LimitValue::Min(v) => Ok(LimitValue::Min(v.compile(signed, params)?)),
+            LimitValue::Max(v) => Ok(LimitValue::Max(v.compile(signed, params)?)),
+            LimitValue::MinMax(v0, v1) => Ok(LimitValue::MinMax(
+                v0.compile(signed, params)?,
+                v1.compile(signed, params)?)),
+            LimitValue::List(vec) => {
+                let mut nv = Vec::with_capacity(vec.len());
+                for v in vec {
+                    nv.push(v.compile(signed, params)?);
+                }
+                Ok(LimitValue::List(nv))
+            }
+            _ => Ok(self.clone()),
+        }
+    }
+
+}
 
 
 #[derive(Clone, Debug, PartialEq)]
@@ -702,6 +763,8 @@ pub struct Field {
     pub array_pos_incr: u8,
     /// Reset value (one per array element)
     pub reset: Vec<ResetVal>,
+    /// True when field is signed
+    pub signed: bool,
     /// Description
     pub description: Description,
     /// Enumerate type
@@ -745,6 +808,7 @@ impl Default for Field {
             array: Width::Value(0),
             array_pos_incr: 0,
             reset: vec![ResetVal::Unsigned(0)],
+            signed: false,
             partial: (None, 0),
             enum_kind: EnumKind::None,
             hw_kind: Vec::new(),
@@ -797,10 +861,12 @@ impl Field {
             } else {
                 (Access::RO, FieldSwKind::ReadWrite)
             };
+        let signed = reset.first().map(|r| r.is_signed()).unwrap_or(false);
         Field {
             name: name.into(),
             description: desc.into(),
             pos,
+            signed,
             array: array.unwrap_or(Width::Value(0)),
             array_pos_incr: 0,
             reset: if reset.is_empty() {vec![ResetVal::Unsigned(0)]} else {reset},
@@ -865,17 +931,13 @@ impl Field {
     }
 
     // Change all unsigned value to signed
-    pub fn signed(&mut self) {
+    pub fn set_signed(&mut self) {
+        self.signed = true;
         for r in self.reset.iter_mut() {
             if let ResetVal::Unsigned(v) = r {
                 *r = ResetVal::Signed(*v as i128);
             }
         };
-    }
-
-    pub fn is_signed(&self) -> bool {
-        let reset = self.reset.first().unwrap_or(&ResetVal::Unsigned(0));
-        matches!(reset, ResetVal::Signed(_))
     }
 
     /// Flag when a field is split on multiple register

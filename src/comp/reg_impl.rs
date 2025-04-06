@@ -60,21 +60,24 @@ pub struct FieldImpl {
 
 impl FieldImpl {
     fn new(field: &Field, reg_array: u16, ctrl_idx: usize, params: &ParamValues, partials: Option<&PartialFieldInfos>) -> Self {
-        let signed = matches!(field.reset.first(), Some(ResetVal::Signed(_)));
         // Handle case of partial array
         let mut array = reg_array.max(1) * field.array.value(params) as u16;
         if reg_array > 0 {
             array += field.partial.1;
         }
         // Handle case of partial field
-        let (width, reset) = if field.is_partial() {
+        let (width, mut resets) = if field.is_partial() {
             // By construction the partials should always be Some if the field is partial
-            partials.unwrap().merge(&field.name, signed)
+            partials.unwrap().merge(&field.name, field.signed)
         } else {
             (field.width(params) as u16, field.reset.clone())
         };
+        for reset in resets.iter_mut() {
+            *reset = reset.compile(field.signed, params).unwrap_or_default();
+        }
+        let limit = field.limit.compile(field.signed, params).expect("Unknown parameter in limit !");
         // Get description
-        let s = if field.is_signed() {'s'} else {'u'};
+        let s = if field.signed {'s'} else {'u'};
         let format_str = format!("{s}{}.{}", width, field.nb_frac);
         let description = field.description.with_format(&format_str);
         // Handle case where only access is a set/clr from software: this implies the equivalent from hardware to be complete
@@ -86,9 +89,9 @@ impl FieldImpl {
             name: field.name.clone(),
             width,
             array,
-            signed,
+            signed: field.signed,
             clk: field.clk.clone(),
-            reset,
+            reset: resets,
             description,
             enum_kind: field.enum_kind.clone(),
             hw_kind,
@@ -98,7 +101,7 @@ impl FieldImpl {
             clear: field.clear.clone(),
             lock: field.lock.clone(),
             intr_desc: field.intr_desc.clone(),
-            limit: field.limit.clone(),
+            limit,
             is_partial: field.is_partial(),
             ctrl_idx
         }
@@ -178,15 +181,8 @@ impl FieldImpl {
         else {self.width}
     }
 
-    pub fn hdl_cast(&self, scope: &str, reg_type: &str) -> CastInfo {
-        if let EnumKind::Type(t) = &self.enum_kind {
-            let mut ts = t.split("::");
-            let (scope, name) = match (ts.next(), ts.next()) {
-                (Some(s), Some(n))   => (s.to_owned(), n.to_owned()),
-                (Some("type"), None) => (scope.to_owned(), format!("e_{reg_type}_{}", self.name)),
-                (Some(n), None)      => (scope.to_owned(), n.to_owned()),
-                _ => unreachable!("Invalid enum type {t}"),
-            };
+    pub fn hdl_cast(&self, base_scope: &str, reg_type: &str) -> CastInfo {
+        if let Some((scope,name)) = self.enum_kind.get_type(base_scope, reg_type, &self.name) {
             CastInfo::Custom(scope, name)
         } else if self.signed {
             CastInfo::Signed
