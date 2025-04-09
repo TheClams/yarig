@@ -345,4 +345,14 @@ dependencies = [
  "serde_derive",
  "toml",
  "winnow",
+ "yarig_macro",
+]
+
+[[package]]
+name = "yarig_macro"
+version = "0.9.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]

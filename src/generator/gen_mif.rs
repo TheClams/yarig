@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 
 use crate::{cfg::CfgMif, generator::casing::{Casing, ToCasing}, rifgen::{EnumDef, FieldSwKind}};
-
 use super::{
     gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore},
     trait_doc::{CellKind, GeneratorDoc, TableKind}
 };
+
+use yarig_macro::add_gen_core;
 
 /// Kind of paragraph used in the dicument
 #[allow(dead_code)]
@@ -16,10 +17,8 @@ enum PgfKind {
     TableTitle, TableHeading, TableCell
 }
 
-#[allow(dead_code)]
+#[add_gen_core("mif")]
 pub struct GeneratorMif {
-    /// Base structure of all generators
-    core: GeneratorCore,
     /// Flag when current document is for a RIFMux
     is_rifmux: bool,
     /// Flag when current document is for a RIFMux
@@ -34,7 +33,6 @@ pub struct GeneratorMif {
     tbl_idx: usize
 }
 
-#[allow(dead_code)]
 impl GeneratorMif {
 
     pub fn new(setting: GeneratorBaseSetting, cfg: CfgMif) -> Self {
@@ -94,39 +92,23 @@ impl GeneratorMif {
         self.push_stash(0,          "\t>\n");
     }
 
-    fn get_col_width<'a> (&self, kind: TableKind) -> &'a [f32] {
+    fn get_col_width<'a> (&'a self, kind: TableKind) -> &'a [f32] {
         match kind {
             // RifMux/Page: Offset, Name, Description
-            TableKind::Rifmux  => &[2.5, 3.4, 11.1],
-            TableKind::RifInst => &[2.5, 3.4, 11.1],
-            TableKind::Page    => &[2.5, 3.4, 11.1],
+            TableKind::Rifmux  => &self.table_dim[0..3],// &[2.5, 3.4, 11.1],
+            TableKind::RifInst => &self.table_dim[0..3],// &[2.5, 3.4, 11.1],
+            TableKind::Page    => &self.table_dim[0..3],// &[2.5, 3.4, 11.1],
             // Register instances: Offset, Name, Reset, Description
-            TableKind::RegInst => &[2.5, 3.4, 2.1, 9.4],
+            TableKind::RegInst => &self.table_dim[3..7],// &[2.5, 3.4, 2.1, 9.4],
             // Fields: Width, Name, Access, Reset, Description
             TableKind::FieldRsvd |
-            TableKind::Field   => &[1.4, 3.4, 2.0, 2.1, 8.5],
+            TableKind::Field   => &self.table_dim[7..12],// &[1.4, 3.4, 2.0, 2.1, 8.5],
             // Unused table kind
             _  => &[],
         }
     }
 
 }
-
-
-impl GeneratorBase for GeneratorMif {
-
-    const EXT : &'static str = "mif";
-
-    fn core(&self) -> &GeneratorCore {
-        &self.core
-    }
-
-    fn core_mut(&mut self) -> &mut GeneratorCore {
-        &mut self.core
-    }
-
-}
-
 
 impl GeneratorDoc for GeneratorMif {
     const HAS_LAYOUT : bool = false;
@@ -201,7 +183,7 @@ impl GeneratorDoc for GeneratorMif {
     }
 
     fn write_table_title(&mut self, kind: TableKind, title: &str, _id: &str) {
-        let widths = self.get_col_width(kind);
+        let widths = self.get_col_width(kind).to_vec();
         let caption = match kind {
             TableKind::Page => {
                 if self.multipage {

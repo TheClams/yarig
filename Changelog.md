@@ -1,6 +1,20 @@
 # Change Log
 
 
+## [0.9.0] - 2025-04-xx
+
+### Added
+ - TraitHw: New generator trait to implement generator for hardware (SV/VHDL)
+ - add_gen_core macro (in sub-crate yarig_macro): avoid some boilerplate code for generator:
+   It add a core field to a struct and implement the GeneratorBase trait
+ - C configuration can override the top gen_inc setting
+ - Field limits can now uses parameter
+
+### Changed
+ - Generator SV now use the TraitHw: this comes with significant change on the SV output
+    since now all logic expression uses a common type and common output code
+ - All generators now uses the new macro
+
 ## [0.8.5] - 2025-04-03
 
 ### Changed

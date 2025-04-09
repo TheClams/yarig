@@ -5,10 +5,10 @@ use super::{
     gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore},
     trait_doc::{CellKind, GeneratorDoc, LinkKind, TableKind}
 };
+use yarig_macro::add_gen_core;
 
+#[add_gen_core("html")]
 pub struct GeneratorHtml {
-    /// Base structure of all generators
-    core: GeneratorCore,
     /// Optional name of CSS file used instead of default one
     css: Option<String>,
     /// Current component address width
@@ -32,20 +32,6 @@ impl GeneratorHtml {
             multipage: false
         }
     }
-}
-
-impl GeneratorBase for GeneratorHtml {
-
-    const EXT : &'static str = "html";
-
-    fn core(&self) -> &GeneratorCore {
-        &self.core
-    }
-
-    fn core_mut(&mut self) -> &mut GeneratorCore {
-        &mut self.core
-    }
-
 }
 
 impl GeneratorDoc for GeneratorHtml {

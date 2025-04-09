@@ -8,10 +8,10 @@ use super::{
     trait_sw::{GeneratorSw, RifContext}
 };
 
+use yarig_macro::add_gen_core;
 
+#[add_gen_core("h")]
 pub struct GeneratorC {
-    /// Base structure of all generators
-    core: GeneratorCore,
     /// Flag when current RIF has multiple pages
     multipage : bool,
     /// Current RIF data bus width
@@ -53,20 +53,6 @@ impl GeneratorC {
             overlap: false
         }
     }
-}
-
-impl GeneratorBase for GeneratorC {
-
-    const EXT : &'static str = "h";
-
-    fn core(&self) -> &GeneratorCore {
-        &self.core
-    }
-
-    fn core_mut(&mut self) -> &mut GeneratorCore {
-        &mut self.core
-    }
-
 }
 
 impl GeneratorSw for GeneratorC {

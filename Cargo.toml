@@ -17,6 +17,7 @@ serde = "1.0.218"
 serde_derive = "1.0.218"
 toml = "0.8.20"
 winnow = "0.7"
+yarig_macro = { path = "./yarig_macro" }
 
 [profile.release]
 strip = true # Strip symbols from the binary

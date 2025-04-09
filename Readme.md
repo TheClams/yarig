@@ -97,11 +97,11 @@ The exact behavior of each traits can be tweaked with some associated constant.
    - [ ] html: view with a sidebar showing the hierarchy.
    - [x] latex
    - [x] mif
- - [ ] Implement base generator for hardware (from SV):
+ - [x] Implement base generator for hardware (from SV):
    - [ ] VHDL
 
 ## API
- - [ ] Add derive macro to omplement the generator base part (core field, and function to access it)
+ - [x] Add derive macro to omplement the generator base part (core field, and function to access it)
 
 ## Feature
  - [ ] Improve nb_frac support:

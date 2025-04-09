@@ -2,10 +2,11 @@ use crate::{generator::casing::ToCasing, rifgen::EnumDef};
 
 use super::{casing::Casing, gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore}, trait_doc::{CellKind, GeneratorDoc, TableKind}};
 
-#[allow(dead_code)]
+
+use yarig_macro::add_gen_core;
+
+#[add_gen_core("tex")]
 pub struct GeneratorLatex {
-    /// Base structure of all generators
-    core: GeneratorCore,
     /// Current component address width
     addr_width: u8,
     /// Flag when next table column is the first of a row
@@ -16,7 +17,6 @@ pub struct GeneratorLatex {
     multipage: bool,
 }
 
-#[allow(dead_code)]
 impl GeneratorLatex {
 
     pub fn new(setting: GeneratorBaseSetting) -> Self {
@@ -28,20 +28,6 @@ impl GeneratorLatex {
             multipage: false,
         }
     }
-}
-
-impl GeneratorBase for GeneratorLatex {
-
-    const EXT : &'static str = "tex";
-
-    fn core(&self) -> &GeneratorCore {
-        &self.core
-    }
-
-    fn core_mut(&mut self) -> &mut GeneratorCore {
-        &mut self.core
-    }
-
 }
 
 impl GeneratorDoc for GeneratorLatex {

@@ -1,11 +1,15 @@
+use yarig_macro::add_gen_core;
+
 use crate::{comp::comp_inst::RifInst, generator::casing::ToCasing, rifgen::EnumDef};
 
-use super::{casing::Casing, gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore}, trait_doc::{CellKind, GeneratorDoc, LinkKind, TableKind}};
+use super::{
+    casing::Casing,
+    gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore},
+    trait_doc::{CellKind, GeneratorDoc, LinkKind, TableKind}
+};
 
-#[allow(dead_code)]
+#[add_gen_core("adoc")]
 pub struct GeneratorAdoc {
-    /// Base structure of all generators
-    core: GeneratorCore,
     /// Flag when current document is for a RIFMux
     is_rifmux: bool,
     /// Name of the current component
@@ -16,7 +20,6 @@ pub struct GeneratorAdoc {
     multipage: bool,
 }
 
-#[allow(dead_code)]
 impl GeneratorAdoc {
 
     pub fn new(setting: GeneratorBaseSetting) -> Self {
@@ -28,20 +31,6 @@ impl GeneratorAdoc {
             multipage: false,
         }
     }
-}
-
-impl GeneratorBase for GeneratorAdoc {
-
-    const EXT : &'static str = "adoc";
-
-    fn core(&self) -> &GeneratorCore {
-        &self.core
-    }
-
-    fn core_mut(&mut self) -> &mut GeneratorCore {
-        &mut self.core
-    }
-
 }
 
 impl GeneratorDoc for GeneratorAdoc {

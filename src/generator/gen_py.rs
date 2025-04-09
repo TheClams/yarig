@@ -12,6 +12,7 @@ use super::{
     gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore, InstDict, RifList},
     trait_sw::{GeneratorSw, RifContext}
 };
+use yarig_macro::add_gen_core;
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub enum PyVersion {
@@ -46,10 +47,8 @@ impl<'de> serde::Deserialize<'de> for PyVersion {
     }
 }
 
-
+#[add_gen_core("py")]
 pub struct GeneratorPy {
-    /// Base structure of all generators
-    core: GeneratorCore,
     /// Base python module defining Peripheral, Register and Field classes
     base_module : String,
     /// Python version
@@ -110,21 +109,6 @@ impl GeneratorPy {
     }
 
 }
-
-impl GeneratorBase for GeneratorPy {
-
-    const EXT : &'static str = "py";
-
-    fn core(&self) -> &GeneratorCore {
-        &self.core
-    }
-
-    fn core_mut(&mut self) -> &mut GeneratorCore {
-        &mut self.core
-    }
-
-}
-
 
 impl GeneratorSw for GeneratorPy {
     const HAS_ENUM        : bool = true;

@@ -9,9 +9,10 @@ use super::{
     trait_sw::GeneratorSw
 };
 
+use yarig_macro::add_gen_core;
 
+#[add_gen_core("ipxact.xml")]
 pub struct GeneratorIpXact {
-    pub core: GeneratorCore,
     pub vendor: String,
     pub version: String,
     pub library: String,
@@ -46,20 +47,6 @@ impl GeneratorIpXact {
     }
 
 }
-
-impl GeneratorBase for GeneratorIpXact {
-
-    const EXT : &'static str = "svd.xml";
-
-    fn core(&self) -> &GeneratorCore {
-        &self.core
-    }
-
-    fn core_mut(&mut self) -> &mut GeneratorCore {
-        &mut self.core
-    }
-}
-
 
 impl GeneratorSw for GeneratorIpXact {
     const HAS_ENUM        : bool = false;

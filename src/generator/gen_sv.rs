@@ -5,9 +5,9 @@ use super::{
     trait_hw::GeneratorHw
 };
 
+use yarig_macro::add_gen_core;
+#[add_gen_core("sv")]
 pub struct GeneratorSv {
-    /// Base structure of all generators
-    core: GeneratorCore,
     /// Current RIF data bus width
     data_width : u8,
     /// Current RIF address bus width
@@ -204,20 +204,6 @@ impl GeneratorSv {
                 s.push_str(&format!("[{}]",r.lsb));
             }
         }
-    }
-
-}
-
-impl GeneratorBase for GeneratorSv {
-
-    const EXT : &'static str = "sv";
-
-    fn core(&self) -> &GeneratorCore {
-        &self.core
-    }
-
-    fn core_mut(&mut self) -> &mut GeneratorCore {
-        &mut self.core
     }
 
 }

@@ -9,13 +9,15 @@ use super::{
     trait_sw::{GeneratorSw, RifContext}
 };
 
+use yarig_macro::add_gen_core;
 
-pub struct GeneratorJson(GeneratorCore);
+#[add_gen_core("json")]
+pub struct GeneratorJson;
 
 impl GeneratorJson {
 
     pub fn new(setting: GeneratorBaseSetting) -> Self {
-        GeneratorJson(GeneratorCore::new(1,setting))
+        GeneratorJson{core:GeneratorCore::new(1,setting)}
     }
 
     fn desc_to_string(&mut self, desc: &Description) -> String {
@@ -23,20 +25,6 @@ impl GeneratorJson {
     }
 
 }
-
-impl GeneratorBase for GeneratorJson {
-
-    const EXT : &'static str = "json";
-
-    fn core(&self) -> &GeneratorCore {
-        &self.0
-    }
-
-    fn core_mut(&mut self) -> &mut GeneratorCore {
-        &mut self.0
-    }
-}
-
 
 impl GeneratorSw for GeneratorJson {
     const HAS_ENUM        : bool = true;

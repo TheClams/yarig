@@ -10,9 +10,10 @@ use super::{
     trait_sw::{GeneratorSw, RifContext}
 };
 
+use yarig_macro::add_gen_core;
 
+#[add_gen_core("svd.xml")]
 pub struct GeneratorSvd {
-    pub core: GeneratorCore,
     pub vendor: String,
     pub version: String,
     pub rif_top: bool,
@@ -61,20 +62,6 @@ impl GeneratorSvd {
     }
 
 }
-
-impl GeneratorBase for GeneratorSvd {
-
-    const EXT : &'static str = "svd.xml";
-
-    fn core(&self) -> &GeneratorCore {
-        &self.core
-    }
-
-    fn core_mut(&mut self) -> &mut GeneratorCore {
-        &mut self.core
-    }
-}
-
 
 impl GeneratorSw for GeneratorSvd {
     const HAS_ENUM        : bool = false;
