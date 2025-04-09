@@ -73,8 +73,8 @@ impl GeneratorPy {
     pub fn new(setting: GeneratorBaseSetting, extra: CfgPy) -> Self {
         let mut core = GeneratorCore::new(2,setting);
         // Override gen_inc if defined in the python settings
-        if !extra.gen_inc.is_empty() {
-            core.setting.gen_inc = extra.gen_inc;
+        if let Some(gen_inc) = extra.gen_inc {
+            core.setting.gen_inc = gen_inc;
         }
         GeneratorPy {
             core,

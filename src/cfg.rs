@@ -140,7 +140,10 @@ pub struct CfgHtml {
 
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct CfgC {
+    /// Name of base address offset (default to PERIPH_BASE_ADDR)
     pub base_offset: Option<String>,
+    /// List of included reference to generate (use ["*"] for all)
+    pub gen_inc: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -161,7 +164,7 @@ pub struct CfgPy {
     /// Python version
     pub version: Option<PyVersion>,
     /// List of included reference to generate (use ["*"] for all)
-    pub gen_inc: Vec<String>,
+    pub gen_inc: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -280,7 +283,7 @@ impl YarigCfg {
             match target {
                 RifGenTargets::C => {
                     setting.set_output(self.get_output_path(&["c", "sw"],"c"));
-                    let mut g = GeneratorC::new(setting, self.c.base_offset.clone());
+                    let mut g = GeneratorC::new(setting, self.c.clone());
                     g.gen_all(&rif_obj).map_err(|e| format!("C generation failed: {e}"))?;
                 },
                 RifGenTargets::Html => {

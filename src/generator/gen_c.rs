@@ -1,7 +1,5 @@
 use crate::{
-    comp::comp_inst::{RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxGroupInst, RifmuxInst},
-    parser::remove_rif,
-    rifgen::{Description, EnumDef, EnumEntry}
+    cfg::CfgC, comp::comp_inst::{RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxGroupInst, RifmuxInst}, parser::remove_rif, rifgen::{Description, EnumDef, EnumEntry}
 };
 
 use super::{
@@ -36,14 +34,19 @@ pub struct GeneratorC {
 
 impl GeneratorC {
 
-    pub fn new(setting: GeneratorBaseSetting, base_addr_name: Option<String>) -> Self {
+    pub fn new(setting: GeneratorBaseSetting, extra: CfgC) -> Self {
+        let mut core = GeneratorCore::new(3,setting);
+        // Override gen_inc if defined in the python settings
+        if let Some(gen_inc) = extra.gen_inc {
+            core.setting.gen_inc = gen_inc;
+        }
         GeneratorC {
-            core: GeneratorCore::new(3,setting),
+            core,
             data_width: 32,
             addr_width: 16,
             multipage: false,
             comp_name: "".to_owned(),
-            base_addr_name : base_addr_name.unwrap_or("PERIPH_BASE_ADDR".to_owned()),
+            base_addr_name : extra.base_offset.unwrap_or("PERIPH_BASE_ADDR".to_owned()),
             max_len_field_name : 0,
             max_len_reg_name : 0,
             max_len_reg_type : 0,
