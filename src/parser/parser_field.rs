@@ -1,5 +1,5 @@
 use crate::rifgen::{
-    Access, ClkEn, Context, CounterInfo, CounterKind, EnumEntry, Field, FieldPos, FieldSwKind, InterruptInfoField, Limit, LimitValue, PasswordInfo, ResetVal
+    Access, ClkEn, Context, CounterInfo, CounterKind, EnumEntry, Field, FieldPos, FieldSwKind, InterruptInfoField, LimitP, LimitValueP, PasswordInfo, ResetValP
 };
 
 use winnow::{
@@ -14,17 +14,17 @@ use super::{
     val_i128, val_u128, val_u8, val_u8_or_param, ws, Res, ResF,
 };
 
-pub fn reset_val<'a>(input: &mut &'a str) -> Res<'a, ResetVal> {
+pub fn reset_val<'a>(input: &mut &'a str) -> Res<'a, ResetValP> {
     if input.starts_with('$') {
-        param.map(|v| ResetVal::Param(v.to_owned())).parse_next(input)
+        param.map(|v| ResetValP::Param(v.to_owned())).parse_next(input)
     } else if input.starts_with('-') || input.starts_with('+') {
-        val_i128.map(ResetVal::Signed).parse_next(input)
+        val_i128.map(ResetValP::Signed).parse_next(input)
     } else {
-        val_u128.map(ResetVal::Unsigned).parse_next(input)
+        val_u128.map(ResetValP::Unsigned).parse_next(input)
     }
 }
 
-pub fn reset_val_arr<'a>(input: &mut &'a str) -> Res<'a, Vec<ResetVal>> {
+pub fn reset_val_arr<'a>(input: &mut &'a str) -> Res<'a, Vec<ResetValP>> {
     delimited("{", separated(1..,reset_val, ws(",")), "}")
         .context(StrContext::Label("reset array values"))
         .parse_next(input)
@@ -52,7 +52,7 @@ pub fn field_decl<'a>(input: &mut &'a str) -> Res<'a, Field> {
     let reset_val = opt(preceded(
         ws("="),
         alt((
-            reset_val.map(|v: ResetVal| vec![v]),
+            reset_val.map(|v: ResetValP| vec![v]),
             reset_val_arr,
         )),
     ))
@@ -288,7 +288,7 @@ pub fn counter_def(input: &str) -> ResF<CounterInfo> {
 }
 
 // limit ([min:max]|{v0,v1,..}|enum) [bypass_signal]
-pub fn limit_def(input: &str) -> ResF<Limit> {
+pub fn limit_def(input: &str) -> ResF<LimitP> {
     (
         alt((
             // Min/Max/MinMax
@@ -298,14 +298,14 @@ pub fn limit_def(input: &str) -> ResF<Limit> {
                 ws("]"),
             ).map(|v| v.into()),
             // Arrays of values
-            reset_val_arr.map(LimitValue::List),
+            reset_val_arr.map(LimitValueP::List),
             // Enum
-            ws("enum").value(LimitValue::Enum),
+            ws("enum").value(LimitValueP::Enum),
         )),
         opt(ws(signal_name)),
     ).context(StrContext::Label("limit definition"))
         .parse(input)
-        .map(|v| Limit {
+        .map(|v| LimitP {
             value: v.0,
             bypass: v.1.unwrap_or_default().to_owned(),
         })
@@ -340,7 +340,7 @@ pub fn password_info(input: &str) -> ResF<PasswordInfo> {
 mod tests_parsing {
 
     use super::*;
-    use crate::rifgen::{FieldSwKind, ResetVal, Width};
+    use crate::rifgen::{FieldSwKind, ResetValP, Width};
 
     #[test]
     fn test_reset_val() {
@@ -350,27 +350,27 @@ mod tests_parsing {
         assert_eq!(val_u8(&mut "6'o10 "), Ok(8));
         assert_eq!(val_u8(&mut "8'd10 "), Ok(10));
         assert_eq!(val_u8(&mut "8'h1A "), Ok(26));
-        assert_eq!(reset_val(&mut "34 "), Ok(ResetVal::Unsigned(34)));
-        assert_eq!(reset_val(&mut "+34"), Ok(ResetVal::Signed(34)));
-        assert_eq!(reset_val(&mut "-17 "), Ok(ResetVal::Signed(-17)));
-        assert_eq!(reset_val(&mut "0x2A"), Ok(ResetVal::Unsigned(42)));
+        assert_eq!(reset_val(&mut "34 "), Ok(ResetValP::Unsigned(34)));
+        assert_eq!(reset_val(&mut "+34"), Ok(ResetValP::Signed(34)));
+        assert_eq!(reset_val(&mut "-17 "), Ok(ResetValP::Signed(-17)));
+        assert_eq!(reset_val(&mut "0x2A"), Ok(ResetValP::Unsigned(42)));
         assert_eq!(
             reset_val_arr(&mut "{0, 1 , 0x2,0x3} rest of text"),
             Ok(vec![
-                    ResetVal::Unsigned(0),
-                    ResetVal::Unsigned(1),
-                    ResetVal::Unsigned(2),
-                    ResetVal::Unsigned(3)
+                    ResetValP::Unsigned(0),
+                    ResetValP::Unsigned(1),
+                    ResetValP::Unsigned(2),
+                    ResetValP::Unsigned(3)
                 ]
             )
         );
         assert_eq!(
             reset_val_arr(&mut "{+0, -1}"),
-            Ok(vec![ResetVal::Signed(0), ResetVal::Signed(-1)])
+            Ok(vec![ResetValP::Signed(0), ResetValP::Signed(-1)])
         );
         assert_eq!(
             reset_val_arr(&mut "{0, -1}"),
-            Ok(vec![ResetVal::Unsigned(0), ResetVal::Signed(-1)])
+            Ok(vec![ResetValP::Unsigned(0), ResetValP::Signed(-1)])
         );
     }
 
@@ -383,7 +383,7 @@ mod tests_parsing {
                     name: "fieldname".to_owned(),
                     description: "Field description".into(),
                     pos: FieldPos::MsbLsb((Width::Value(7), Width::Value(0))),
-                    reset: vec![ResetVal::Unsigned(24)],
+                    reset: vec![ResetValP::Unsigned(24)],
                     array: Width::Value(0),
                     hw_acc: Access::RO,
                     ..Default::default()
@@ -397,7 +397,7 @@ mod tests_parsing {
                     name: "field_ro".to_owned(),
                     description: "Field Read-only".into(),
                     pos: FieldPos::Size(Width::Value(5)),
-                    reset: vec![ResetVal::Unsigned(0)],
+                    reset: vec![ResetValP::Unsigned(0)],
                     array: Width::Value(0),
                     hw_acc: Access::WO,
                     sw_kind: FieldSwKind::ReadOnly,
@@ -412,7 +412,7 @@ mod tests_parsing {
                     name: "field_constant".to_owned(),
                     description: "Field Constant".into(),
                     pos: FieldPos::MsbLsb((Width::Value(10), Width::Value(5))),
-                    reset: vec![ResetVal::Unsigned(3)],
+                    reset: vec![ResetValP::Unsigned(3)],
                     array: Width::Value(0),
                     hw_acc: Access::WO,
                     sw_kind: FieldSwKind::ReadOnly,
@@ -427,7 +427,7 @@ mod tests_parsing {
                     name: "array".to_owned(),
                     description: "Array 2 reset".into(),
                     pos: FieldPos::LsbSize((Width::Value(4), Width::Value(8))),
-                    reset: vec![ResetVal::Unsigned(13), ResetVal::Signed(-37)],
+                    reset: vec![ResetValP::Unsigned(13), ResetValP::Signed(-37)],
                     array: Width::Value(4),
                     hw_acc: Access::RO,
                     ..Default::default()
@@ -513,40 +513,40 @@ mod tests_parsing {
     fn test_limit() {
         assert_eq!(
             limit_def("[0:7] bypass"),
-            Ok(Limit {
-                value: LimitValue::MinMax(ResetVal::Unsigned(0), ResetVal::Unsigned(7)),
+            Ok(LimitP {
+                value: LimitValueP::MinMax(ResetValP::Unsigned(0), ResetValP::Unsigned(7)),
                 bypass: "bypass".to_string()
             })
         );
         assert_eq!(
             limit_def("[:5]"),
-            Ok(Limit {
-                value: LimitValue::Max(ResetVal::Unsigned(5)),
+            Ok(LimitP {
+                value: LimitValueP::Max(ResetValP::Unsigned(5)),
                 bypass: "".to_string()
             })
         );
         assert_eq!(
             limit_def("[3:]"),
-            Ok(Limit {
-                value: LimitValue::Min(ResetVal::Unsigned(3)),
+            Ok(LimitP {
+                value: LimitValueP::Min(ResetValP::Unsigned(3)),
                 bypass: "".to_string()
             })
         );
         assert_eq!(
             limit_def("{3,5,9} allow"),
-            Ok(Limit {
-                value: LimitValue::List(vec![
-                    ResetVal::Unsigned(3),
-                    ResetVal::Unsigned(5),
-                    ResetVal::Unsigned(9)
+            Ok(LimitP {
+                value: LimitValueP::List(vec![
+                    ResetValP::Unsigned(3),
+                    ResetValP::Unsigned(5),
+                    ResetValP::Unsigned(9)
                 ]),
                 bypass: "allow".to_string()
             })
         );
         assert_eq!(
             limit_def("enum"),
-            Ok(Limit {
-                value: LimitValue::Enum,
+            Ok(LimitP {
+                value: LimitValueP::Enum,
                 bypass: "".to_string()
             })
         );
@@ -559,7 +559,7 @@ mod tests_parsing {
             password_info("hold=0x1234"),
             Ok(PasswordInfo {
                 once: None,
-                hold: Some(ResetVal::Unsigned(0x1234)),
+                hold: Some(ResetValP::Unsigned(0x1234)),
                 protect: false,
             })
         );
@@ -567,23 +567,23 @@ mod tests_parsing {
             password_info("once=0x1337"),
             Ok(PasswordInfo {
                 hold: None,
-                once: Some(ResetVal::Unsigned(0x1337)),
+                once: Some(ResetValP::Unsigned(0x1337)),
                 protect: false,
             })
         );
         assert_eq!(
             password_info("hold=0xDEAD once=0xC0FE protect"),
             Ok(PasswordInfo {
-                hold: Some(ResetVal::Unsigned(0xDEAD)),
-                once: Some(ResetVal::Unsigned(0xC0FE)),
+                hold: Some(ResetValP::Unsigned(0xDEAD)),
+                once: Some(ResetValP::Unsigned(0xC0FE)),
                 protect: true,
             })
         );
         assert_eq!(
             password_info("once=0xBAD hold=0xBED"),
             Ok(PasswordInfo {
-                once: Some(ResetVal::Unsigned(0xBAD)),
-                hold: Some(ResetVal::Unsigned(0xBED)),
+                once: Some(ResetValP::Unsigned(0xBAD)),
+                hold: Some(ResetValP::Unsigned(0xBED)),
                 protect: false,
             })
         );

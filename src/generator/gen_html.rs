@@ -195,7 +195,7 @@ impl GeneratorDoc for GeneratorHtml {
             }
             _ => {},
         }
-        if self.nb_col>1 || span > 1 {
+        if (self.nb_col>1 && span > 0) || span > 1 {
             self.write(&format!(" colspan=\"{}\"", span * self.nb_col));
         }
         if let Some(tip) = tip {

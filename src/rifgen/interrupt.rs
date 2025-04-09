@@ -1,4 +1,4 @@
-use super::{ResetVal, Description};
+use super::{ResetValP, Description};
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub enum InterruptTrigger {#[default] High, Low, Rising, Falling, Edge}
@@ -54,13 +54,13 @@ pub struct InterruptInfo {
     pub name: String,
     pub trigger: InterruptTrigger,
     pub clear: InterruptClr,
-    pub enable: Option<ResetVal>,
-    pub mask: Option<ResetVal>,
+    pub enable: Option<ResetValP>,
+    pub mask: Option<ResetValP>,
     pub pending: bool,
     pub description: InterruptDesc,
 }
 
-pub type InterruptPropTuple = (Option<InterruptTrigger>,Option<InterruptClr>,Option<ResetVal>,Option<ResetVal>,Option<bool>);
+pub type InterruptPropTuple = (Option<InterruptTrigger>,Option<InterruptClr>,Option<ResetValP>,Option<ResetValP>,Option<bool>);
 impl InterruptInfo {
     pub fn new(name: &str, info: InterruptPropTuple) -> InterruptInfo {
         InterruptInfo {
@@ -74,7 +74,7 @@ impl InterruptInfo {
         }
     }
 
-    pub fn get_rst_desc(&self, kind: InterruptRegKind) -> Option<(&ResetVal,&Description)> {
+    pub fn get_rst_desc(&self, kind: InterruptRegKind) -> Option<(&ResetValP,&Description)> {
         match kind {
             InterruptRegKind::Enable => {
                 let rst = self.enable.as_ref()?;
@@ -85,7 +85,7 @@ impl InterruptInfo {
                 Some((rst,&self.description.mask))
             },
             InterruptRegKind::Pending if self.pending => {
-                Some((&ResetVal::Unsigned(0),&self.description.pending))
+                Some((&ResetValP::Unsigned(0),&self.description.pending))
             },
             _ => None
         }

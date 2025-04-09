@@ -3,7 +3,9 @@ use std::collections::{BTreeMap, HashMap};
 use crate::{
     parser::{get_rif, parser_expr::ParamValues, RifGenSrc, RifGenTop},
     rifgen::{
-        order_dict::{OrderDict, OrderedDictIterV}, Access, AddressKind, ClockingInfo, CounterInfo, Description, EnumDef, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, Interface, InterruptRegKind, InterruptTrigger, Limit, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegPulseKind, ResetVal, ResetValOverride, Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SuffixInfo, Visibility
+        order_dict::{OrderDict, OrderedDictIterV},
+        Access, AddressKind, ClockingInfo, CounterInfo, Description, EnumDef, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, Interface,
+        InterruptRegKind, InterruptTrigger, Limit, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegPulseKind, ResetVal, ResetValOverride, Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SuffixInfo, Visibility
     },
 };
 
@@ -649,7 +651,6 @@ pub struct RifRegInst {
     pub incl: Option<String>,
 }
 
-#[allow(dead_code)]
 impl RifRegInst {
     pub fn new(
         def: &RegDef,
@@ -742,7 +743,7 @@ impl RifRegInst {
                     r.sw_access = Access::RO;
                 }
                 r.hw_access = Access::NA;
-                r.reset = info.0.to_u128(128);
+                r.reset = info.0.compile(false, &rifs.params)?.to_u128(128);
                 for f in r.fields.iter_mut() {
                     let val : u128 = (r.reset >> f.lsb) & ((1<<f.width)-1);
                     f.reset = if f.is_signed() {
@@ -805,16 +806,16 @@ impl RifRegInst {
                         }
                     }
                     match &ovr_f.reset {
-                        ResetValOverride::Reset(reset_val) => reg_field.reset = reset_val.clone(),
+                        ResetValOverride::Reset(reset_val) => reg_field.reset = reset_val.compile(reg_field.is_signed(), &rifs.params)?,
                         ResetValOverride::Disable(reset_val) => {
-                            reg_field.reset = reset_val.clone();
+                            reg_field.reset = reset_val.compile(reg_field.is_signed(), &rifs.params)?;
                             reg_field.visibility = Visibility::Disabled;
                         },
                         // Nothing
                         ResetValOverride::None => {},
                     }
                     if let Some(limit) = &ovr_f.limit {
-                        reg_field.limit = limit.clone();
+                        reg_field.limit = limit.compile(reg_field.is_signed(), &rifs.params)?;
                     }
                 }
             }
@@ -1016,15 +1017,21 @@ impl RifFieldInst {
         if let Some(kind) = field.get_auto_hw_kind(params) {
             hw_kind.push(kind);
         }
-        //
+        // Compile value containing resetVal in case they use parameters
         let limit = field.limit.compile(field.signed, params).expect("Unknown parameter in limit !");
+        let mut sw_kind = field.sw_kind.to_owned();
+        if let FieldSwKind::Password(info) = &mut sw_kind {
+            info.once = info.once.as_ref().map(|r| (&r.compile(field.signed, params).expect("Unknown parameter in limit !")).into());
+            info.hold = info.hold.as_ref().map(|r| (&r.compile(field.signed, params).expect("Unknown parameter in limit !")).into());
+        }
+
         *next_lsb += width;
         RifFieldInst {
             name: field.name.to_owned(),
             base_description: desc.no_dollar(),
             description: desc,
             reset,
-            sw_kind: field.sw_kind.to_owned(),
+            sw_kind,
             hw_kind,
             hw_access: field.hw_acc,
             visibility: field.visibility.compile(params),

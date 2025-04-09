@@ -442,20 +442,88 @@ impl EnumKind {
 
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ResetVal {
+pub enum ResetValP {
     Unsigned(u128),
     Signed(i128),
     Param(String),
 }
+impl Default for ResetValP {
+    fn default() -> Self {
+        ResetValP::Unsigned(0)
+    }
+}
+
+impl Default for &ResetValP {
+    fn default() -> Self {
+        &ResetValP::Unsigned(0)
+    }
+}
+
+impl ResetValP {
+    //
+    pub fn is_signed(&self) -> bool {
+        matches!(self,ResetValP::Signed(_))
+    }
+
+    //
+    pub fn compile(&self, signed: bool, params: &ParamValues) -> Result<ResetVal,String> {
+        match self {
+            ResetValP::Param(p) => {
+                if let Some(v) = params.get(p) {
+                    if signed {
+                        Ok(ResetVal::Signed(*v as i128))
+                    } else {
+                        Ok(ResetVal::Unsigned(*v as u128))
+                    }
+                } else {
+                    Err(format!("Unknown parameter {p}"))
+                }
+            }
+            ResetValP::Signed(v)   => Ok(ResetVal::Signed(*v as i128)),
+            ResetValP::Unsigned(v) if signed => Ok(ResetVal::Signed(*v as i128)),
+            ResetValP::Unsigned(v) => Ok(ResetVal::Unsigned(*v as u128)),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ResetVal {
+    Unsigned(u128),
+    Signed(i128),
+}
+
 impl Default for ResetVal {
     fn default() -> Self {
         ResetVal::Unsigned(0)
     }
 }
 
-impl Default for &ResetVal {
-    fn default() -> Self {
-        &ResetVal::Unsigned(0)
+impl From<ResetValP> for ResetVal {
+    fn from(value: ResetValP) -> Self {
+        match value {
+            ResetValP::Unsigned(v) => ResetVal::Unsigned(v),
+            ResetValP::Signed(v) => ResetVal::Signed(v),
+            ResetValP::Param(p) => unreachable!("Reset value with parameter {p} should have been compiled !"),
+        }
+    }
+}
+
+impl From<&ResetValP> for ResetVal {
+    fn from(value: &ResetValP) -> Self {
+        match value {
+            ResetValP::Unsigned(v) => ResetVal::Unsigned(*v),
+            ResetValP::Signed(v) => ResetVal::Signed(*v),
+            ResetValP::Param(p) => unreachable!("Reset value with parameter {p} should have been compiled !"),
+        }
+    }
+}
+
+impl From<&ResetVal> for ResetValP {
+    fn from(value: &ResetVal) -> Self {
+        match value {
+            ResetVal::Unsigned(v) => ResetValP::Unsigned(*v),
+            ResetVal::Signed(v) => ResetValP::Signed(*v),
+        }
     }
 }
 
@@ -465,7 +533,6 @@ impl ResetVal {
         match self {
             ResetVal::Unsigned(v) => *v,
             ResetVal::Signed(v) => (*v as u128) & ((1<<w)-1),
-            ResetVal::Param(p) => unreachable!("to_u128 cannot be used on uncompiled values: {:?}",p),
         }
     }
 
@@ -475,7 +542,6 @@ impl ResetVal {
         match self {
             ResetVal::Unsigned(v) => (*v as f64) * scale,
             ResetVal::Signed(v) => (*v as f64) * scale,
-            ResetVal::Param(p) => unreachable!("to_u128 cannot be used on uncompiled values: {:?}",p),
         }
     }
 
@@ -484,24 +550,6 @@ impl ResetVal {
         matches!(self,ResetVal::Signed(_))
     }
 
-    //
-    pub fn compile(&self, signed: bool, params: &ParamValues) -> Result<ResetVal,String> {
-        match self {
-            ResetVal::Param(p) => {
-                if let Some(v) = params.get(p) {
-                    if signed {
-                        Ok(ResetVal::Signed(*v as i128))
-                    } else {
-                        Ok(ResetVal::Unsigned(*v as u128))
-                    }
-                } else {
-                    Err(p.to_owned())
-                }
-            }
-            ResetVal::Unsigned(v) if signed => Ok(ResetVal::Signed(*v as i128)),
-            _ => Ok(self.clone())
-        }
-    }
 }
 
 
@@ -599,7 +647,6 @@ impl Sub<&Width> for Width {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq)]
 pub enum FieldPos {
     MsbLsb((Width,Width)),
@@ -607,7 +654,27 @@ pub enum FieldPos {
     Size(Width),
 }
 
-#[allow(dead_code)]
+#[derive(Clone, Debug, PartialEq)]
+pub enum LimitValueP {
+    None,
+    Min(ResetValP),
+    Max(ResetValP),
+    MinMax(ResetValP, ResetValP),
+    List(Vec<ResetValP>),
+    Enum,
+}
+pub type PairResetVal = (Option<ResetValP>,Option<ResetValP>);
+impl From<PairResetVal> for LimitValueP {
+	fn from(t: PairResetVal) -> LimitValueP {
+		match t {
+			(Some(v),None) => LimitValueP::Min(v),
+			(None,Some(v)) => LimitValueP::Max(v),
+			(Some(v0),Some(v1)) => LimitValueP::MinMax(v0,v1),
+			(None,None) => LimitValueP::None,
+		}
+	}
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum LimitValue {
     None,
@@ -617,18 +684,28 @@ pub enum LimitValue {
     List(Vec<ResetVal>),
     Enum,
 }
-pub type PairResetVal = (Option<ResetVal>,Option<ResetVal>);
-impl From<PairResetVal> for LimitValue {
-	fn from(t: PairResetVal) -> LimitValue {
-		match t {
-			(Some(v),None) => LimitValue::Min(v),
-			(None,Some(v)) => LimitValue::Max(v),
-			(Some(v0),Some(v1)) => LimitValue::MinMax(v0,v1),
-			(None,None) => LimitValue::None,
-		}
-	}
+
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct LimitP {
+    pub value: LimitValueP,
+    pub bypass: String,
+}
+impl Default for LimitP {
+    fn default() -> Self {
+        LimitP {
+            value: LimitValueP::None,
+            bypass: "".to_owned(),
+        }
+    }
 }
 
+impl LimitP {
+    pub fn compile(&self, signed: bool, params: &ParamValues) -> Result<Limit,String> {
+        let value = self.value.compile(signed, params)?;
+        Ok(Limit{value, bypass:self.bypass.to_owned()})
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Limit {
@@ -648,31 +725,28 @@ impl Limit {
     pub fn is_none(&self) -> bool {
         self.value == LimitValue::None
     }
-
-    pub fn compile(&self, signed: bool, params: &ParamValues) -> Result<Limit,String> {
-        let value = self.value.compile(signed, params)?;
-        Ok(Limit{value, bypass:self.bypass.to_owned()})
-    }
 }
 
-impl LimitValue {
+impl LimitValueP {
 
     /// Create a new limit by setting value to all ResetVal from
     pub fn compile(&self, signed: bool, params: &ParamValues) -> Result<LimitValue,String> {
         match self {
-            LimitValue::Min(v) => Ok(LimitValue::Min(v.compile(signed, params)?)),
-            LimitValue::Max(v) => Ok(LimitValue::Max(v.compile(signed, params)?)),
-            LimitValue::MinMax(v0, v1) => Ok(LimitValue::MinMax(
+            LimitValueP::Min(v) => Ok(LimitValue::Min(v.compile(signed, params)?)),
+            LimitValueP::Max(v) => Ok(LimitValue::Max(v.compile(signed, params)?)),
+            LimitValueP::MinMax(v0, v1) => Ok(LimitValue::MinMax(
                 v0.compile(signed, params)?,
                 v1.compile(signed, params)?)),
-            LimitValue::List(vec) => {
+            LimitValueP::List(vec) => {
                 let mut nv = Vec::with_capacity(vec.len());
                 for v in vec {
                     nv.push(v.compile(signed, params)?);
                 }
                 Ok(LimitValue::List(nv))
             }
-            _ => Ok(self.clone()),
+            LimitValueP::Enum => Ok(LimitValue::Enum),
+            LimitValueP::None => Ok(LimitValue::None),
+            // _ => Ok(self.clone()),
         }
     }
 
@@ -681,8 +755,8 @@ impl LimitValue {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct PasswordInfo {
-    pub once: Option<ResetVal>,
-    pub hold: Option<ResetVal>,
+    pub once: Option<ResetValP>,
+    pub hold: Option<ResetValP>,
     pub protect: bool,
 }
 
@@ -762,7 +836,7 @@ pub struct Field {
     /// Field position increment when defined as an array
     pub array_pos_incr: u8,
     /// Reset value (one per array element)
-    pub reset: Vec<ResetVal>,
+    pub reset: Vec<ResetValP>,
     /// True when field is signed
     pub signed: bool,
     /// Description
@@ -790,7 +864,7 @@ pub struct Field {
     /// Optional description for interrupt derived register (enable/mask/pending)
     pub intr_desc: Option<InterruptDesc>,
     /// Optional limits on the value which can be writen
-    pub limit: Limit,
+    pub limit: LimitP,
     /// Number of fractional bits
     pub nb_frac: isize,
     /// Indicates the register instance is controlled by a parameter
@@ -807,7 +881,7 @@ impl Default for Field {
             pos: FieldPos::Size(Width::Value(1)),
             array: Width::Value(0),
             array_pos_incr: 0,
-            reset: vec![ResetVal::Unsigned(0)],
+            reset: vec![ResetValP::Unsigned(0)],
             signed: false,
             partial: (None, 0),
             enum_kind: EnumKind::None,
@@ -821,7 +895,7 @@ impl Default for Field {
             visibility: VisibilityRaw::Full,
             intr_desc: None,
             nb_frac : 0,
-            limit: Limit::default(),
+            limit: LimitP::default(),
             info: HashMap::new(),
             optional: "".to_owned(),
         }
@@ -831,7 +905,7 @@ impl Default for Field {
 impl Field {
     pub fn new<S1, S2>(
         name: S1,
-        reset: Vec<ResetVal>,
+        reset: Vec<ResetValP>,
         pos: FieldPos,
         sw_kind: Option<FieldSwKind>,
         array: Option<Width>,
@@ -869,7 +943,7 @@ impl Field {
             signed,
             array: array.unwrap_or(Width::Value(0)),
             array_pos_incr: 0,
-            reset: if reset.is_empty() {vec![ResetVal::Unsigned(0)]} else {reset},
+            reset: if reset.is_empty() {vec![ResetValP::Unsigned(0)]} else {reset},
             sw_kind,
             hw_acc,
             ..Default::default()
@@ -921,7 +995,7 @@ impl Field {
             // Reset value for password field is 1 since it corresponds to the locked signal
             FieldSwKind::Password(_) => {
                 for r in self.reset.iter_mut() {
-                    *r = ResetVal::Unsigned(1);
+                    *r = ResetValP::Unsigned(1);
                 };
             }
             _ => {}
@@ -934,8 +1008,8 @@ impl Field {
     pub fn set_signed(&mut self) {
         self.signed = true;
         for r in self.reset.iter_mut() {
-            if let ResetVal::Unsigned(v) = r {
-                *r = ResetVal::Signed(*v as i128);
+            if let ResetValP::Unsigned(v) = r {
+                *r = ResetValP::Signed(*v as i128);
             }
         };
     }

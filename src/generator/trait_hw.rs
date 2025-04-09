@@ -1032,13 +1032,13 @@ pub trait GeneratorHw : GeneratorBase {
                                     let mut if_then_pw = Vec::new();
                                     if let Some(v) = &info.once {
                                         if_then_pw.push((
-                                            LogicExpr::eq(wr_data.clone(), LogicExpr::reset(v, field.width)),
+                                            LogicExpr::eq(wr_data.clone(), LogicExpr::reset(&v.into(), field.width)),
                                             LogicExpr::ValueU(0, 2)
                                         ));
                                     }
                                     if let Some(v) = &info.hold {
                                         if_then_pw.push((
-                                            LogicExpr::eq(wr_data.clone(), LogicExpr::reset(v, field.width)),
+                                            LogicExpr::eq(wr_data.clone(), LogicExpr::reset(&v.into(), field.width)),
                                             LogicExpr::ValueU(2, 2)
                                         ));
                                     }

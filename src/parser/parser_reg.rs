@@ -1,5 +1,5 @@
 use crate::rifgen::{
-    Context, InterruptClr, InterruptPropTuple, InterruptTrigger, RegDef, ResetVal,
+    Context, InterruptClr, InterruptPropTuple, InterruptTrigger, RegDef, ResetValP,
 };
 
 use winnow::{
@@ -114,17 +114,17 @@ pub fn reg_interrupt_clr<'a>(input: &mut &'a str) -> Res<'a, InterruptClr> {
     .parse_next(input)
 }
 
-pub fn reg_interrupt_en<'a>(input: &mut &'a str) -> Res<'a, ResetVal> {
+pub fn reg_interrupt_en<'a>(input: &mut &'a str) -> Res<'a, ResetValP> {
     alt(("enable", "en"))
         .context(StrContext::Label("register interrupt enable"))
         .parse_next(input)?;
     preceded("=", reset_val)
-        .parse_next(input).or_else(|_| Ok(ResetVal::Unsigned(0)))
+        .parse_next(input).or_else(|_| Ok(ResetValP::Unsigned(0)))
 }
 
-pub fn reg_interrupt_mask<'a>(input: &mut &'a str) -> Res<'a, ResetVal> {
+pub fn reg_interrupt_mask<'a>(input: &mut &'a str) -> Res<'a, ResetValP> {
     "mask".context(StrContext::Label("register interrupt mask")).parse_next(input)?;
-    preceded("=", reset_val).parse_next(input).or_else(|_| Ok(ResetVal::Unsigned(0)))
+    preceded("=", reset_val).parse_next(input).or_else(|_| Ok(ResetValP::Unsigned(0)))
 }
 
 pub fn reg_interrupt_perm<'a>(input: &mut &'a str) -> Res<'a, InterruptPropTuple> {
@@ -196,7 +196,7 @@ pub fn reg_pulse_info<'a>(input: &mut &'a str, reg_clk: &str, init: bool) -> Res
 #[cfg(test)]
 mod tests_parsing {
     use super::*;
-    use crate::rifgen::{InterruptDesc, InterruptInfo, ResetVal};
+    use crate::rifgen::{InterruptDesc, InterruptInfo, ResetValP};
 
     #[test]
     fn test_interrupt() {
@@ -207,8 +207,8 @@ mod tests_parsing {
                 trigger: InterruptTrigger::Edge,
                 clear: InterruptClr::Write1,
                 description: InterruptDesc::default(),
-                enable: Some(ResetVal::Unsigned(0x1337)),
-                mask: Some(ResetVal::Unsigned(0xCAFE)),
+                enable: Some(ResetValP::Unsigned(0x1337)),
+                mask: Some(ResetValP::Unsigned(0xCAFE)),
                 pending: true,
             }
         );
@@ -219,8 +219,8 @@ mod tests_parsing {
                 trigger: InterruptTrigger::High,
                 clear: InterruptClr::Hw,
                 description: InterruptDesc::default(),
-                enable: Some(ResetVal::Unsigned(0xCAFE)),
-                mask: Some(ResetVal::Unsigned(0)),
+                enable: Some(ResetValP::Unsigned(0xCAFE)),
+                mask: Some(ResetValP::Unsigned(0)),
                 pending: true,
             }
         );
@@ -232,7 +232,7 @@ mod tests_parsing {
                 trigger: InterruptTrigger::High,
                 clear: InterruptClr::Read,
                 description: InterruptDesc::default(),
-                enable: Some(ResetVal::Unsigned(0)),
+                enable: Some(ResetValP::Unsigned(0)),
                 mask: None,
                 pending: false,
             }

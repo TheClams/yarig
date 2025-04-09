@@ -1,3 +1,4 @@
 /target
 /test
 .*
+/yarig_macro/target

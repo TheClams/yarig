@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::parser::{get_rif, parser_expr::ExprTokens};
 
-use super::{Access, ClkEn, Description, InterruptRegKind, Limit, RegDef, RegDefOrIncl, ResetVal, Rif, Visibility};
+use super::{Access, ClkEn, Description, InterruptRegKind, LimitP, RegDef, RegDefOrIncl, ResetValP, Rif, Visibility};
 
 /// Result of register definition search
 /// Contains the register deifntion itself, information about the interrupt kind and its RIF source if included
@@ -146,9 +146,9 @@ pub enum ResetValOverride {
     /// No override
     None,
     /// Relative to the last absolute value provided
-    Reset(ResetVal),
+    Reset(ResetValP),
     /// Like Relative but also set current address as absolute value
-    Disable(ResetVal),
+    Disable(ResetValP),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -162,7 +162,7 @@ pub struct FieldOverride {
     /// Reset override
     pub reset:ResetValOverride,
     /// Limit override
-    pub limit: Option<Limit>,
+    pub limit: Option<LimitP>,
     /// Info override
     pub info: HashMap<String,String>,
 }
@@ -298,7 +298,7 @@ impl RegInst {
         reg.hw_acc = Some(v);
     }
 
-    pub fn set_reset(&mut self, idx: &OverrideIndex, v: ResetVal) {
+    pub fn set_reset(&mut self, idx: &OverrideIndex, v: ResetValP) {
         let reg = self.reg_override.entry(idx.0).or_default();
         if let Some(name) = &idx.1 {
             let field = Self::get_field_ovr(reg, name, idx.2);
@@ -306,7 +306,7 @@ impl RegInst {
         }
     }
 
-    pub fn set_limit(&mut self, idx: &OverrideIndex, limit: Limit) {
+    pub fn set_limit(&mut self, idx: &OverrideIndex, limit: LimitP) {
         let reg = self.reg_override.entry(idx.0).or_default();
         if let Some(name) = &idx.1 {
             let field = Self::get_field_ovr(reg, name, idx.2);

@@ -59,23 +59,24 @@ pub struct FieldImpl {
 }
 
 impl FieldImpl {
-    fn new(field: &Field, reg_array: u16, ctrl_idx: usize, params: &ParamValues, partials: Option<&PartialFieldInfos>) -> Self {
+    fn new(field: &Field, reg_array: u16, ctrl_idx: usize, params: &ParamValues, partials: Option<&PartialFieldInfos>) -> Result<Self, String> {
         // Handle case of partial array
         let mut array = reg_array.max(1) * field.array.value(params) as u16;
         if reg_array > 0 {
             array += field.partial.1;
         }
         // Handle case of partial field
-        let (width, mut resets) = if field.is_partial() {
+        let (width, resets) = if field.is_partial() {
             // By construction the partials should always be Some if the field is partial
             partials.unwrap().merge(&field.name, field.signed)
         } else {
-            (field.width(params) as u16, field.reset.clone())
+            let mut resets = Vec::with_capacity(field.reset.len());
+            for reset in field.reset.iter() {
+                resets.push(reset.compile(field.signed, params)?);
+            }
+            (field.width(params) as u16, resets)
         };
-        for reset in resets.iter_mut() {
-            *reset = reset.compile(field.signed, params).unwrap_or_default();
-        }
-        let limit = field.limit.compile(field.signed, params).expect("Unknown parameter in limit !");
+        let limit = field.limit.compile(field.signed, params)?;
         // Get description
         let s = if field.signed {'s'} else {'u'};
         let format_str = format!("{s}{}.{}", width, field.nb_frac);
@@ -85,7 +86,7 @@ impl FieldImpl {
         if let Some(kind) = field.get_auto_hw_kind(params) {
             hw_kind.push(kind);
         }
-        FieldImpl {
+        Ok(FieldImpl {
             name: field.name.clone(),
             width,
             array,
@@ -104,7 +105,7 @@ impl FieldImpl {
             limit,
             is_partial: field.is_partial(),
             ctrl_idx
-        }
+        })
     }
 
     /// Get the reset value as an unsigned 128b
@@ -372,7 +373,7 @@ impl RegImplDict {
                     reg_impl.merge_with(reg, &rifs.params, &rifs.partials)?;
                 }
                 else {
-                    let mut reg_impl = RegImpl::new(reg, &rifs.params, &rifs.partials);
+                    let mut reg_impl = RegImpl::new(reg, &rifs.params, &rifs.partials)?;
                     // Inherit clock from page if default
                     if reg_impl.clk_en.is_default() {
                         reg_impl.clk_en = clk_en.to_owned();
@@ -417,7 +418,7 @@ pub struct RegImpl {
 impl RegImpl {
 
     /// Create a register hardware implementation based on a register definition
-    fn new(reg: &RegDef, params: &ParamValues, partials: &PartialFieldDict) -> Self {
+    fn new(reg: &RegDef, params: &ParamValues, partials: &PartialFieldDict) -> Result<Self, String> {
         let mut fields = Vec::with_capacity(reg.fields.len());
         let mut port = RegPortKind::from_reg(reg);
         let array = reg.array.value(params) as u16;
@@ -426,9 +427,9 @@ impl RegImpl {
         for f in reg.fields.iter() {
             port.updt(RegPortKind::from_field(f));
             sw_access.updt((&f.sw_kind).into());
-            fields.push(FieldImpl::new(f, array, 0, params, partials.get(reg.get_group_name())));
+            fields.push(FieldImpl::new(f, array, 0, params, partials.get(reg.get_group_name()))?);
         }
-        RegImpl {
+        Ok(RegImpl {
             name: reg.get_group_name().to_owned(),
             description: reg.description.clone(),
             fields, port,
@@ -439,7 +440,7 @@ impl RegImpl {
             clear: reg.clear.clone(),
             pkg: reg.group.pkg.clone(),
             regs_ctrl: vec![RegHwCtrl::new(reg.name.clone(), reg.pulse.clone(), reg.external.with_access(&sw_access))],
-        }
+        })
     }
 
     /// Merge a register definition in an already existing register implementation
@@ -477,7 +478,7 @@ impl RegImpl {
                     field_impl.array += f.array.value(params) as u16;
                     // TODO: might need to check dimensions (or maybe shjould be done at parsing level)
                     for r in f.reset.iter() {
-                        field_impl.reset.push(r.clone());
+                        field_impl.reset.push(r.compile(f.signed, params)?);
                     }
                 } else if f.is_partial() {
                     for kind in f.hw_kind.iter() {
@@ -490,7 +491,7 @@ impl RegImpl {
                     return Err(format!("Field {}.{} already defined in this register group. Missing partial definition ?", reg.name, f.name));
                 }
             } else {
-                let mut field = FieldImpl::new(f, array, self.regs_ctrl.len(), params, partials.get(reg.get_group_name()));
+                let mut field = FieldImpl::new(f, array, self.regs_ctrl.len(), params, partials.get(reg.get_group_name()))?;
                 if !clk_en.is_default() {
                     field.clk_en = clk_en.to_owned()
                 }
@@ -525,7 +526,7 @@ impl RegImpl {
                         if let Some(ref mut reg) = reg_impl {
                             reg.merge_with(d, &rifs.params, &rifs.partials)?;
                         } else {
-                            reg_impl = Some(RegImpl::new(d, &rifs.params, &rifs.partials));
+                            reg_impl = Some(RegImpl::new(d, &rifs.params, &rifs.partials)?);
                         }
                     }
                 }

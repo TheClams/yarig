@@ -1,7 +1,7 @@
 # Change Log
 
 
-## [0.9.0] - 2025-04-xx
+## [0.9.0] - 2025-04-11
 
 ### Added
  - TraitHw: New generator trait to implement generator for hardware (SV/VHDL)
@@ -9,11 +9,15 @@
    It add a core field to a struct and implement the GeneratorBase trait
  - C configuration can override the top gen_inc setting
  - Field limits can now uses parameter
+ - Split option for HTML/ADoc/MIF: allow to split rifmux and the RIF output in different files
 
 ### Changed
  - Generator SV now use the TraitHw: this comes with significant change on the SV output
     since now all logic expression uses a common type and common output code
  - All generators now uses the new macro
+
+### Internals
+ - Add distinct type for resetVal (ReseltValP and ResetVal) before and after "compilation" to ensure all value are fully defined after compilation.
 
 ## [0.8.5] - 2025-04-03
 
