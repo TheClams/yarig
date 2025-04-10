@@ -87,7 +87,7 @@ impl RifGenSrc {
         }
     }
 
-    /// Generrate a source object from a file
+    /// Generate a source object from a file
     /// the includes path are used to find and parse any included/referenced RIF
     /// The reserved_keyword selection
     pub fn from_file<P>(filename: P, includes: &[String], rsvd_keywords_sel: RsvdKeywordSel) -> Result<RifGenSrc, RifError>

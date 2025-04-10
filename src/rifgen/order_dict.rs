@@ -18,7 +18,6 @@ impl<K,V> OrderDict<K,V>
         OrderDict { keys: HashMap::with_capacity(n), values: Vec::with_capacity(n) }
     }
 
-    #[allow(dead_code)]
     pub fn contains_key(&self, k: &K) -> bool{
         self.keys.contains_key(k)
     }
@@ -33,11 +32,15 @@ impl<K,V> OrderDict<K,V>
         }
     }
 
+    pub fn clear(&mut self) {
+        self.values.clear();
+        self.keys.clear();
+    }
+
     pub fn len(&self) -> usize {
         self.values.len()
     }
 
-    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.values.is_empty()
     }
@@ -51,7 +54,6 @@ impl<K,V> OrderDict<K,V>
         self.values.last_mut()
     }
 
-    #[allow(dead_code)]
     pub fn values(&self) -> OrderedDictIterV<V> {
         OrderedDictIterV {
             values: &self.values,

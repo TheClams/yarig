@@ -17,3 +17,4 @@ pub mod gen_svd;
 // Hardware Generators
 pub mod trait_hw;
 pub mod gen_sv;
+pub mod gen_vhdl;

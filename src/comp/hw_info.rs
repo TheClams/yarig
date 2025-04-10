@@ -6,8 +6,7 @@ use crate::{
 use super::{comp_inst::{ArrayIdx, RifFieldInst, RifPageInst}, reg_impl::{FieldImpl, HwRegs, MissingFieldInfo, RegImplDict}};
 
 /// Signal type: either a bit vector (signed or unsigned) or a custom type
-#[derive(Clone, Debug)]
-#[allow(dead_code)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum SignalKind {
     /// Single bit or unsigned bus
     Unsigned(u16),
@@ -50,6 +49,13 @@ impl SignalKind {
             SignalKind::Unsigned(w) => *w = width,
             SignalKind::Signed(w) => *w = width,
             _ => {}
+        }
+    }
+
+    pub fn custom_name(&self) -> &str {
+        match self {
+            SignalKind::Custom((_,n)) => n,
+            _ => ""
         }
     }
 }
@@ -448,15 +454,33 @@ impl PortList {
 pub struct RifIntfPorts (Vec<PortInfo>);
 
 impl RifIntfPorts {
-    pub fn new(intf: &Interface) -> Self {
+    pub fn new(intf: &Interface, use_intf: bool) -> Self {
         let ports =
         match intf {
-            Interface::Default => vec![
-                PortInfo::new_intf(
-                    "if_rif".to_owned(),
-                    "rif_if".to_owned(), "rif".to_owned(),
-                    "SW register interface".to_owned())
-            ],
+            Interface::Default => {
+                if use_intf {
+                    vec![
+                        PortInfo::new_intf(
+                            "if_rif".to_owned(),
+                            "rif_if".to_owned(), "rif".to_owned(),
+                            "SW register interface".to_owned())
+                    ]
+                } else {
+                    vec![
+                        PortInfo::new( "reg_addr".to_owned(), SignalKind::Address, PortDir::In, 0, "Register Address".to_owned()),
+                        PortInfo::new_in( "reg_en".to_owned()     , "Register Enable".to_owned()),
+                        PortInfo::new_in( "reg_rd_wrn".to_owned() , "Register write/not read".to_owned()),
+                        PortInfo::new("reg_wr_data".to_owned(), SignalKind::Data, PortDir::In , 0, "Register write data".to_owned()),
+                        PortInfo::new("reg_rd_data".to_owned(), SignalKind::Data, PortDir::Out, 0, "Register read data".to_owned()),
+                        PortInfo::new_out("reg_done".to_owned()      , "Register ready".to_owned()),
+                        PortInfo::new_out("reg_done_next".to_owned() , "Register ready next".to_owned()),
+                        PortInfo::new_out("reg_err_addr".to_owned()  , "Register address error".to_owned()),
+                        PortInfo::new_out("reg_err_addr_next".to_owned()  , "Register address error (combinatorial)".to_owned()),
+                        PortInfo::new_out("reg_err_access".to_owned(), "Register access error".to_owned()),
+                        PortInfo::new_out("reg_err_access_next".to_owned(), "Register access error (combinatorial)".to_owned()),
+                    ]
+                }
+            },
             Interface::Apb => vec![
                 PortInfo::new("paddr".to_owned(), SignalKind::Address, PortDir::In, 0, "APB Address".to_owned()),
                 PortInfo::new_in("psel".to_owned(), "APB Select".to_owned()),
@@ -868,6 +892,13 @@ impl LogicExpr {
         }
     }
 
+    pub fn is_id(&self, name: &str) -> bool {
+        match self {
+            LogicExpr::Id(id) => id.name == name,
+            _ => false
+        }
+    }
+
     pub fn is_value(&self) -> bool {
         matches!(*self,LogicExpr::ValueU(_,_) | LogicExpr::ValueI(_,_))
     }
@@ -889,6 +920,21 @@ impl LogicExpr {
 
     pub fn has_vec(&self) -> bool {
         matches!(*self, LogicExpr::Ite(_,_) | LogicExpr::Or(_) | LogicExpr::And(_) )
+    }
+
+    pub fn is_comp(&self) -> bool {
+        matches!(*self, LogicExpr::Gte(_,_) | LogicExpr::Lte(_,_) | LogicExpr::Lt(_,_))
+    }
+
+    pub fn has_comp(&self) -> bool {
+        match self {
+            LogicExpr::Gte(_,_)  |
+            LogicExpr::Lte(_,_)  |
+            LogicExpr::Lt(_,_)   => true,
+            LogicExpr::Or(vec)  |
+            LogicExpr::And(vec) => vec.iter().any(|e| e.is_comp()),
+            _ => false
+        }
     }
 
     /// Number of expressions

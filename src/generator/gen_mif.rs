@@ -92,7 +92,7 @@ impl GeneratorMif {
         self.push_stash(0,          "\t>\n");
     }
 
-    fn get_col_width<'a> (&'a self, kind: TableKind) -> &'a [f32] {
+    fn get_col_width (&self, kind: TableKind) -> &[f32] {
         match kind {
             // RifMux/Page: Offset, Name, Description
             TableKind::Rifmux  => &self.table_dim[0..3],// &[2.5, 3.4, 11.1],

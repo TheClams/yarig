@@ -334,10 +334,10 @@ pub trait GeneratorBase {
     }
 
     fn filename_rif(&self, rif: &RifInst) -> String {
-        format!("{}.{}", rif.name(false), Self::EXT)
+        format!("{}.{}", rif.name(false).to_lowercase(), Self::EXT)
     }
 
     fn filename_rifmux(&self, rifmux: &RifmuxInst) -> String {
-        format!("{}.{}", &rifmux.inst_name, Self::EXT)
+        format!("{}.{}", rifmux.inst_name.to_lowercase(), Self::EXT)
     }
 }

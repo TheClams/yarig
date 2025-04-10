@@ -479,9 +479,9 @@ impl ResetValP {
                     Err(format!("Unknown parameter {p}"))
                 }
             }
-            ResetValP::Signed(v)   => Ok(ResetVal::Signed(*v as i128)),
+            ResetValP::Signed(v)   => Ok(ResetVal::Signed(*v)),
             ResetValP::Unsigned(v) if signed => Ok(ResetVal::Signed(*v as i128)),
-            ResetValP::Unsigned(v) => Ok(ResetVal::Unsigned(*v as u128)),
+            ResetValP::Unsigned(v) => Ok(ResetVal::Unsigned(*v)),
         }
     }
 }

@@ -19,6 +19,10 @@ use super::{
 #[allow(unused_variables)]
 pub trait GeneratorHw : GeneratorBase {
 
+    const HAS_ADDR_CONST : bool = false;
+    const HAS_FIELD_CONST : bool = false;
+    const SUPPORT_INTF   : bool = true;
+
     /// Write generic header for a file
     fn write_file_header(&mut self) {}
 
@@ -101,7 +105,7 @@ pub trait GeneratorHw : GeneratorBase {
                 };
                 let field_name = if f.sw_kind.is_password() {format!("{name}_locked")} else {name.to_owned()};
                 let field_decl = SignalDecl::new(
-                    SignalDef::new(name.to_owned(), kind, f.array) ,
+                    SignalDef::new(field_name, kind, f.array) ,
                     f.description.get_short().to_owned()
                 );
                 // Add field to SW structure writable by firmware or readable by hardware
@@ -117,7 +121,7 @@ pub trait GeneratorHw : GeneratorBase {
                     // Write modifiers: Write Enable, clr/set/tgl
                     if kind.has_write_mod() {
                         if let Some(d) = SignalDecl::from_hw_kind(kind, &hw_reg.name, &name) {
-                            if names.iter().rev().any(|n| n==d.name()) {
+                            if !names.iter().rev().any(|n| n==d.name()) {
                                 names.push(d.name().to_owned());
                                 hw_fields.push(d);
                             }
@@ -142,12 +146,12 @@ pub trait GeneratorHw : GeneratorBase {
                         }
                         if info.incr_val > 1 {
                             hw_fields.push(SignalDecl::new_bus(
-                                format!("{name}_incr_val"), (info.incr_val-1) as u16, f.signed,
+                                format!("{name}_incr_val"), info.incr_val as u16, f.signed,
                                 format!("Increment value for counter {name}")));
                         }
                         if info.decr_val > 1 {
                             hw_fields.push(SignalDecl::new_bus(
-                                format!("{name}_decr_val"), (info.decr_val-1) as u16, f.signed,
+                                format!("{name}_decr_val"), info.decr_val as u16, f.signed,
                                 format!("Decrement value for counter {name}")));
                         }
                         if info.event || info.sat {
@@ -197,7 +201,7 @@ pub trait GeneratorHw : GeneratorBase {
                         RegPulseKind::Read(_)   => SignalDecl::new_bit(format!("p_{name}{sep}read"), format!("{desc} {} is read", ctrl.name)),
                         RegPulseKind::Access(_) => SignalDecl::new_bit(format!("p_{name}{sep}acc"), format!("{desc} {} is accessed", ctrl.name)),
                     };
-                    hw_fields.push(field_decl);
+                    sw_fields.push(field_decl);
                 }
                 if ctrl.external != ExternalKind::None {
                     let (sep,name) = if is_multi_ext {("_",&*ctrl.name)} else {("","")};
@@ -206,13 +210,13 @@ pub trait GeneratorHw : GeneratorBase {
                         format!("Pulse high when read/write operation on register {} is complete", ctrl.name))
                     );
                     if matches!(ctrl.external, ExternalKind::ReadWrite | ExternalKind::Write) {
-                        hw_fields.push(SignalDecl::new_bit(
+                        sw_fields.push(SignalDecl::new_bit(
                             format!("ext_{name}{sep}write"),
                             format!("Pulse high to start a write operation on register {}", ctrl.name))
                         );
                     }
                     if matches!(ctrl.external, ExternalKind::ReadWrite | ExternalKind::Read) {
-                        hw_fields.push(SignalDecl::new_bit(
+                        sw_fields.push(SignalDecl::new_bit(
                             format!("ext_{name}{sep}read"),
                             format!("Pulse high to start a read operation on register {}", ctrl.name))
                         );
@@ -221,29 +225,29 @@ pub trait GeneratorHw : GeneratorBase {
             }
             // Write the software structure (if not empty)
             if !sw_fields.is_empty() {
-                let reg_name = hw_reg.name.to_casing(Snake);
-                self.write_struct_header(&reg_name, &sw_fields);
+                let type_name = format!("t_{}_sw",hw_reg.name.to_casing(Snake));
+                self.write_struct_header(&type_name, &sw_fields);
                 let mut fields = sw_fields.iter().peekable();
                 while let Some(f) = fields.next() {
                     self.write_struct_field(f, fields.peek().is_none());
                 }
-                self.write_struct_footer(&reg_name);
+                self.write_struct_footer(&type_name);
             }
             // Write the hardware structure (if not empty)
             if !hw_fields.is_empty() {
-                let reg_name = hw_reg.name.to_casing(Snake);
-                self.write_struct_header(&reg_name, &hw_fields);
+                let type_name = format!("t_{}_hw",hw_reg.name.to_casing(Snake));
+                self.write_struct_header(&type_name, &hw_fields);
                 let mut fields = hw_fields.iter().peekable();
                 while let Some(f) = fields.next() {
                     self.write_struct_field(f, fields.peek().is_none());
                 }
-                self.write_struct_footer(&reg_name);
+                self.write_struct_footer(&type_name);
             }
         }
 
         // Add end of package and save file
         self.write_rif_pkg_footer(rif);
-        self.save(&self.filename_rif(rif))?;
+        self.save(&self.filename_rif_pkg(rif))?;
         Ok(())
     }
 
@@ -270,6 +274,7 @@ pub trait GeneratorHw : GeneratorBase {
             };
             self.write_const(&decl, LogicExpr::ValueI(v as i128, 32));
         }
+        self.write("\n");
     }
 
     /// Generate RIF module
@@ -352,6 +357,9 @@ pub trait GeneratorHw : GeneratorBase {
         }
 
         // Add interface to external pages and collect them for later
+        if rif.pages.iter().any(|p| p.is_external()) {
+            self.write_comment(1, "External pages interface");
+        }
         let mut ext_pages = Vec::new();
         for page in rif.pages.iter() {
             if let Some(width) = &page.external {
@@ -366,10 +374,13 @@ pub trait GeneratorHw : GeneratorBase {
             }
         }
         // Create a few expr used many times
-        let rif_en : LogicExpr = "if_rif.en".into();
-        let rd_wrn : LogicExpr = "if_rif.rd_wrn".into();
+        let rif_en : LogicExpr = ("if_rif","en").into();
+        let rd_wrn : LogicExpr = ("if_rif","rd_wrn").into();
 
         // Add main control interface
+        if !Self::SUPPORT_INTF {
+            self.write_comment(1, "Register SW interface");
+        }
         self.write_intf_ports(&rif.interface);
         self.write_module_decl_footer(&rif_name);
 
@@ -501,7 +512,7 @@ pub trait GeneratorHw : GeneratorBase {
                     if f.sw_kind.is_pulse_comb() || (f.sw_kind==FieldSwKind::ReadOnly && !f.has_write_mod() && !f.is_counter()) {
                         continue;
                     }
-                    let mut sig_kind = SignalKind::from_field(f, &pkg_base, &group_name);
+                    let mut sig_kind = SignalKind::from_field(f, pkg_base, &group_name);
                     if f.is_counter() {
                         sig_kind.set_width(f.width+1);
                     }
@@ -541,7 +552,7 @@ pub trait GeneratorHw : GeneratorBase {
             // Read data updated only on read access
             SignalInfo::new_with_en(("if_rif","rd_data").into(), LogicExpr::ValueU(0, rif.data_width.into()),
                 "rif_read_data_l".into(),
-                Some(LogicExpr::and("rif_done_next".into(), ("if_rif","rd_wrn").into()))),
+                Some(LogicExpr::and("rif_done_next".into(), rd_wrn.clone()))),
         ];
         if self.nb_pipe() == 0 {
             for s in signals {
@@ -556,11 +567,12 @@ pub trait GeneratorHw : GeneratorBase {
             );
         }
 
-        self.write_assign("if_rif.done_next      ".into(), "rif_done_next   ".into());
-        self.write_assign("if_rif.err_addr_next  ".into(), "rif_err_addr_l  ".into());
-        self.write_assign("if_rif.err_access_next".into(), "rif_err_access_l".into());
+        self.write_assign(("if_rif","done_next      ").into(), "rif_done_next   ".into());
+        self.write_assign(("if_rif","err_addr_next  ").into(), "rif_err_addr_l  ".into());
+        self.write_assign(("if_rif","err_access_next").into(), "rif_err_access_l".into());
         self.write("\n");
-        let addr_bus = format!("if_rif.addr[{}:{}]", rif.addr_width-1, addr_shift);
+        let addr_bus = ExprId::new_field_range("if_rif".to_owned(), None, "addr".to_owned(), Some(SignalRange::new(addr_shift as u8, rif.addr_width-1)));
+        // format!("if_rif.addr[{}:{}]", rif.addr_width-1, addr_shift);
         self.write_assign("rif_addr_l".into(), addr_bus.into());
 
         // Decode process
@@ -615,7 +627,7 @@ pub trait GeneratorHw : GeneratorBase {
                             if bypass.is_empty() {check}
                             else {LogicExpr::or(check, bypass.as_str().into())}
                         }).collect();
-                        LogicExpr::or("if_rif.rd_wrn".into(), LogicExpr::And(checks))
+                        LogicExpr::or(rd_wrn.clone(), LogicExpr::And(checks))
                     };
                     self.write_assign_comb(4, name.into(), value);
                 }
@@ -626,8 +638,8 @@ pub trait GeneratorHw : GeneratorBase {
                 // Access error when writing a read-only field, reading a write only field,
                 //  or writing one field outside its set value (when limits are defined)
                 let err_val : LogicExpr = match reg.sw_access {
-                    Access::RO => LogicExpr::not("if_rif.rd_wrn".into()),
-                    Access::WO => "if_rif.rd_wrn".into(),
+                    Access::RO => LogicExpr::not(rd_wrn.clone()),
+                    Access::WO => rd_wrn.clone(),
                     Access::NA => LogicExpr::ValueU(1, 1),
                     Access::RW =>
                         if field_limit.is_empty() {
@@ -1112,19 +1124,19 @@ pub trait GeneratorHw : GeneratorBase {
 
                 // External register
                 if reg.is_external() {
-                    let mut ext_path = format!("ext");
+                    let mut ext_path = "ext".to_owned();
                     if reg_impl.is_multi_ext() {
                         ext_path.push_str(&format!("_{}",reg.reg_name));
                     }
                     if reg.sw_access.is_writable() {
                         let decode_wr = LogicExpr::And([decode.clone(), rif_en.clone(), LogicExpr::not(rd_wrn.clone())].to_vec());
                         let ext_write : ExprId = sw_groupd_id.with_path(self.casing(&format!("{ext_path}_write")), None);
-                        self.write_assign(ext_write.into(), decode_wr);
+                        self.write_assign(ext_write, decode_wr);
                     }
                     if reg.sw_access.is_readable() {
                         let decode_rd = LogicExpr::And([decode.clone(),rif_en.clone(),rd_wrn.clone()].to_vec());
                         let ext_read : ExprId = sw_groupd_id.with_path(self.casing(&format!("{ext_path}_read")), None);
-                        self.write_assign(ext_read.into(), decode_rd);
+                        self.write_assign(ext_read, decode_rd);
                     }
                 }
                 // Sequential process
@@ -1354,7 +1366,7 @@ pub trait GeneratorHw : GeneratorBase {
                                 } else if reg_clk!=p_clk {
                                     return Err(format!("Only one clock should be used for the register {group_name} pulses").into());
                                 }
-                                signals.push(SignalInfo::new(sw_groupd_id.with_path(name, None).into(), LogicExpr::ValueU(0,1), value));
+                                signals.push(SignalInfo::new(sw_groupd_id.with_path(name, None), LogicExpr::ValueU(0,1), value));
                             }
                         }
                     }
@@ -1546,7 +1558,8 @@ pub trait GeneratorHw : GeneratorBase {
         self.write_rifmux_pkg_footer(rifmux);
 
         // Write file
-        self.save(&format!("{}_pkg.sv", rifmux.type_name.to_lowercase()))
+        let filename = self.filename_rifmux_pkg(rifmux);
+        self.save(&filename)
     }
 
     // Hooks for RIF mux package
@@ -1700,7 +1713,7 @@ pub trait GeneratorHw : GeneratorBase {
 
         let sw_clk = &rifmux.sw_clocking.clk;
         let sw_rst = &rifmux.sw_clocking.rst.name;
-        let intf_ports = RifIntfPorts::new(&rifmux.interface);
+        let intf_ports = RifIntfPorts::new(&rifmux.interface, Self::SUPPORT_INTF);
         let mut names : Vec<String> = [sw_clk.to_owned(), sw_rst.to_owned()].to_vec();
         self.set_rifmux_info(rifmux);
         self.write_file_header();
@@ -1766,7 +1779,7 @@ pub trait GeneratorHw : GeneratorBase {
         self.write_inst_header(&rifmux.type_name, "rifmux", &comp_params);
         self.write_port_bind(sw_clk, sw_clk, false);
         self.write_port_bind(sw_rst, sw_rst, false);
-        let intf_ports = RifIntfPorts::new(&rifmux.interface);
+        let intf_ports = RifIntfPorts::new(&rifmux.interface, Self::SUPPORT_INTF);
         for port in intf_ports.iter() {
             self.write_port_bind(port.name(), port.name(), false);
         }
@@ -1821,7 +1834,7 @@ pub trait GeneratorHw : GeneratorBase {
     }
 
     fn write_intf_ports(&mut self, intf: &Interface) {
-        let intf_ports = RifIntfPorts::new(intf);
+        let intf_ports = RifIntfPorts::new(intf, Self::SUPPORT_INTF);
         let mut ports = intf_ports.iter().peekable();
         while let Some(port) = ports.next()  {
             self.write_port_decl(port, None, ports.peek().is_none());
@@ -1891,6 +1904,15 @@ pub trait GeneratorHw : GeneratorBase {
 
     /// Return number of pipe level at the interface
     fn nb_pipe(&self) -> usize {1}
+
+    /// Filename for RIF package
+    fn filename_rif_pkg(&self, rif: &RifInst) -> String {
+        format!("{}_pkg.{}", rif.name(false).to_lowercase(), Self::EXT)
+    }
+
+    fn filename_rifmux_pkg(&self, rifmux: &RifmuxInst) -> String {
+        format!("{}_pkg.{}", &rifmux.inst_name.to_lowercase(), Self::EXT)
+    }
 
 }
 

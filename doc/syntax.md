@@ -45,13 +45,13 @@ the reset is rst_n (asynchronous, active low) and used for both hardware and sof
 
 A parameter is pair name/value declared with `- name = value`.
 
-Declaration of parameter can use arithmetic operation : `-param1 = 2*param2-1`.
+Declaration of parameter can use arithmetic operation : `- param1 = 2*param2-1`.
 It supports all basic arithmetic operation and a few functions like pow, log2, log10, ceil and floor.
 Note that pow, log2 and log10 output is a floating point number and should typically be associated with ceil/floor operation when the parameter value is used for field width or array size.
 
 Any occurence of _$parameterName_ in the RIF will be replaced by its value.
 
-Parameters value can be overriden by a command-line argument `--param name value`
+Parameters value can be overriden by a command-line argument `-P name=value`
 
 ## Generics
 

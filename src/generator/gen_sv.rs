@@ -27,75 +27,73 @@ impl GeneratorSv {
         }
     }
 
-    fn add_signal_def(&self, s: &mut String, def: &SignalDef, prefix: Option<&String> ) {
+    fn add_signal_def(&mut self, def: &SignalDef, prefix: Option<&String> ) {
         match &def.kind {
             SignalKind::Unsigned(w) => {
-                s.push_str("logic ");
+                self.write("logic ");
                 if *w > 1 {
-                    s.push_str(&format!("[{}:0] ", w-1));
+                    self.write(&format!("[{}:0] ", w-1));
                 }
             },
-            SignalKind::Signed(w)   => s.push_str(&format!("logic signed [{}:0] ", w-1)),
-            SignalKind::Custom((Some(pkg),n)) => s.push_str(&format!("{pkg}::{n} ")),
-            SignalKind::Custom((None,n))      => s.push_str(&format!("{n} ")),
-            SignalKind::Integer     => s.push_str("int "),
-            SignalKind::Address     => s.push_str(&format!("logic [{}:0] ", self.addr_width-1)),
-            SignalKind::Data        => s.push_str(&format!("logic [{}:0] ", self.data_width-1)),
+            SignalKind::Signed(w)   => self.write(&format!("logic signed [{}:0] ", w-1)),
+            SignalKind::Custom((Some(pkg),n)) => self.write(&format!("{pkg}::{n} ")),
+            SignalKind::Custom((None,n))      => self.write(&format!("{n} ")),
+            SignalKind::Integer     => self.write("int "),
+            SignalKind::Address     => self.write(&format!("logic [{}:0] ", self.addr_width-1)),
+            SignalKind::Data        => self.write(&format!("logic [{}:0] ", self.data_width-1)),
         }
         if let Some(prefix) = prefix {
             if let Some(base_name) = def.name.strip_prefix("rif_") {
-                s.push_str(&format!("rif_{prefix}_{base_name}"));
+                self.write(&format!("rif_{prefix}_{base_name}"));
             } else {
-                s.push_str(&format!("{prefix}_{}",def.name));
+                self.write(&format!("{prefix}_{}",def.name));
             }
         } else {
-            s.push_str(&def.name);
+            self.write(&def.name);
         }
         if def.dim > 0 {
-            s.push_str(&format!("[{}]", def.dim));
+            self.write(&format!("[{}]", def.dim));
         }
     }
 
     fn write_signal_seq(&mut self, id: &ExprId, val: &LogicExpr, lvl: usize) {
-        let mut s = String::new();
-        s.push_str(&" ".repeat(3*lvl));
-        Self::add_expr_id(&mut s, id);
-        s.push_str(" <= ");
-        Self::add_logic_expr(&mut s, val, 0, false);
-        s.push_str(";\n");
-        self.write(&s);
+        self.write(&" ".repeat(3*lvl));
+        self.add_expr_id(id);
+        self.write(" <= ");
+        self.add_logic_expr(val, 0, false);
+        self.write(";\n");
     }
 
-    fn add_logic_expr(s: &mut String, expr: &LogicExpr, lvl: usize, is_part: bool) {
-        s.push_str(&" ".repeat(3*lvl));
+    fn add_logic_expr(&mut self, expr: &LogicExpr, lvl: usize, is_part: bool) {
+        self.core.write(&" ".repeat(3*lvl));
         match expr {
-            LogicExpr::Id(expr_id) => Self::add_expr_id(s, expr_id),
+            LogicExpr::Id(expr_id) => self.add_expr_id(expr_id),
             LogicExpr::Cast(cast_info, expr) => {
                 let has_par = !cast_info.is_none();
                 match cast_info {
                     CastInfo::None => {}
-                    CastInfo::Unsigned => s.push_str("$unsigned("),
-                    CastInfo::Signed => s.push_str("$signed("),
+                    CastInfo::Unsigned => self.core.write("$unsigned("),
+                    CastInfo::Signed => self.core.write("$signed("),
                     CastInfo::Custom(pkg, name) => {
                         if !pkg.is_empty() {
-                            s.push_str(pkg);
-                            s.push_str("::");
+                            self.core.write(pkg);
+                            self.core.write("::");
                         }
-                        s.push_str(name);
-                        s.push_str("'(");
+                        self.core.write(name);
+                        self.core.write("'(");
                     }
                 }
-                Self::add_logic_expr(s, expr, 0, false);
+                self.add_logic_expr(expr, 0, false);
                 if has_par {
-                    s.push(')');
+                    self.core.write(")");
                 }
             }
             LogicExpr::ValueU(v, w) => {
                 let n = (w+3)>>2;
                 match w {
-                    1 => s.push_str(&format!("1'b{v}")),
-                    2..=12 => s.push_str(&format!("{w}'d{v}")),
-                    _ => s.push_str(&format!("{w}'h{v:0n$x}")),
+                    1 => self.core.write(&format!("1'b{v}")),
+                    2..=12 => self.core.write(&format!("{w}'d{v}")),
+                    _ => self.core.write(&format!("{w}'h{v:0n$x}")),
                 }
             }
             LogicExpr::ValueI(v, w) => {
@@ -103,105 +101,105 @@ impl GeneratorSv {
                 match w {
                     0..=12 => {
                         if *v < 0 {
-                            s.push_str(&format!("-{w}'sd{}", v.abs()))
+                            self.core.write(&format!("-{w}'sd{}", v.abs()))
                         } else {
-                            s.push_str(&format!("{w}'sd{v}"))
+                            self.core.write(&format!("{w}'sd{v}"))
                         }
                     }
-                    _ => s.push_str(&format!("{w}'sh{v:0n$x}")),
+                    _ => self.core.write(&format!("{w}'sh{v:0n$x}")),
                 }
             }
             LogicExpr::Not(logic_expr) => {
-                s.push('!');
-                Self::add_logic_expr(s, logic_expr, 0, true);
+                self.core.write("!");
+                self.add_logic_expr(logic_expr, 0, true);
             }
             LogicExpr::NotB(logic_expr) => {
-                s.push('~');
-                Self::add_logic_expr(s, logic_expr, 0, true);
+                self.core.write("~");
+                self.add_logic_expr(logic_expr, 0, true);
             }
             LogicExpr::Concat(exprs) => {
-                s.push('{');
+                self.core.write("{");
                 let mut expr_iter = exprs.iter().peekable();
                 while let Some(e) = expr_iter.next() {
-                    Self::add_logic_expr(s, e, 0, false);
+                    self.add_logic_expr(e, 0, false);
                     if expr_iter.peek().is_some() {
-                        s.push(',');
+                        self.core.write(",");
                     }
                 }
-                s.push('}');
+                self.core.write("}");
             }
-            LogicExpr::Add(lhs, rhs) => Self::add_two_expr(s, lhs, rhs, " + " , false),
-            LogicExpr::Sub(lhs, rhs) => Self::add_two_expr(s, lhs, rhs, " - " , false),
-            LogicExpr::Eq(lhs, rhs)  => Self::add_two_expr(s, lhs, rhs, " == ", false),
-            LogicExpr::Neq(lhs, rhs) => Self::add_two_expr(s, lhs, rhs, " != ", false),
-            LogicExpr::Gte(lhs, rhs) => Self::add_two_expr(s, lhs, rhs, " >= ", false),
-            LogicExpr::Lte(lhs, rhs) => Self::add_two_expr(s, lhs, rhs, " <= ", false),
-            LogicExpr::Lt(lhs, rhs)  => Self::add_two_expr(s, lhs, rhs, " < " , false),
-            LogicExpr::Xor(lhs, rhs) => Self::add_two_expr(s, lhs, rhs, " ^ ", is_part),
-            LogicExpr::OrB(lhs, rhs) => Self::add_two_expr(s, lhs, rhs, " | ", is_part),
-            LogicExpr::AndB(lhs, rhs) => Self::add_two_expr(s, lhs, rhs, " & ", is_part),
-            LogicExpr::Or(vec)  => Self::add_n_expr(s, vec, " || ", is_part, lvl),
-            LogicExpr::And(vec) => Self::add_n_expr(s, vec, " && ", is_part, lvl),
+            LogicExpr::Add(lhs, rhs)  => self.add_two_expr(lhs, rhs, " + " , false),
+            LogicExpr::Sub(lhs, rhs)  => self.add_two_expr(lhs, rhs, " - " , false),
+            LogicExpr::Eq(lhs, rhs)   => self.add_two_expr(lhs, rhs, " == ", false),
+            LogicExpr::Neq(lhs, rhs)  => self.add_two_expr(lhs, rhs, " != ", false),
+            LogicExpr::Gte(lhs, rhs)  => self.add_two_expr(lhs, rhs, " >= ", false),
+            LogicExpr::Lte(lhs, rhs)  => self.add_two_expr(lhs, rhs, " <= ", false),
+            LogicExpr::Lt(lhs, rhs)   => self.add_two_expr(lhs, rhs, " < " , false),
+            LogicExpr::Xor(lhs, rhs)  => self.add_two_expr(lhs, rhs, " ^ ", is_part),
+            LogicExpr::OrB(lhs, rhs)  => self.add_two_expr(lhs, rhs, " | ", is_part),
+            LogicExpr::AndB(lhs, rhs) => self.add_two_expr(lhs, rhs, " & ", is_part),
+            LogicExpr::Or(vec)  => self.add_n_expr(vec, " || ", is_part, lvl),
+            LogicExpr::And(vec) => self.add_n_expr(vec, " && ", is_part, lvl),
             LogicExpr::Ite(it_exprs, else_expr) => {
                 let tab = if lvl>0 {format!("\n{}", " ".repeat(3*lvl))} else {" ".to_owned()};
-                if is_part {s.push('(');}
+                if is_part {self.core.write("(");}
                 for it_expr in it_exprs {
-                    Self::add_logic_expr(s, &it_expr.0, 0, false /*it_expr.0.nb() > 1*/);
-                    s.push_str(" ? ");
-                    Self::add_logic_expr(s, &it_expr.1, 0, it_expr.1.nb() > 1 || it_expr.1.is_ite() );
-                    s.push_str(" :");
-                    s.push_str(&tab);
+                    self.add_logic_expr(&it_expr.0, 0, false /*it_expr.0.nb() > 1*/);
+                    self.core.write(" ? ");
+                    self.add_logic_expr(&it_expr.1, 0, it_expr.1.nb() > 1 || it_expr.1.is_ite() );
+                    self.core.write(" :");
+                    self.core.write(&tab);
                 }
-                Self::add_logic_expr(s, else_expr, 0, else_expr.nb() > 1);
-                if is_part {s.push(')');}
+                self.add_logic_expr(else_expr, 0, else_expr.nb() > 1);
+                if is_part {self.core.write(")");}
             }
         }
     }
 
-    fn add_two_expr(s: &mut String, lhs: &LogicExpr, rhs: &LogicExpr, op: &str, is_part: bool) {
-        if is_part {s.push('(');}
-        Self::add_logic_expr(s, lhs, 0, true);
-        s.push_str(op);
+    fn add_two_expr(&mut self, lhs: &LogicExpr, rhs: &LogicExpr, op: &str, is_part: bool) {
+        if is_part {self.write("(");}
+        self.add_logic_expr(lhs, 0, true);
+        self.write(op);
         if rhs.is_ite() {
-            s.push_str("\n      ");
+            self.write("\n      ");
         }
-        Self::add_logic_expr(s, rhs, 0, true);
-        if is_part {s.push(')');}
+        self.add_logic_expr(rhs, 0, true);
+        if is_part {self.write(")");}
     }
 
-    fn add_n_expr(s: &mut String, exprs: &[LogicExpr], op: &str, is_part: bool, lvl: usize) {
+    fn add_n_expr(&mut self, exprs: &[LogicExpr], op: &str, is_part: bool, lvl: usize) {
         let is_part = is_part && exprs.len() > 1;
         let eol = if !is_part && lvl > 0 && exprs.len() > 2 {
             format!("\n{}", " ".repeat(3*lvl))
         } else {
             "".to_owned()
         };
-        if is_part {s.push('(');}
+        if is_part {self.core.write("(");}
         let mut expr_iter = exprs.iter().peekable();
         while let Some(expr) = expr_iter.next() {
-            Self::add_logic_expr(s, expr, 0, true);
+            self.add_logic_expr(expr, 0, true);
             if expr_iter.peek().is_some() {
-                s.push_str(op);
-                s.push_str(&eol);
+                self.core.write(op);
+                self.core.write(&eol);
             }
         }
-        if is_part {s.push(')');}
+        if is_part {self.core.write(")");}
     }
 
-    fn add_expr_id(s: &mut String, expr: &ExprId) {
-        s.push_str(&expr.name);
+    fn add_expr_id(&mut self, expr: &ExprId) {
+        self.core.write(&expr.name);
         if let Some(idx) = expr.idx {
-            s.push_str(&format!("[{idx}]"));
+            self.core.write(&format!("[{idx}]"));
         }
         if let Some(field) = &expr.field {
-            s.push('.');
-            s.push_str(field);
+            self.core.write(".");
+            self.core.write(field);
         }
         if let Some(r) = &expr.range {
             if let Some(msb) = r.msb {
-                s.push_str(&format!("[{msb}:{}]", r.lsb));
+                self.core.write(&format!("[{msb}:{}]", r.lsb));
             } else {
-                s.push_str(&format!("[{}]",r.lsb));
+                self.core.write(&format!("[{}]",r.lsb));
             }
         }
     }
@@ -238,29 +236,42 @@ impl GeneratorHw for GeneratorSv {
 
     fn write_const(&mut self, signal: &SignalDecl, value: LogicExpr) {
         self.write("   localparam ");
-        let mut s = String::new();
-        self.add_signal_def(&mut s, &signal.def, None);
-        s.push_str(" = ");
+        match &signal.def.kind {
+            SignalKind::Unsigned(1) => self.write("bit "),
+            SignalKind::Unsigned(w) => self.write(&format!("logic [{}:0] ", w-1)),
+            SignalKind::Integer     => self.write("int "),
+            _ => unreachable!("Constant were supposed to be only unsigned or int got {:?}", signal.def.kind)
+        }
+        self.write(&signal.def.name);
+        self.write(" = ");
         match &value {
             LogicExpr::ValueU(v,w) => {
-                let n = (w+3)>>2;
-                s.push_str(&format!("{w}'h{v:0n$x}"))
+                if signal.name().ends_with("_W") {
+                    self.write(&format!("{v:2}"))
+                } else if signal.def.kind==SignalKind::Unsigned(1) {
+                    self.write(&format!("{v}"))
+                } else {
+                    let n = (w+3)>>2;
+                    self.write(&format!("{w}'h{v:0n$x}"))
+                }
             },
             LogicExpr::ValueI(v,w) => {
-                let n = (w+3)>>2;
-                s.push_str(&format!("{w}'sh{v:0n$x}"))
+                if matches!(signal.def.kind,SignalKind::Integer | SignalKind::Unsigned(1)) {
+                    self.write(&format!("{v}"))
+                } else {
+                    let n = (w+3)>>2;
+                    self.write(&format!("{w}'sh{v:0n$x}"))
+                }
             }
-            _ => Self::add_logic_expr(&mut s, &value, 0, false),
+            _ => self.add_logic_expr(&value, 0, false),
         }
-        ;
-        self.write(&s);
         self.write(";\n");
     }
 
     // Enums declaration
     fn write_enum_header(&mut self, _name: &str, width: u8) {
-        self.write("   typedef enum logic");
-        if width > 0 {
+        self.write("   typedef enum logic ");
+        if width > 1 {
             self.write(&format!("[{}:0] ", width - 1));
         }
         self.write("{\n");
@@ -288,13 +299,14 @@ impl GeneratorHw for GeneratorSv {
     }
 
     fn write_struct_field(&mut self, field: &SignalDecl, _is_last: bool) {
-        let mut s = String::new();
-        s.push_str("      ");
-        self.add_signal_def(&mut s, &field.def, None);
-        s.push_str("; // ");
-        s.push_str(&field.desc);
-        s.push('\n');
-        self.write(&s);
+        self.write("      ");
+        self.add_signal_def(&field.def, None);
+        self.write(";");
+        if !field.desc.is_empty() {
+            self.write(" // ");
+            self.write(&field.desc);
+        }
+        self.write("\n");
     }
 
     fn write_struct_footer(&mut self, name: &str) {
@@ -324,13 +336,11 @@ impl GeneratorHw for GeneratorSv {
                 self.write(&format!("{intf}.{mp} "))
             }
         }
-        let mut s = String::new();
         if port.dir.is_modport() {
             self.write(port.name());
         } else {
-            self.add_signal_def(&mut s, &port.def, prefix);
+            self.add_signal_def(&port.def, prefix);
         }
-        self.write(&s);
         self.write(if is_last {"  "} else {", "});
         if !port.desc.is_empty() {
             self.write("// ");
@@ -340,10 +350,8 @@ impl GeneratorHw for GeneratorSv {
     }
 
     fn write_signal_decl(&mut self, signal: &SignalDecl) {
-        let mut s = String::new();
         self.write("   ");
-        self.add_signal_def(&mut s, &signal.def, None);
-        self.write(&s);
+        self.add_signal_def(&signal.def, None);
         self.write(";");
         if !signal.desc.is_empty() {
             self.write(" // ");
@@ -411,16 +419,14 @@ impl GeneratorHw for GeneratorSv {
     }
 
     fn write_assign(&mut self, lhs: ExprId, rhs: LogicExpr) {
-        let mut s = String::new();
-        s.push_str("   assign ");
-        Self::add_expr_id(&mut s, &lhs);
-        s.push_str(" = ");
+        self.write("   assign ");
+        self.add_expr_id(&lhs);
+        self.write(" = ");
         let multiline =
             (rhs.has_vec() && rhs.nb() > 2 && !rhs.is_and()) ||
             (rhs.is_ite() && (rhs.nb() > 1 || !rhs.is_else_value()));
-        let lvl = if multiline {s.push('\n'); 2} else {0};
-        Self::add_logic_expr(&mut s, &rhs, lvl, false);
-        self.write(&s);
+        let lvl = if multiline {self.write("\n"); 2} else {0};
+        self.add_logic_expr(&rhs, lvl, false);
         self.write(";\n");
     }
 
@@ -441,11 +447,9 @@ impl GeneratorHw for GeneratorSv {
     }
 
     fn write_match_case_header(&mut self, value: LogicExpr) {
-        let mut s = String::new();
-        s.push_str("         ");
-        Self::add_logic_expr(&mut s, &value, 0, false);
-        s.push_str(" : begin\n");
-        self.write(&s);
+        self.write("         ");
+        self.add_logic_expr(&value, 0, false);
+        self.write(" : begin\n");
     }
 
     fn write_match_case_footer(&mut self) {
@@ -453,12 +457,10 @@ impl GeneratorHw for GeneratorSv {
     }
 
     fn write_cond_if(&mut self, lvl: usize, cond: LogicExpr) {
-        let mut s = String::new();
-        s.push_str(&" ".repeat(3*lvl));
-        s.push_str("if(");
-        Self::add_logic_expr(&mut s, &cond, 0, false);
-        s.push_str(") begin\n");
-        self.write(&s);
+        self.write(&" ".repeat(3*lvl));
+        self.write("if(");
+        self.add_logic_expr(&cond, 0, false);
+        self.write(") begin\n");
     }
 
     fn write_cond_else(&mut self, lvl: usize, cond: Option<LogicExpr>) {
@@ -477,12 +479,10 @@ impl GeneratorHw for GeneratorSv {
     }
 
     fn write_assign_comb(&mut self, lvl: usize, lhs: ExprId, rhs: LogicExpr) {
-        let mut s = String::new();
-        s.push_str(&" ".repeat(3*lvl));
-        Self::add_expr_id(&mut s, &lhs);
-        s.push_str(" = ");
-        Self::add_logic_expr(&mut s, &rhs, 0, false);
-        self.write(&s);
+        self.write(&" ".repeat(3*lvl));
+        self.add_expr_id(&lhs);
+        self.write(" = ");
+        self.add_logic_expr(&rhs, 0, false);
         self.write(";\n");
     }
 
@@ -553,13 +553,10 @@ impl GeneratorHw for GeneratorSv {
         self.write("      end else ");
         // Optional Global clear
         // Maybe need to add an option to take the clear into account only if the enable is high
-        let mut s = String::new();
         if let Some(clr) = clr.filter(|_| clr_global) {
-            s.push_str("if(");
-            Self::add_logic_expr(&mut s, clr, 0, false);
-            s.push_str(") begin\n");
-            self.write(&s);
-            s.clear();
+            self.write("if(");
+            self.add_logic_expr(clr, 0, false);
+            self.write(") begin\n");
             for signal in signals.iter() {
                 self.write_signal_seq(&signal.name, &signal.reset, 3);
             }
@@ -567,11 +564,9 @@ impl GeneratorHw for GeneratorSv {
         }
         // Optional Global Enable
         if let Some(clk_en) = clk_en.filter(|_| clk_en_global) {
-            s.push_str("if(");
-            Self::add_logic_expr(&mut s, clk_en, 0, false);
-            s.push_str(") ");
-            self.write(&s);
-            s.clear();
+            self.write("if(");
+            self.add_logic_expr(clk_en, 0, false);
+            self.write(") ");
         }
         self.write("begin\n");
         // Set value
@@ -579,23 +574,19 @@ impl GeneratorHw for GeneratorSv {
         for signal in signals.iter() {
             if let Some(clr) = signal.clear.as_ref().filter(|_| !clr_global) {
                 lvl = 4;
-                s.push_str("         if(");
-                Self::add_logic_expr(&mut s, clr, 0, false);
-                s.push_str(")\n");
-                self.write(&s);
-                s.clear();
+                self.write("         if(");
+                self.add_logic_expr(clr, 0, false);
+                self.write(")\n");
                 self.write_signal_seq(&signal.name, &signal.reset, lvl);
                 self.write("         else");
             }
             if let Some(clk_en) = signal.enable.as_ref().filter(|_| !clk_en_global) {
                 if lvl==3 {
-                    s.push_str("         ");
+                    self.write("         ");
                 }
-                s.push_str("if(");
-                Self::add_logic_expr(&mut s, clk_en, 0, false);
-                s.push_str(")");
-                self.write(&s);
-                s.clear();
+                self.write("if(");
+                self.add_logic_expr(clk_en, 0, false);
+                self.write(")");
                 lvl = 4;
             }
             if lvl==4 {

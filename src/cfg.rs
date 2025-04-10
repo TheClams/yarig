@@ -4,22 +4,7 @@ use toml;
 use crate::{
     comp::comp_inst::Comp,
     generator::{
-        casing::Casing,
-        gen_common::GeneratorBaseSetting,
-        trait_doc::GeneratorDoc,
-        gen_adoc::GeneratorAdoc,
-        gen_html::GeneratorHtml,
-        gen_latex::GeneratorLatex,
-        gen_mif::GeneratorMif,
-        trait_sw::GeneratorSw,
-        trait_hw::GeneratorHw,
-        gen_c::GeneratorC,
-        gen_ipxact::GeneratorIpXact,
-        gen_json::GeneratorJson,
-        gen_py::{GeneratorPy, PyVersion},
-        gen_ral::GeneratorRal,
-        gen_svd::GeneratorSvd,
-        gen_sv::GeneratorSv,
+        casing::Casing, gen_adoc::GeneratorAdoc, gen_c::GeneratorC, gen_common::GeneratorBaseSetting, gen_html::GeneratorHtml, gen_ipxact::GeneratorIpXact, gen_json::GeneratorJson, gen_latex::GeneratorLatex, gen_mif::GeneratorMif, gen_py::{GeneratorPy, PyVersion}, gen_ral::GeneratorRal, gen_sv::GeneratorSv, gen_svd::GeneratorSvd, gen_vhdl::GeneratorVhdl, trait_doc::GeneratorDoc, trait_hw::GeneratorHw, trait_sw::GeneratorSw
     },
     parser::{parser_expr::ParamValues, RifGenSrc, RsvdKeywordSel},
     rifgen::{Interface, SuffixInfo}
@@ -333,6 +318,17 @@ impl YarigCfg {
                     }
                     let mut g = GeneratorSv::new(setting);
                     g.gen_all(&rif_obj).map_err(|e| format!("SystemVerilog generation failed: {e}"))?;
+                    if self.suffix_rtl_only {
+                        rif_obj.set_suffixes(&no_suffixes);
+                    }
+                }
+                RifGenTargets::Vhdl => {
+                    setting.set_output(self.get_output_path(&["vhdl", "rtl"], "rtl"));
+                    if self.suffix_rtl_only {
+                        rif_obj.set_suffixes(&self.suffixes);
+                    }
+                    let mut g = GeneratorVhdl::new(setting);
+                    g.gen_all(&rif_obj).map_err(|e| format!("VHDL generation failed: {e}"))?;
                     if self.suffix_rtl_only {
                         rif_obj.set_suffixes(&no_suffixes);
                     }

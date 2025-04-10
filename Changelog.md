@@ -1,6 +1,17 @@
 # Change Log
 
 
+## [0.9.2] - 2025-04-13
+
+### Bug Fixes
+ - Fix SV package not being generated anymore ...
+
+### Added
+ - VHDL Generator
+
+### Changed
+ - Update Trait HW: +/- logic expression now include a signed flag
+
 ## [0.9.1] - 2025-04-11
 
 ### Added
