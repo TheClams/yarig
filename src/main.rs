@@ -55,6 +55,9 @@ struct RifGenArgs{
     /// Set suffix value
     #[arg(short = 'S', long)]
     suffix: Option<SuffixInfo>,
+    /// List of target which should split their output. Supported targets are: html, mif, adoc
+    #[arg(long, num_args = 0..)]
+    split: Vec<RifGenTargets>,
     /// Rename field using reserved keyword
     #[arg(long, action)]
     keyword_rename: bool,
@@ -137,6 +140,15 @@ fn main() {
     if args.keyword_rename {cfg.keywords.error = false;}
     if args.targets.contains(&RifGenTargets::Sv) {cfg.keywords.sv = true;}
     if args.targets.contains(&RifGenTargets::Vhdl) {cfg.keywords.vhdl = true;}
+
+    for t in args.split.iter() {
+        match t {
+            RifGenTargets::Html => cfg.html.split = Some(true),
+            RifGenTargets::Adoc => cfg.adoc.split = Some(true),
+            RifGenTargets::Mif  => cfg.mif.split  = Some(true),
+            _ => eprintln!("Split target {t} not supported ! Expecting html, adoc, mif."),
+        }
+    }
 
     //
     let outputs = [

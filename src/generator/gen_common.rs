@@ -108,9 +108,25 @@ pub struct GeneratorBaseSetting {
     pub privacy: Privacy,
     /// List of included component to generate
     pub gen_inc: Vec<String>,
+    /// True when generator should split output in multiple files (if implemented by the generator)
+    pub split: bool,
+    /// For multi-file output, output path is local to each individual RIFs
+    pub local: bool,
 }
 
 impl GeneratorBaseSetting {
+
+    pub fn new(casing: Option<Casing>, public: bool, gen_inc: &[String]) -> Self {
+        GeneratorBaseSetting {
+            path: "".into(),
+            fname: None,
+            casing: casing.unwrap_or(Casing::Snake),
+            privacy: if public {Privacy::Public} else {Privacy::Internal},
+            gen_inc: gen_inc.to_vec(),
+            split: false,
+            local: false,
+        }
+    }
 
     pub fn set_output(&mut self, info: (PathBuf, Option<String>) ) {
         self.path = info.0;

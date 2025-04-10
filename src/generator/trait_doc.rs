@@ -110,10 +110,24 @@ pub trait GeneratorDoc : GeneratorBase {
                     self.add_rifmux_entry(c, w,  0, None, &rifmux.groups);
                 }
                 self.write_table_footer(TableKind::Rifmux);
+                // Split output -> save current file
+                if self.setting().split {
+                    self.write_footer(obj.get_name());
+                    self.save(&self.setting().fname.clone().unwrap_or(filename.clone()))?;
+                }
                 // Add description of all rif types
                 let rif_list = RifList::new(rifmux, true);
                 for (i,(rif,info)) in rif_list.iter().enumerate() {
-                    self.add_rif(rif, i+1, info)?;
+                    if self.setting().split {
+                        let name = rif.name(false);
+                        let basename = remove_rif(&name);
+                        self.write_header(basename);
+                        self.add_rif(rif, 1, &[])?;
+                        self.write_footer(basename);
+                        self.save(&format!("{name}.{}", Self::EXT))?;
+                    } else {
+                        self.add_rif(rif, i+1, info)?;
+                    }
                 }
             }
             Comp::Rif(rif) => {
@@ -123,10 +137,13 @@ pub trait GeneratorDoc : GeneratorBase {
             // Nothing todo for external RIF
             Comp::External(_) => return Ok(()),
         }
-        self.write_footer(obj.get_name());
-        // Write file
-        let fname = self.setting().fname.clone().unwrap_or(filename);
-        self.save(&fname)
+        if !self.setting().split || obj.is_rif() {
+            self.write_footer(obj.get_name());
+            // Write file
+            let fname = self.setting().fname.clone().unwrap_or(filename);
+            self.save(&fname)?;
+        }
+        Ok(())
     }
 
     /// Add rifmux row in a table composed of 4 column:
@@ -150,6 +167,9 @@ pub trait GeneratorDoc : GeneratorBase {
             },
             inst => {
                 let tn = remove_rif(inst.get_type());
+                if let Comp::Rif(rif) = inst {
+                    self.set_rif_info(rif);
+                }
                 self.write_rifmux_entry(&instname, tn, (addr,w), inst.get_desc_short(), Self::SHOW_TYPE);
             }
         }
@@ -171,7 +191,7 @@ pub trait GeneratorDoc : GeneratorBase {
     fn add_rif(&mut self, rif: &RifInst, idx: usize, info: &[RifInstInfo]) -> Result<(), String> {
         let rif_name = remove_rif(&rif.type_name);
         let desc = rif.base_description.get_split();
-        self.set_rif_info(rif_name, rif.addr_width, rif.data_width, rif.pages.len());
+        self.set_rif_info(rif);
         self.write_rif_title((rif_name, idx), desc.0);
         if let Some(desc_detail) = desc.1 {
             let desc_detail = self.sanitize(desc_detail);
@@ -495,7 +515,7 @@ pub trait GeneratorDoc : GeneratorBase {
     }
 
     /// Set the width of address/data for current RIF
-    fn set_rif_info(&mut self, name: &str, addr_w: u8, data_w: u8, nb_page: usize) {}
+    fn set_rif_info(&mut self, rif: &RifInst) {}
 
     /// Write file header
     /// No header by default

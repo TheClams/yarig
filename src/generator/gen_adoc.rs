@@ -1,6 +1,6 @@
 use yarig_macro::add_gen_core;
 
-use crate::{comp::comp_inst::RifInst, generator::casing::ToCasing, rifgen::EnumDef};
+use crate::{comp::comp_inst::RifInst, generator::casing::ToCasing, parser::remove_rif, rifgen::EnumDef};
 
 use super::{
     casing::Casing,
@@ -14,6 +14,8 @@ pub struct GeneratorAdoc {
     is_rifmux: bool,
     /// Name of the current component
     comp_name: String,
+    /// Currrent component full name
+    comp_fname: String,
     /// Current compoment address width
     addr_width: u8,
     /// Flag when current RIF has multiple pages
@@ -27,6 +29,7 @@ impl GeneratorAdoc {
             core: GeneratorCore::new(0,setting),
             addr_width: 8,
             comp_name: "".to_owned(),
+            comp_fname: "".to_owned(),
             is_rifmux: false,
             multipage: false,
         }
@@ -40,10 +43,11 @@ impl GeneratorDoc for GeneratorAdoc {
     const SHOW_SINGLE_REG : bool = false;
     const SHOW_UNUSED : bool = true;
 
-    fn set_rif_info(&mut self, name: &str, addr_w: u8, _data_w: u8, nb_page: usize) {
-        self.addr_width = addr_w;
-        self.comp_name = name.to_owned();
-        self.multipage = nb_page > 1;
+    fn set_rif_info(&mut self, rif: &RifInst) {
+        self.addr_width = rif.addr_width;
+        self.comp_name = remove_rif(&rif.type_name).to_owned();
+        self.multipage = rif.pages.len() > 1;
+        self.comp_fname = rif.name(false);
     }
 
     fn write_rif_title(&mut self, idx_rif: (&str,usize), desc: &str) {
@@ -181,7 +185,12 @@ impl GeneratorDoc for GeneratorAdoc {
             }
             self.write("|");
             if has_link {
-                self.write(&format!("<<{id},{txt}>>"));
+                // Handle cross document reference
+                if self.setting().split && kind.0==TableKind::Rifmux {
+                    self.write(&format!("xref:{}.adoc#{id}[{txt}]", self.comp_fname));
+                } else {
+                    self.write(&format!("<<{id},{txt}>>"));
+                }
             } else {
                 self.write(&txt);
             }

@@ -52,6 +52,14 @@ pub enum Comp {
 }
 
 impl Comp {
+    pub fn is_rif(&self) -> bool {
+        matches!(self, Comp::Rif(_))
+    }
+
+    pub fn is_rifmux(&self) -> bool {
+        matches!(self, Comp::Rifmux(_))
+    }
+
     pub fn is_external(&self) -> bool {
         matches!(self, Comp::External(_))
     }

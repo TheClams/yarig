@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{cfg::CfgMif, generator::casing::{Casing, ToCasing}, rifgen::{EnumDef, FieldSwKind}};
+use crate::{cfg::CfgMif, comp::comp_inst::RifInst, generator::casing::{Casing, ToCasing}, rifgen::{EnumDef, FieldSwKind}};
 use super::{
     gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore},
     trait_doc::{CellKind, GeneratorDoc, TableKind}
@@ -117,9 +117,9 @@ impl GeneratorDoc for GeneratorMif {
     const SHOW_SINGLE_REG : bool = false;
     const SHOW_UNUSED : bool = true;
 
-    fn set_rif_info(&mut self, _name: &str, addr_w: u8, _data_w: u8, nb_page: usize) {
-        self.addr_width = addr_w;
-        self.multipage = nb_page > 1;
+    fn set_rif_info(&mut self, rif: &RifInst) {
+        self.addr_width = rif.addr_width;
+        self.multipage = rif.pages.len() > 1;
     }
 
     fn write_header(&mut self, _name: &str) {

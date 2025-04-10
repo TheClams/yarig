@@ -1,4 +1,4 @@
-use crate::{cfg::CfgHtml, rifgen::EnumDef};
+use crate::{cfg::CfgHtml, comp::comp_inst::RifInst, rifgen::EnumDef};
 
 use super::{
     casing::{Casing, ToCasing},
@@ -17,6 +17,8 @@ pub struct GeneratorHtml {
     nb_col : usize,
     /// Flag when current RIF has multiple pages
     multipage : bool,
+    /// Currrent component full name
+    comp_fname: String,
 }
 
 #[allow(dead_code)]
@@ -27,6 +29,7 @@ impl GeneratorHtml {
         GeneratorHtml {
             core: GeneratorCore::new(0,setting),
             css: cfg.css,
+            comp_fname: "".to_owned(),
             addr_width: 8,
             nb_col: 1,
             multipage: false
@@ -40,10 +43,11 @@ impl GeneratorDoc for GeneratorHtml {
     const SHOW_TYPE : bool = false;
     const SHOW_SINGLE_REG : bool = true;
 
-    fn set_rif_info(&mut self, _name: &str, addr_w: u8, data_w: u8, nb_page: usize) {
-        self.addr_width = addr_w;
-        self.nb_col = 32 / data_w as usize;
-        self.multipage = nb_page > 1;
+    fn set_rif_info(&mut self, rif: &RifInst) {
+        self.addr_width = rif.addr_width;
+        self.nb_col = 32 / rif.data_width as usize;
+        self.multipage = rif.pages.len() > 1;
+        self.comp_fname = rif.name(false);
     }
 
     fn write_header(&mut self, name: &str) {
@@ -200,7 +204,10 @@ impl GeneratorDoc for GeneratorHtml {
         self.write(">");
         // Add link to type cell only
         if kind.1==CellKind::Inst && (kind.0==TableKind::Rifmux || kind.0==TableKind::Page) && !id.is_empty() {
-            self.write(&format!("<a href=\"#{id}\">{txt}</a>"));
+                let ext_link = self.setting().split && kind.0==TableKind::Rifmux;
+                let root = if ext_link {format!("./{}.html", self.comp_fname)} else {"".to_owned()};
+                self.write(&format!("<a href=\"{root}#{id}\">{txt}</a>"));
+
         } else {
             self.write(txt);
         }

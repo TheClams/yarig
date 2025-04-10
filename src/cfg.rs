@@ -5,7 +5,7 @@ use crate::{
     comp::comp_inst::Comp,
     generator::{
         casing::Casing,
-        gen_common::{GeneratorBaseSetting, Privacy},
+        gen_common::GeneratorBaseSetting,
         trait_doc::GeneratorDoc,
         gen_adoc::GeneratorAdoc,
         gen_html::GeneratorHtml,
@@ -76,6 +76,26 @@ impl From<&str> for RifGenTargets {
     }
 }
 
+impl std::fmt::Display for RifGenTargets {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RifGenTargets::Sv        => write!(f, "SystemVerilog"),
+            RifGenTargets::Ral       => write!(f, "UVM Register Abstraction Layer"),
+            RifGenTargets::Vhdl      => write!(f, "VHDL"),
+            RifGenTargets::C         => write!(f, "C"),
+            RifGenTargets::Py        => write!(f, "Python"),
+            RifGenTargets::Html      => write!(f, "HTML"),
+            RifGenTargets::Latex     => write!(f, "LaTeX"),
+            RifGenTargets::Mif       => write!(f, "Framemaker MIF"),
+            RifGenTargets::Svd       => write!(f, "SVD"),
+            RifGenTargets::Json      => write!(f, "JSON"),
+            RifGenTargets::Adoc      => write!(f, "AsciiDoctor"),
+            RifGenTargets::IpXact    => write!(f, "IpXact"),
+            RifGenTargets::Custom(n) => write!(f, "'{n}'"),
+        }
+    }
+}
+
 impl<'de> serde::Deserialize<'de> for RifGenTargets {
     fn deserialize<D: serde::Deserializer<'de> >(d: D) -> Result<Self, D::Error> {
         let s = String::deserialize(d)?;
@@ -124,6 +144,7 @@ pub struct YarigCfg {
     pub keywords: RsvdKeywordSel,
     //-- Target specific settings--//
     pub html  : CfgHtml,
+    pub adoc  : CfgAdoc,
     pub c  : CfgC,
     pub ral: CfgRal,
     pub rtl: CfgRtl,
@@ -136,6 +157,12 @@ pub struct YarigCfg {
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct CfgHtml {
     pub css: Option<String>,
+    pub split: Option<bool>,
+}
+
+#[derive(Deserialize, Debug, Clone, Default)]
+pub struct CfgAdoc {
+    pub split: Option<bool>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -182,6 +209,7 @@ pub struct CfgIpXact {
 
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct CfgMif {
+    pub split              : Option<bool>,
     pub anchor             : Option<String>,
     pub h2                 : Option<String>,
     pub h3                 : Option<String>,
@@ -248,13 +276,7 @@ impl YarigCfg {
 
     pub fn gen_all(&self) -> Result<Comp, String> {
 
-        let base_setting = GeneratorBaseSetting {
-            path: "".into(),
-            fname: None,
-            casing: self.casing.unwrap_or(Casing::Snake),
-            privacy: if self.public {Privacy::Public} else {Privacy::Internal},
-            gen_inc: self.gen_inc.clone()
-        };
+        let base_setting = GeneratorBaseSetting::new(self.casing, self.public, &self.gen_inc);
         let mut params = ParamValues::new();
         self.parameters.iter().for_each(
             |(k,v)| params.insert(k.to_owned(), *v)
@@ -288,17 +310,19 @@ impl YarigCfg {
                 },
                 RifGenTargets::Html => {
                     setting.set_output(self.get_output_path(&["html", "doc"],"doc"));
+                    if let Some(split) = self.html.split {setting.split = split;}
                     let mut g = GeneratorHtml::new(setting, self.html.clone());
                     g.gen_all(&rif_obj).map_err(|e| format!("Html generation failed: {e}"))?;
                 }
                 RifGenTargets::Mif => {
                     setting.set_output(self.get_output_path(&["mif", "doc"], "doc"));
-                    // TODO: support customization of paragraph style
+                    if let Some(split) = self.mif.split {setting.split = split;}
                     let mut g = GeneratorMif::new(setting, self.mif.clone());
                     g.gen_all(&rif_obj).map_err(|e| format!("MIF generation failed: {e}"))?;
                 }
                 RifGenTargets::Latex => {
                     setting.set_output(self.get_output_path(&["latex", "doc"], "doc"));
+                    // if let Some(split) = self.latex.split {setting.split = split;}
                     let mut g = GeneratorLatex::new(setting);
                     g.gen_all(&rif_obj).map_err(|e| format!("Latex generation failed: {e}"))?;
                 }
@@ -330,6 +354,7 @@ impl YarigCfg {
                 }
                 RifGenTargets::Adoc => {
                     setting.set_output(self.get_output_path(&["adoc", "doc"], "doc"));
+                    if let Some(split) = self.adoc.split {setting.split = split;}
                     let mut g = GeneratorAdoc::new(setting);
                     g.gen_all(&rif_obj).map_err(|e| format!("AsciiDoctor generation failed: {e}"))?;
                 }

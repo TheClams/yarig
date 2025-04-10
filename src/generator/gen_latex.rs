@@ -1,4 +1,4 @@
-use crate::{generator::casing::ToCasing, rifgen::EnumDef};
+use crate::{comp::comp_inst::RifInst, generator::casing::ToCasing, rifgen::EnumDef};
 
 use super::{casing::Casing, gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore}, trait_doc::{CellKind, GeneratorDoc, TableKind}};
 
@@ -37,9 +37,9 @@ impl GeneratorDoc for GeneratorLatex {
     const SHOW_SINGLE_REG : bool = false;
     const SHOW_UNUSED : bool = true;
 
-    fn set_rif_info(&mut self, _name: &str, addr_w: u8, _data_w: u8, nb_page: usize) {
-        self.addr_width = addr_w;
-        self.multipage = nb_page > 1;
+    fn set_rif_info(&mut self, rif: &RifInst) {
+        self.addr_width = rif.addr_width;
+        self.multipage = rif.pages.len() > 1;
     }
 
     fn write_rif_title(&mut self, idx_rif: (&str,usize), desc: &str) {
