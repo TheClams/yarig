@@ -30,6 +30,16 @@ impl<'a> RegDefMatch<'a> {
 
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum InstMode {
+    /// Register are instantiated manually
+    Manual,
+    /// Registers are manually instantiated
+    Automatic,
+    /// Registers are manually instantiated using a different order on interrupts (mask before enable)
+    AutoLegacy,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct RifPage{
     /// Page name
@@ -47,7 +57,7 @@ pub struct RifPage{
     /// List of register instance for the page
     pub instances: Vec<RegInst>,
     /// Indicates all register are instantiated in order
-    pub inst_auto: bool,
+    pub inst_auto: InstMode,
     /// Indicates the page logic is handled externally
     pub external: bool,
     /// Indicate the address width associated with the page (mandatory for external, optional otherwise)
@@ -64,7 +74,7 @@ impl RifPage {
             optional: "".to_owned(),
             registers: vec![],
             instances: vec![],
-            inst_auto: false,
+            inst_auto: InstMode::Manual,
             external: false,
         }
     }
@@ -125,6 +135,15 @@ impl RifPage {
         }
         None
     }
+
+    pub fn is_auto(&self) -> bool {
+        matches!(self.inst_auto, InstMode::Automatic | InstMode::AutoLegacy)
+    }
+
+    pub fn is_auto_legacy(&self) -> bool {
+        matches!(self.inst_auto, InstMode::AutoLegacy)
+    }
+
 }
 
 

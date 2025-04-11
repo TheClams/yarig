@@ -415,7 +415,7 @@ impl RifPageInst {
         };
         // Automatic instance: create one register from each definition
         // and check for any override in the instances vector
-        if page.inst_auto {
+        if page.is_auto() {
             Self::reg_auto_inst(&mut p, rifs, page, addr_incr)?;
         }
         // Manual instance: create one register by instance
@@ -496,11 +496,13 @@ impl RifPageInst {
                             self.add_reg(RifRegInst::new(d, addr, inst, RegInstArgs::Intr(InterruptRegKind::Base, idx, true), None, rifs)?);
                             addr += addr_incr as u64;
                             if info.enable.is_some() {
-                                self.add_reg(RifRegInst::new(d, addr, inst, RegInstArgs::Intr(InterruptRegKind::Enable, idx, true), None, rifs)?);
+                                let delta = if page.is_auto_legacy() && info.mask.is_some() {addr_incr} else {0} as u64;
+                                self.add_reg(RifRegInst::new(d, addr+delta, inst, RegInstArgs::Intr(InterruptRegKind::Enable, idx, true), None, rifs)?);
                                 addr += addr_incr as u64;
                             }
                             if info.mask.is_some() {
-                                self.add_reg(RifRegInst::new(d, addr, inst, RegInstArgs::Intr(InterruptRegKind::Mask, idx, true), None, rifs)?);
+                                let delta = if page.is_auto_legacy() && info.mask.is_some() {addr_incr} else {0} as u64;
+                                self.add_reg(RifRegInst::new(d, addr-delta, inst, RegInstArgs::Intr(InterruptRegKind::Mask, idx, true), None, rifs)?);
                                 addr += addr_incr as u64;
                             }
                             if info.pending {

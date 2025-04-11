@@ -1,6 +1,15 @@
 # Change Log
 
 
+## [0.9.1] - 2025-04-11
+
+### Added
+ - Add a register auto instance mode (auto-legacy) where order of the interrupt register is different (mask before enable)
+
+### Bug Fix
+ - Python: enumerated was potentially including a package name
+
+
 ## [0.9.0] - 2025-04-11
 
 ### Added

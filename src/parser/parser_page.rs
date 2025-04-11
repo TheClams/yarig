@@ -1,4 +1,4 @@
-use crate::rifgen::{AddressKind, Context, RegInst};
+use crate::rifgen::{AddressKind, Context, InstMode, RegInst};
 
 use winnow::{
     ascii::space0,
@@ -35,10 +35,11 @@ pub fn page_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
 //--------------------------------
 // Instances properties
 
-pub fn is_auto(input: &str) -> ResF<bool> {
+pub fn is_auto(input: &str) -> ResF<InstMode> {
     alt((
-        ws("auto").value(true),
-        space0.value(false)
+        ws("auto-legacy").value(InstMode::AutoLegacy),
+        ws("auto").value(InstMode::Automatic),
+        space0.value(InstMode::Manual)
     )).parse(input)
 }
 
@@ -160,8 +161,9 @@ mod tests_parsing {
 
     #[test]
     fn test_is_auto() {
-        assert_eq!(is_auto("auto"), Ok(true));
-        assert_eq!(is_auto("  "), Ok(false));
+        assert_eq!(is_auto("auto"), Ok(InstMode::Automatic));
+        assert_eq!(is_auto("auto-legacy"), Ok(InstMode::AutoLegacy));
+        assert_eq!(is_auto("  "), Ok(InstMode::Manual));
         assert_eq!(is_auto("anything else").is_err(),true);
     }
 
