@@ -263,8 +263,9 @@ impl GeneratorSw for GeneratorPy {
                 self.write(&format!("\n{tab}@typing.override"));
             }
             let comp = remove_rif(&self.comp_name).to_casing(Casing::Pascal);
+            let name = def.name.split("::").skip(1).next().unwrap_or(&def.name);
             self.write(&format!("\n{tab}def enum_kind(self) -> None| type[IntEnum]:\n"));
-            self.write(&format!("{tab}   return {comp}.{}\n", def.name));
+            self.write(&format!("{tab}   return {comp}.{name}\n"));
         }
     }
 
