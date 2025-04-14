@@ -1,9 +1,9 @@
 use crate::{
     comp::{
         comp_inst::{RifInst, RifmuxInst},
-        hw_info::{CastInfo, ExprId, LogicExpr, PortDir, PortInfo, SignalDecl, SignalDef, SignalInfo, SignalKind}
+        hw_info::{CastInfo, ExprId, LogicExpr, PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalInfo, SignalKind}
     },
-    rifgen::{order_dict::OrderDict, EnumEntry, ResetDef}
+    rifgen::{order_dict::OrderDict, EnumEntry, Interface, ResetDef}
 };
 
 use super::{
@@ -146,8 +146,8 @@ impl GeneratorVhdl {
             }
             LogicExpr::Add(lhs, rhs) => self.add_two_expr(lhs, rhs, " + " , LogicExprKind::MathU, false),
             LogicExpr::Sub(lhs, rhs) => self.add_two_expr(lhs, rhs, " - " , LogicExprKind::MathU, false),
-            LogicExpr::Eq(lhs, rhs)  => self.add_two_expr(lhs, rhs, " = " , kind, false),
-            LogicExpr::Neq(lhs, rhs) => self.add_two_expr(lhs, rhs, " /= ", kind, false),
+            LogicExpr::Eq(lhs, rhs)  => self.add_two_expr(lhs, rhs, " = " , LogicExprKind::Basic, false),
+            LogicExpr::Neq(lhs, rhs) => self.add_two_expr(lhs, rhs, " /= ", LogicExprKind::Basic, false),
             LogicExpr::Gte(lhs, rhs) => self.add_two_expr(lhs, rhs, " >= ", LogicExprKind::MathU, false),
             LogicExpr::Lte(lhs, rhs) => self.add_two_expr(lhs, rhs, " <= ", LogicExprKind::MathU, false),
             LogicExpr::Lt(lhs, rhs)  => self.add_two_expr(lhs, rhs, " < " , LogicExprKind::MathU, false),
@@ -381,7 +381,14 @@ impl GeneratorHw for GeneratorVhdl {
             PortDir::Out => {
                 self.write(" : out ");
                 if !self.outputs_locked {
-                    self.outputs.insert(name, port.kind().custom_name().to_owned());
+                    let typename = match port.kind() {
+                        SignalKind::Unsigned(w) |
+                        SignalKind::Signed(w) =>
+                            if *w == 1 {"std_logic"}
+                            else {"std_logic_vector"},
+                        _ => port.kind().custom_name()
+                    };
+                    self.outputs.insert(name, typename.to_owned());
                 }
             }
             _ => {}
@@ -406,11 +413,15 @@ impl GeneratorHw for GeneratorVhdl {
         self.write("\n");
     }
 
-    fn write_rif_decl(&mut self, comp: &CompInfo, single: bool, clk: &str, rst: &str) {
-        let name = if single {"rif"} else {&comp.name};
-        self.write(&format!("   rif_if#({}, {}) if_{name}({clk}, {rst});\n",
-            comp.addr_width, comp.data_width
-        ));
+    fn write_rif_decl(&mut self, _comp: &CompInfo, _single: bool, _clk: &str, _rst: &str) {
+        let ports = RifIntfPorts::new(&Interface::Default, false);
+        for port in ports.iter() {
+            self.write("   signal ");
+            self.write(port.name());
+            self.write(" : ");
+            self.add_signal_kind(port.kind(), port.dim());
+            self.write(";\n");
+        }
     }
 
     fn write_inst_header(&mut self, type_name: &str, inst_name: &str, params: &[(String, isize)]) {
@@ -470,8 +481,8 @@ impl GeneratorHw for GeneratorVhdl {
         self.write(" <= ");
         if rhs.has_comp() {
             self.write("'1' when ");
-            self.add_logic_expr(&rhs, 0, LogicExprKind::Basic, false);
-            self.write("else '0'");
+            self.add_logic_expr(&rhs, 0, LogicExprKind::Bool, false);
+            self.write(" else '0'");
         } else {
             let multiline =
                 (rhs.has_vec() && rhs.nb() > 2 && !rhs.is_and()) ||
@@ -538,12 +549,22 @@ impl GeneratorHw for GeneratorVhdl {
         self.write(" <= ");
         if rhs.has_comp() {
             self.write("'1' when ");
-            self.add_logic_expr(&rhs, 0, LogicExprKind::Basic, false);
-            self.write("else '0'");
+            self.add_logic_expr(&rhs, 0, LogicExprKind::Bool, false);
+            self.write(" else '0'");
         } else {
             self.add_logic_expr(&rhs, 0, LogicExprKind::Basic, false);
         }
         self.write(";\n");
+    }
+
+    fn write_signal_decl_footer(&mut self) {
+        self.write("\n   -- Intermediate signals for output port --\n");
+        for (n,t) in self.outputs.items() {
+            self.core.write(&format!("   signal {n}_l : {t};\n"));
+            self.core.push_stash(0,&format!("   {n} <= {n}_l;\n"));
+        }
+        self.write("\nbegin\n\n");
+        self.pop_stash(0);
     }
 
     fn write_comment(&mut self, lvl: usize, txt: &str) {
@@ -559,17 +580,6 @@ impl GeneratorHw for GeneratorVhdl {
     fn write_comment_box(&mut self, txt: &str) {
         // Remove signals declaration box since VHDL has a section dedicated to signals declaration
         if txt=="Signals declaration" {return;}
-        // Interface handling block is called at the end of signal declaration:
-        // Use it to add intermediate signals for output
-        if txt=="Interface handling" {
-            self.write("\n   -- Intermediate signals for output port --\n");
-            for (n,t) in self.outputs.items() {
-                self.core.write(&format!("   signal {n}_l : {t};\n"));
-                self.core.push_stash(0,&format!("   {n} <= {n}_l;\n"));
-            }
-            self.write("\nbegin\n\n");
-            self.pop_stash(0);
-        }
         self.write("\n-------------------------------------------------------------------------------\n");
         for l in txt.split('\n') {
             self.write("-- ");
@@ -630,6 +640,8 @@ impl GeneratorHw for GeneratorVhdl {
         if !rst.sync {
             self.write(&format!("      elsif rising_edge({clk}) then\n"));
         }
+        let base_lvl = if clk_en_global && clk_en.is_some() {4} else {3};
+        let tab = " ".repeat(base_lvl*3);
         // Optional Global clear
         // Maybe need to add an option to take the clear into account only if the enable is high
         if let Some(clr) = clr.filter(|_| clr_global) {
@@ -639,7 +651,9 @@ impl GeneratorHw for GeneratorVhdl {
             for signal in signals.iter() {
                 self.write_signal_seq(&signal.name, &signal.reset, 3);
             }
-            self.write("      end else ");
+            self.write("      end els");
+        } else if base_lvl == 4 {
+            self.write("      ");
         }
         // Optional Global Enable
         if let Some(clk_en) = clk_en.filter(|_| clk_en_global) {
@@ -648,33 +662,39 @@ impl GeneratorHw for GeneratorVhdl {
             self.write(" then\n");
         }
         // Set value
-        let mut lvl = 3;
+        let mut lvl = base_lvl;
         for signal in signals.iter() {
             if let Some(clr) = signal.clear.as_ref().filter(|_| !clr_global) {
-                lvl = 4;
-                self.write("         if ");
+                self.write(&tab);
+                self.write("if ");
                 self.add_logic_expr(clr, 0, LogicExprKind::Bool, false);
-                self.write(" then\n");
+                self.write(" then");
                 self.write_signal_seq(&signal.name, &signal.reset, lvl);
-                self.write("         els");
+                self.write(&tab);
+                self.write("els");
+                lvl = base_lvl+1;
             }
             if let Some(clk_en) = signal.enable.as_ref().filter(|_| !clk_en_global) {
-                if lvl==3 {
-                    self.write("         ");
+                if lvl==base_lvl {
+                    self.write(&tab);
                 }
                 self.write("if ");
                 self.add_logic_expr(clk_en, 0, LogicExprKind::Bool, false);
-                self.write(" then\n");
-                lvl = 4;
+                self.write(" then");
+                lvl = base_lvl+1;
             }
-            if lvl==4 {
+            if lvl==base_lvl+1 {
                 self.write("\n");
             }
             self.write_signal_seq(&signal.name, &signal.value, lvl);
-            if lvl==4 {
-                self.write("         end if;\n");
-                lvl = 3;
+            if lvl==base_lvl+1 {
+                self.write(&tab);
+                self.write("end if;\n");
+                lvl = base_lvl;
             }
+        }
+        if clk_en_global && clk_en.is_some() {
+            self.write("          end if;\n");
         }
         self.write("      end if;\n");
         self.write("   end process;\n\n");

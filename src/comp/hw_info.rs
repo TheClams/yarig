@@ -58,6 +58,10 @@ impl SignalKind {
             _ => ""
         }
     }
+
+    pub fn is_custom(&self) -> bool {
+        matches!(self, SignalKind::Custom(_))
+    }
 }
 
 /// Signal declaration info: contains both name and type
@@ -923,11 +927,12 @@ impl LogicExpr {
     }
 
     pub fn is_comp(&self) -> bool {
-        matches!(*self, LogicExpr::Gte(_,_) | LogicExpr::Lte(_,_) | LogicExpr::Lt(_,_))
+        matches!(*self, LogicExpr::Gte(_,_) | LogicExpr::Lte(_,_) | LogicExpr::Lt(_,_) | LogicExpr::Neq(_,_))
     }
 
     pub fn has_comp(&self) -> bool {
         match self {
+            LogicExpr::Neq(_,_)  |
             LogicExpr::Gte(_,_)  |
             LogicExpr::Lte(_,_)  |
             LogicExpr::Lt(_,_)   => true,

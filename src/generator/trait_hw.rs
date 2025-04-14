@@ -479,6 +479,8 @@ pub trait GeneratorHw : GeneratorBase {
                             let f_name = self.casing(&f.name);
                             let w = f.width + (if f.is_counter() {1} else {0});
                             self.write_signal_decl(&SignalDef::new_bus(
+                                format!("{name}{idx}_{f_name}__cleared"), f.width, false).into());
+                            self.write_signal_decl(&SignalDef::new_bus(
                                 format!("{name}{idx}_{f_name}__next"), f.width, false).into());
                             if intr_info.enable.is_some() {
                                 self.write_signal_decl(&SignalDef::new_bus(
@@ -534,9 +536,17 @@ pub trait GeneratorHw : GeneratorBase {
             }
         }
 
+        let comp_info : CompInfo = rif.into();
+
+        // Create local rif interface if not default
+        if !rif.interface.is_default() {
+            self.write_rif_decl(&comp_info, true, &rif.sw_clocking.clk, &rif.sw_clocking.rst.name);
+        }
+
+        self.write_signal_decl_footer();
+
         // Add interface bridge to the internal rif_if
         // Nothing is done if already using rif_if
-        let comp_info : CompInfo = rif.into();
         self.write_intf_bridge(&rif.interface, &comp_info, &rif.sw_clocking.clk, &rif.sw_clocking.rst.name);
 
         // Connect interface to internal logic
@@ -898,7 +908,9 @@ pub trait GeneratorHw : GeneratorBase {
                             InterruptClr::Hw => todo!("Hardware clear interrupt are not supported yet ! :(")
                         };
                         let intr_clr = LogicExpr::ite(clr_acc, clr_val, field_id.into());
-                        let rhs = LogicExpr::or_b(intr_set, intr_clr);
+                        let field_clr_id = ExprId::new_range(format!("{reg_field_name}__cleared"), partial.clone());
+                        self.write_assign(field_clr_id.clone(), intr_clr);
+                        let rhs = LogicExpr::or_b(intr_set, field_clr_id.into());
                         self.write_assign(field_next_id, rhs);
                         continue;
                     }
@@ -1847,7 +1859,6 @@ pub trait GeneratorHw : GeneratorBase {
         }
 
         self.write_comment_box("Bridge to the internal register interface");
-        self.write_rif_decl(comp, true, sw_clk, sw_rst);
         self.write("\n");
         let name = format!("bridge_{}_rif", intf.name());
         let params = [
@@ -1876,6 +1887,7 @@ pub trait GeneratorHw : GeneratorBase {
     fn write_struct_footer(&mut self, name: &str) {}
     fn write_module_decl_header(&mut self, name: &str) {}
     fn write_module_decl_footer(&mut self, name: &str) {}
+    fn write_signal_decl_footer(&mut self) {}
     fn write_module_impl_footer(&mut self, name: &str) {}
     fn write_port_decl(&mut self, port: &PortInfo, prefix: Option<&String>, is_last: bool) {}
     fn write_rif_decl(&mut self, comp: &CompInfo, single: bool, clk: &str, rst: &str) {}
