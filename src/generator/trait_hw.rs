@@ -19,9 +19,10 @@ use super::{
 #[allow(unused_variables)]
 pub trait GeneratorHw : GeneratorBase {
 
-    const HAS_ADDR_CONST : bool = false;
-    const HAS_FIELD_CONST : bool = false;
-    const SUPPORT_INTF   : bool = true;
+    const HAS_ADDR_CONST    : bool = false;
+    const HAS_FIELD_CONST   : bool = false;
+    const SUPPORT_INTF      : bool = true;
+    const SUPPORT_IMPL_BIND : bool = true;
 
     /// Write generic header for a file
     fn write_file_header(&mut self) {}
@@ -1867,7 +1868,15 @@ pub trait GeneratorHw : GeneratorBase {
         self.write_inst_header(&name, "bridge", &params);
         self.write_port_bind("clk"  , sw_clk, false);
         self.write_port_bind("rst_n", sw_rst, false);
-        self.write_port_bind("*", "", true);
+        if Self::SUPPORT_IMPL_BIND {
+            self.write_port_bind("*", "", true);
+        } else {
+            let intf_ports = RifIntfPorts::new(&intf, Self::SUPPORT_INTF);
+            for port in intf_ports.iter() {
+                self.write_port_bind(port.name(), port.name(), false);
+            }
+            self.write_intf_bind("rif", true);
+        }
     }
 
     /// Save information for the current RIF
@@ -1919,7 +1928,7 @@ pub trait GeneratorHw : GeneratorBase {
 
     /// Filename for RIF package
     fn filename_rif_pkg(&self, rif: &RifInst) -> String {
-        format!("{}_pkg.{}", rif.name(false).to_lowercase(), Self::EXT)
+        format!("{}_pkg.{}", rif.name(true).to_lowercase(), Self::EXT)
     }
 
     fn filename_rifmux_pkg(&self, rifmux: &RifmuxInst) -> String {

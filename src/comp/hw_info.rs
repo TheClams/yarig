@@ -525,6 +525,10 @@ impl RifIntfPorts {
     pub fn iter(&self) -> impl Iterator<Item=&PortInfo> {
         self.0.iter()
     }
+
+    pub fn iter_mut(&mut self) -> impl Iterator<Item=&mut PortInfo> {
+        self.0.iter_mut()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

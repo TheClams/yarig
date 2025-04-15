@@ -22,6 +22,8 @@ pub struct GeneratorVhdl {
     enum_width : u8,
     /// True when current module instance is a bridge
     is_bridge : bool,
+    /// Component interface
+    intf : Interface,
     /// List of outputs port (needed to add intermediate signals)
     outputs : OrderDict<String,String>,
     outputs_locked: bool,
@@ -40,7 +42,8 @@ impl GeneratorVhdl {
             enum_width: 0,
             is_bridge: false,
             outputs: OrderDict::new(),
-            outputs_locked: false
+            outputs_locked: false,
+            intf: Interface::Default,
         }
     }
 
@@ -63,15 +66,22 @@ impl GeneratorVhdl {
         match kind {
             SignalKind::Signed(w) |
             SignalKind::Unsigned(w) => {
-                self.core.write("std_logic");
-                if *w > 1 {
-                    self.core.write(&format!("_vector({} downto 0)", w-1));
+                if dim == 0 {
+                    self.core.write("std_logic");
+                    if *w > 1 {
+                        self.core.write(&format!("_vector({} downto 0)", w-1));
+                    }
+                } else {
+                    match w {
+                        1 => self.core.write("t_sla"),
+                        n => self.core.write(&format!("t_slv_a{n}(0 to {})", dim-1)),
+                    }
                 }
             },
             SignalKind::Custom((_,n)) => {
                 self.core.write(n);
                 if dim > 0 {
-                    self.core.write(&format!("(0 to {})", dim));
+                    self.core.write(&format!("_a(0 to {})", dim));
                 }
             }
             SignalKind::Integer     => self.core.write("integer "),
@@ -95,7 +105,7 @@ impl GeneratorVhdl {
             LogicExpr::Cast(cast_info, expr) => {
                 if let CastInfo::Custom(_, name) = cast_info {
                     self.core.write(name);
-                    self.core.write("'(");
+                    self.core.write("'val(");
                 }
                 self.add_logic_expr(expr, 0, kind, false);
                 if cast_info.is_custom() {
@@ -240,9 +250,10 @@ impl GeneratorVhdl {
 }
 
 impl GeneratorHw for GeneratorVhdl {
-    const HAS_ADDR_CONST : bool = true;
-    const HAS_FIELD_CONST: bool = true;
-    const SUPPORT_INTF   : bool = false;
+    const HAS_ADDR_CONST    : bool = true;
+    const HAS_FIELD_CONST   : bool = true;
+    const SUPPORT_INTF      : bool = false;
+    const SUPPORT_IMPL_BIND : bool = false;
 
     /// Write generic header for a file
     fn write_file_header(&mut self) {
@@ -257,12 +268,54 @@ impl GeneratorHw for GeneratorVhdl {
         self.data_width = rif.data_width;
         self.outputs.clear();
         self.outputs_locked = false;
+        self.intf = rif.interface.clone();
     }
 
     /// Set the width of address/data for current RIF
     fn set_rifmux_info(&mut self, rifmux: &RifmuxInst) {
         self.addr_width = rifmux.addr_width;
         self.data_width = rifmux.data_width;
+    }
+
+    // Hooks for RIF package
+    fn write_rif_pkg_header(&mut self, rif: &RifInst) {
+        self.write_pkg_header(&rif.type_name);
+        // Extract all arrays
+        let mut names = Vec::new();
+        let mut vec_a = Vec::new();
+        for hw_reg in rif.hw_regs.values() {
+            if names.contains(&&hw_reg.group) {continue;}
+            if hw_reg.dim > 0 {
+                names.push(&hw_reg.group);
+                if hw_reg.port.is_in() {
+                    self.write(&format!("   type t_{0}_hw_a is array (natural range <>) of t_{0}_hw;\n", hw_reg.group));
+                }
+                if hw_reg.port.is_out() {
+                    self.write(&format!("   type t_{0}_sw_a is array (natural range <>) of t_{0}_sw;\n", hw_reg.group));
+                }
+            }
+            let hw_reg_def = rif.get_hw_reg(&hw_reg.group);
+            for f in hw_reg_def.fields.iter().filter(|f| f.array > 0) {
+                if vec_a.contains(&f.width) {continue;}
+                vec_a.push(f.width);
+            }
+        }
+        if !names.is_empty() {
+            self.write("\n");
+        }
+        if !vec_a.is_empty() {
+            vec_a.sort();
+            let mut sizes = vec_a.iter().peekable();
+            if let Some(1) = sizes.peek()  {
+                self.write("   type t_sla is array (natural range <>) of std_logic;\n");
+                sizes.next();
+            }
+            while let Some(s) = sizes.next() {
+                self.write(&format!("   type t_slv_a{s} is array (natural range <>) of std_logic_vector({} downto 0);\n", s-1));
+            }
+            self.write("\n");
+        }
+        vec_a.sort();
     }
 
     fn write_pkg_header(&mut self, name: &str) {
@@ -283,7 +336,7 @@ impl GeneratorHw for GeneratorVhdl {
                 if signal.name().ends_with("_W") {
                     self.core.write(&format!("{v:2}"))
                 } else if signal.def.kind==SignalKind::Unsigned(1) {
-                    self.core.write(&format!("{v}"))
+                    self.core.write(&format!("'{v}'"))
                 } else {
                     let n = (w+3)>>2;
                     self.core.write(&format!("{w}x\"{v:0n$x}\""))
@@ -292,6 +345,8 @@ impl GeneratorHw for GeneratorVhdl {
             LogicExpr::ValueI(v,w) => {
                 if matches!(signal.def.kind,SignalKind::Integer) {
                     self.core.write(&format!("{v}"))
+                } else if signal.def.kind==SignalKind::Unsigned(1) {
+                    self.core.write(&format!("'{v}'"))
                 } else {
                     let n = (w+3)>>2;
                     self.core.write(&format!("{w}x\"{v:0n$x}\""))
@@ -304,7 +359,7 @@ impl GeneratorHw for GeneratorVhdl {
 
     // Enums declaration
     fn write_enum_header(&mut self, name: &str, width: u8) {
-        self.write(&format!("   type {name} is (\""));
+        self.write(&format!("   type {name} is ("));
         self.enum_width = width;
     }
 
@@ -314,12 +369,12 @@ impl GeneratorHw for GeneratorVhdl {
         // Push encoding on stash
         let w = self.enum_width as usize;
         self.push_stash(0,&format!("{:0w$b}", entry.value));
-        self.write(if is_last {"\""} else {" "});
+        self.push_stash(0,if is_last {"\""} else {" "});
     }
 
     fn write_enum_footer(&mut self, name: &str, _width: u8) {
         self.write("   attribute ENUM_ENCODING : string;\n");
-        self.write(&format!("   attribute ENUM_ENCODING of {name} : type is \n"));
+        self.write(&format!("   attribute ENUM_ENCODING of {name} : type is \""));
         self.pop_stash(0);
         self.write(";\n\n");
     }
@@ -426,52 +481,42 @@ impl GeneratorHw for GeneratorVhdl {
 
     fn write_inst_header(&mut self, type_name: &str, inst_name: &str, params: &[(String, isize)]) {
         self.is_bridge = inst_name=="bridge";
-        self.write(&format!("   {type_name}"));
+        self.write(&format!("   i_{inst_name} : {type_name}\n"));
         if !params.is_empty() {
-            self.write("#(");
-            let mut iter = params.iter().map(|(_,v)| v).peekable();
-            while let Some(v) = iter.next() {
-                self.write(&format!("{v}"));
-                if iter.peek().is_some() {
-                    self.write(", ");
-                }
+            self.write("      generic map(\n");
+            let mut iter = params.iter().peekable();
+            while let Some((n,v)) = iter.next() {
+                let sep = if iter.peek().is_some() {","} else {""};
+                self.write(&format!("         {n} => {v}{sep}\n"));
             }
-            self.write(")");
+            self.write("      )\n");
         }
-        self.write(&format!(" i_{inst_name} ("));
-        if !self.is_bridge {
-            self.write("\n");
-        }
+        self.write("      port map(\n");
     }
 
     fn write_port_bind(&mut self, port_name: &str, signal_name: &str, is_last: bool) {
-        let eol = if self.is_bridge {" "} else {"\n"};
-        if port_name=="*" {
-            self.write(".*")
+        self.write(&format!("         {port_name} => {signal_name}"));
+        if !is_last {
+            self.write(",\n");
         } else {
-            if !self.is_bridge {
-                self.write("      ");
-            }
-            self.write(&format!(".{port_name}({signal_name})"));
-        }
-        if is_last {
-            self.write(eol);
-            if !self.is_bridge {
-                self.write("   ");
-            }
-            self.write(");\n\n");
-        } else {
-            self.write(",");
-            self.write(eol);
+            self.write("\n      );\n\n");
         }
     }
 
     fn write_intf_bind(&mut self, name: &str, is_last: bool) {
-        self.write(&format!("      .if_rif(if_{name})"));
-        if is_last {
-            self.write("\n   );\n\n");
-        } else {
-            self.write(",\n");
+        let port_list = RifIntfPorts::new(&Interface::Default, false);
+        let names = ["reg_err_addr_next", "reg_err_access_next"];
+        let mut ports = port_list.iter().filter(|p| !names.contains(&p.name())).peekable();
+        while let Some(port) = ports.next() {
+            let last = is_last && ports.peek().is_none();
+            let sig_name =
+                if name=="rif" {
+                    port.name().to_owned()
+                } else {
+                    let f = port.name().strip_prefix("reg_").unwrap_or(port.name());
+                    format!("reg_{name}_{f}")
+                };
+            self.write_port_bind(port.name(), &sig_name, last);
         }
     }
 
@@ -562,6 +607,31 @@ impl GeneratorHw for GeneratorVhdl {
         for (n,t) in self.outputs.items() {
             self.core.write(&format!("   signal {n}_l : {t};\n"));
             self.core.push_stash(0,&format!("   {n} <= {n}_l;\n"));
+        }
+
+        if !self.intf.is_default() {
+            self.write(&format!("\n   component bridge_vhd_{}_rif is\n", self.intf.name()));
+            self.write("      generic (ADDR_W : natural := 16; DATA_W : natural := 32; ASSUME_WR_OK : boolean := false);\n");
+            self.write("      port (\n");
+            self.write("         clk            : in  std_logic;\n");
+            self.write("         rst_n          : in  std_logic;\n");
+            let mut ports = RifIntfPorts::new(&Interface::Default, false);
+            let names = ["reg_err_addr_next", "reg_err_access_next"];
+            for port in ports.iter_mut().filter(|p| !names.contains(&p.name())) {
+                if port.name()=="reg_err_addr_next" || port.name()=="reg_err_access_next" {
+                    continue;
+                }
+                if port.dir == PortDir::In {port.dir = PortDir::Out;}
+                else {port.dir = PortDir::In;}
+                self.write_port_decl(port, None, false);
+            }
+            let intf_ports = RifIntfPorts::new(&self.intf, false);
+            let mut ports = intf_ports.iter().peekable();
+            while let Some(port) = ports.next() {
+                self.write_port_decl(port, None, ports.peek().is_none());
+            }
+            self.write("      );\n");
+            self.write(&format!("\n   end component bridge_vhd_{}_rif;\n", self.intf.name()));
         }
         self.write("\nbegin\n\n");
         self.pop_stash(0);
