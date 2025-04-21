@@ -22,6 +22,8 @@ pub struct GeneratorVhdl {
     enum_width : u8,
     /// True when current module instance is a bridge
     is_bridge : bool,
+    /// True when current module is a rifmux
+    is_rifmux : bool,
     /// Component interface
     intf : Interface,
     /// List of outputs port (needed to add intermediate signals)
@@ -41,13 +43,14 @@ impl GeneratorVhdl {
             addr_width: 16,
             enum_width: 0,
             is_bridge: false,
+            is_rifmux: false,
             outputs: OrderDict::new(),
             outputs_locked: false,
             intf: Interface::Default,
         }
     }
 
-    fn add_signal_def(&mut self, def: &SignalDef, prefix: Option<&String> ) {
+    fn write_signal_def(&mut self, def: &SignalDef, prefix: Option<&String> ) {
         let name = def.name.replace("__", "_");
         if let Some(prefix) = prefix {
             if let Some(base_name) = name.strip_prefix("rif_") {
@@ -59,10 +62,10 @@ impl GeneratorVhdl {
             self.core.write(&name);
         }
         self.core.write(" : ");
-        self.add_signal_kind(&def.kind, def.dim);
+        self.write_signal_kind(&def.kind, def.dim);
     }
 
-    fn add_signal_kind(&mut self, kind: &SignalKind, dim: u16) {
+    fn write_signal_kind(&mut self, kind: &SignalKind, dim: u16) {
         match kind {
             SignalKind::Signed(w) |
             SignalKind::Unsigned(w) => {
@@ -92,7 +95,7 @@ impl GeneratorVhdl {
 
     fn write_signal_seq(&mut self, id: &ExprId, val: &LogicExpr, lvl: usize) {
         self.write(&" ".repeat(3*lvl));
-        self.add_expr_id(id, LogicExprKind::Basic);
+        self.write_expr_id(id, LogicExprKind::Basic);
         self.write(" <= ");
         self.add_logic_expr(val, 0, LogicExprKind::Basic, false);
         self.write(";\n");
@@ -101,15 +104,15 @@ impl GeneratorVhdl {
     fn add_logic_expr(&mut self, expr: &LogicExpr, lvl: usize, kind: LogicExprKind, is_part: bool) {
         self.core.write(&" ".repeat(3*lvl));
         match expr {
-            LogicExpr::Id(expr_id) => self.add_expr_id(expr_id, kind),
+            LogicExpr::Id(expr_id) => self.write_expr_id(expr_id, kind),
             LogicExpr::Cast(cast_info, expr) => {
                 if let CastInfo::Custom(_, name) = cast_info {
                     self.core.write(name);
-                    self.core.write("'val(");
+                    self.core.write("'val(to_integer(unsigned(");
                 }
                 self.add_logic_expr(expr, 0, kind, false);
                 if cast_info.is_custom() {
-                    self.core.write(")");
+                    self.core.write(")))");
                 }
             }
             LogicExpr::ValueU(v, w) => {
@@ -133,7 +136,7 @@ impl GeneratorVhdl {
             }
             LogicExpr::Not(logic_expr) if kind==LogicExprKind::Bool => {
                 if let LogicExpr::Id(id) = &**logic_expr {
-                    self.add_expr_id(id, LogicExprKind::Basic);
+                    self.write_expr_id(id, LogicExprKind::Basic);
                     self.write(" = '0'");
                 } else {
                     self.core.write("not ");
@@ -213,14 +216,18 @@ impl GeneratorVhdl {
         if is_part {self.core.write(")");}
     }
 
-    fn add_expr_id(&mut self, expr: &ExprId, kind: LogicExprKind) {
+    fn write_expr_id(&mut self, expr: &ExprId, kind: LogicExprKind) {
+        let is_intf = expr.name.starts_with("if_") && self.is_rifmux;
         match kind {
             LogicExprKind::MathU => self.write("unsigned("),
             LogicExprKind::MathS => self.write("signed("),
             LogicExprKind::Bool  |
             LogicExprKind::Basic => {}
         }
-        let mut name = if expr.name == "if_rif" {"reg".to_owned()} else {expr.name.replace("__", "_")};
+        let mut name =
+            if expr.name == "if_rif" {"reg".to_owned()}
+            else if is_intf {expr.name.strip_prefix("if_").unwrap_or(&expr.name).to_owned()}
+            else {expr.name.replace("__", "_")};
         if self.outputs.contains_key(&expr.name) {
             name.push_str("_l");
         }
@@ -229,7 +236,10 @@ impl GeneratorVhdl {
             self.write(&format!("({idx})"));
         }
         if let Some(field) = &expr.field {
-            self.write(if expr.name == "if_rif" {"_"} else {"."});
+            self.write(
+                if expr.name == "if_rif" || is_intf {"_"}
+                else {"."}
+            );
             self.write(field);
         }
         if let Some(r) = &expr.range {
@@ -268,13 +278,21 @@ impl GeneratorHw for GeneratorVhdl {
         self.data_width = rif.data_width;
         self.outputs.clear();
         self.outputs_locked = false;
+        self.is_rifmux = false;
         self.intf = rif.interface.clone();
     }
 
     /// Set the width of address/data for current RIF
     fn set_rifmux_info(&mut self, rifmux: &RifmuxInst) {
+        self.is_rifmux = true;
         self.addr_width = rifmux.addr_width;
         self.data_width = rifmux.data_width;
+        self.intf = rifmux.interface.clone();
+    }
+
+    /// Set address width
+    fn set_addr_width(&mut self, width: u8) {
+        self.addr_width = width;
     }
 
     // Hooks for RIF package
@@ -315,7 +333,9 @@ impl GeneratorHw for GeneratorVhdl {
             }
             self.write("\n");
         }
-        vec_a.sort();
+        if !rif.enum_defs.is_empty() {
+            self.write("   attribute ENUM_ENCODING : string;\n");
+        }
     }
 
     fn write_pkg_header(&mut self, name: &str) {
@@ -329,7 +349,7 @@ impl GeneratorHw for GeneratorVhdl {
 
     fn write_const(&mut self, signal: &SignalDecl, value: LogicExpr) {
         self.write("   constant ");
-        self.add_signal_def(&signal.def, None);
+        self.write_signal_def(&signal.def, None);
         self.core.write(" := ");
         match &value {
             LogicExpr::ValueU(v,w) => {
@@ -373,7 +393,6 @@ impl GeneratorHw for GeneratorVhdl {
     }
 
     fn write_enum_footer(&mut self, name: &str, _width: u8) {
-        self.write("   attribute ENUM_ENCODING : string;\n");
         self.write(&format!("   attribute ENUM_ENCODING of {name} : type is \""));
         self.pop_stash(0);
         self.write(";\n\n");
@@ -386,7 +405,7 @@ impl GeneratorHw for GeneratorVhdl {
 
     fn write_struct_field(&mut self, field: &SignalDecl, _is_last: bool) {
         self.write("      ");
-        self.add_signal_def(&field.def, None);
+        self.write_signal_def(&field.def, None);
         self.write("; -- ");
         self.write(&field.desc);
         self.write("\n");
@@ -418,6 +437,22 @@ impl GeneratorHw for GeneratorVhdl {
     }
 
     fn write_port_decl(&mut self, port: &PortInfo, prefix: Option<&String>, is_last: bool) {
+        // Handle Rif Interface
+        if port.kind().custom_name() == "rif_if" {
+            let base_raw = port.name().strip_prefix("if_").unwrap_or(port.name());
+            let base = base_raw.trim();
+            let pad = " ".repeat(base_raw.len() - base.len());
+            for p in RifIntfPorts::new(&Interface::Default, false).iter() {
+                let n = p.name().strip_prefix("reg_").unwrap_or(p.name());
+                let d = if p.dir.is_in() {"out"} else {"in "};
+                let desc = p.desc.strip_prefix("Register ").unwrap_or(&p.desc);
+                self.write(&format!("   {base}_{n}{pad} : {d} "));
+                self.write_signal_kind(p.kind(), 0);
+                self.write(&format!("; -- {} {desc}\n", &port.desc));
+            }
+            return;
+        }
+
         //
         self.write("   ");
         let name =
@@ -448,7 +483,7 @@ impl GeneratorHw for GeneratorVhdl {
             }
             _ => {}
         }
-        self.add_signal_kind(port.kind(), port.dim());
+        self.write_signal_kind(port.kind(), port.dim());
         self.write(if is_last {"  "} else {"; "});
         if !port.desc.is_empty() {
             self.write("-- ");
@@ -459,7 +494,7 @@ impl GeneratorHw for GeneratorVhdl {
 
     fn write_signal_decl(&mut self, signal: &SignalDecl) {
         self.write("   signal ");
-        self.add_signal_def(&signal.def, None);
+        self.write_signal_def(&signal.def, None);
         self.write(";");
         if !signal.desc.is_empty() {
             self.write(" -- ");
@@ -474,7 +509,7 @@ impl GeneratorHw for GeneratorVhdl {
             self.write("   signal ");
             self.write(port.name());
             self.write(" : ");
-            self.add_signal_kind(port.kind(), port.dim());
+            self.write_signal_kind(port.kind(), port.dim());
             self.write(";\n");
         }
     }
@@ -522,7 +557,7 @@ impl GeneratorHw for GeneratorVhdl {
 
     fn write_assign(&mut self, lhs: ExprId, rhs: LogicExpr) {
         self.write("   ");
-        self.add_expr_id(&lhs, LogicExprKind::Basic);
+        self.write_expr_id(&lhs, LogicExprKind::Basic);
         self.write(" <= ");
         if rhs.has_comp() {
             self.write("'1' when ");
@@ -590,7 +625,7 @@ impl GeneratorHw for GeneratorVhdl {
 
     fn write_assign_comb(&mut self, lvl: usize, lhs: ExprId, rhs: LogicExpr) {
         self.write(&" ".repeat(3*lvl));
-        self.add_expr_id(&lhs, LogicExprKind::Basic);
+        self.write_expr_id(&lhs, LogicExprKind::Basic);
         self.write(" <= ");
         if rhs.has_comp() {
             self.write("'1' when ");
@@ -602,13 +637,16 @@ impl GeneratorHw for GeneratorVhdl {
         self.write(";\n");
     }
 
-    fn write_signal_decl_footer(&mut self) {
-        self.write("\n   -- Intermediate signals for output port --\n");
-        for (n,t) in self.outputs.items() {
-            self.core.write(&format!("   signal {n}_l : {t};\n"));
-            self.core.push_stash(0,&format!("   {n} <= {n}_l;\n"));
+    fn write_signal_decl_footer(&mut self, is_rif: bool) {
+        // For RIF: need to intermediate signal for output
+        if is_rif {
+            self.write("\n   -- Intermediate signals for output port --\n");
+            for (n,t) in self.outputs.items() {
+                self.core.write(&format!("   signal {n}_l : {t};\n"));
+                self.core.push_stash(0,&format!("   {n} <= {n}_l;\n"));
+            }
         }
-
+        // Optional bridge declaration
         if !self.intf.is_default() {
             self.write(&format!("\n   component bridge_vhd_{}_rif is\n", self.intf.name()));
             self.write("      generic (ADDR_W : natural := 16; DATA_W : natural := 32; ASSUME_WR_OK : boolean := false);\n");

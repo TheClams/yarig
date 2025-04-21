@@ -3,7 +3,10 @@ use crate::{
     rifgen::{ClkEn, FieldHwKind, Interface, ResetVal, Rif, SuffixInfo}
 };
 
-use super::{comp_inst::{ArrayIdx, RifFieldInst, RifPageInst}, reg_impl::{FieldImpl, HwRegs, MissingFieldInfo, RegImplDict}};
+use super::{
+    comp_inst::{RifFieldInst, RifPageInst},
+    reg_impl::{FieldImpl, HwRegs, MissingFieldInfo, RegImplDict}
+};
 
 /// Signal type: either a bit vector (signed or unsigned) or a custom type
 #[derive(Clone, Debug, PartialEq)]
@@ -285,12 +288,15 @@ pub enum PortDir {
 }
 
 impl PortDir {
+    /// True for intput port
     pub fn is_in(&self) -> bool {
         self == &PortDir::In
     }
+    /// True for output port
     pub fn is_out(&self) -> bool {
         self == &PortDir::Out
     }
+    /// True when direction is a modport (interface)
     pub fn is_modport(&self) -> bool {
         matches!(self, PortDir::Modport(_))
     }
@@ -471,16 +477,16 @@ impl RifIntfPorts {
                     ]
                 } else {
                     vec![
-                        PortInfo::new( "reg_addr".to_owned(), SignalKind::Address, PortDir::In, 0, "Register Address".to_owned()),
-                        PortInfo::new_in( "reg_en".to_owned()     , "Register Enable".to_owned()),
-                        PortInfo::new_in( "reg_rd_wrn".to_owned() , "Register write/not read".to_owned()),
-                        PortInfo::new("reg_wr_data".to_owned(), SignalKind::Data, PortDir::In , 0, "Register write data".to_owned()),
-                        PortInfo::new("reg_rd_data".to_owned(), SignalKind::Data, PortDir::Out, 0, "Register read data".to_owned()),
-                        PortInfo::new_out("reg_done".to_owned()      , "Register ready".to_owned()),
-                        PortInfo::new_out("reg_done_next".to_owned() , "Register ready next".to_owned()),
-                        PortInfo::new_out("reg_err_addr".to_owned()  , "Register address error".to_owned()),
-                        PortInfo::new_out("reg_err_addr_next".to_owned()  , "Register address error (combinatorial)".to_owned()),
-                        PortInfo::new_out("reg_err_access".to_owned(), "Register access error".to_owned()),
+                        PortInfo::new(    "reg_addr           ".to_owned(), SignalKind::Address, PortDir::In, 0, "Register address".to_owned()),
+                        PortInfo::new_in( "reg_en             ".to_owned(), "Register enable".to_owned()),
+                        PortInfo::new_in( "reg_rd_wrn         ".to_owned(), "Register write/not read".to_owned()),
+                        PortInfo::new(    "reg_wr_data        ".to_owned(), SignalKind::Data, PortDir::In , 0, "Register write data".to_owned()),
+                        PortInfo::new(    "reg_rd_data        ".to_owned(), SignalKind::Data, PortDir::Out, 0, "Register read data".to_owned()),
+                        PortInfo::new_out("reg_done           ".to_owned(), "Register ready".to_owned()),
+                        PortInfo::new_out("reg_done_next      ".to_owned(), "Register ready next".to_owned()),
+                        PortInfo::new_out("reg_err_addr       ".to_owned(), "Register address error".to_owned()),
+                        PortInfo::new_out("reg_err_addr_next  ".to_owned(), "Register address error (combinatorial)".to_owned()),
+                        PortInfo::new_out("reg_err_access     ".to_owned(), "Register access error".to_owned()),
                         PortInfo::new_out("reg_err_access_next".to_owned(), "Register access error (combinatorial)".to_owned()),
                     ]
                 }
@@ -561,8 +567,9 @@ impl SignalRange {
                 Some(SignalRange::new_bit(lsb))
             }
         } else if fallback {
-            if let ArrayIdx::Inst(idx,_) = field.array {
-                Some(SignalRange::new_bit(idx as u8))
+            // if let ArrayIdx::Inst(idx,_) = field.array {
+            if field.array.dim() > 0 {
+                Some(SignalRange::new_bit(field.array.idx() as u8))
             } else {
                 None
             }
@@ -931,11 +938,12 @@ impl LogicExpr {
     }
 
     pub fn is_comp(&self) -> bool {
-        matches!(*self, LogicExpr::Gte(_,_) | LogicExpr::Lte(_,_) | LogicExpr::Lt(_,_) | LogicExpr::Neq(_,_))
+        matches!(*self, LogicExpr::Gte(_,_) | LogicExpr::Lte(_,_) | LogicExpr::Lt(_,_) | LogicExpr::Neq(_,_) | LogicExpr::Eq(_,_))
     }
 
     pub fn has_comp(&self) -> bool {
         match self {
+            LogicExpr::Eq(_,_)  |
             LogicExpr::Neq(_,_)  |
             LogicExpr::Gte(_,_)  |
             LogicExpr::Lte(_,_)  |

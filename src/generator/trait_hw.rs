@@ -544,7 +544,7 @@ pub trait GeneratorHw : GeneratorBase {
             self.write_rif_decl(&comp_info, true, &rif.sw_clocking.clk, &rif.sw_clocking.rst.name);
         }
 
-        self.write_signal_decl_footer();
+        self.write_signal_decl_footer(true);
 
         // Add interface bridge to the internal rif_if
         // Nothing is done if already using rif_if
@@ -727,7 +727,7 @@ pub trait GeneratorHw : GeneratorBase {
                     let field_impl = reg_impl.get_field(&field.name)?;
                     let partial  = SignalRange::from_field(field, false);
                     let field_range = SignalRange::from_field(field, true);
-                    let field_name = self.casing(&field.name());
+                    let field_name = self.casing(&field.name);
                     let field_name_flat = self.casing(&field.name_flat());
                     let reg_field_name = format!("{group_name}{intr_suffix}{reg_idxf}_{field_name_flat}");
                     let field_id = if field_impl.is_local() && field.has_write_mod() && !reg.is_external() {
@@ -874,17 +874,17 @@ pub trait GeneratorHw : GeneratorBase {
                         let intr_info = reg_impl.intr_info(reg)?;
                         let group_name_base = reg.group_name.to_casing(Snake);
                         // Local signal where interrupt vector is and with the optional enable signals
-                        let intr_l  : ExprId = format!("{group_name}_l.{field_name}").into();
+                        let intr_l = ExprId::new_field_range(format!("{group_name}_l"), None, field_name.to_owned(), field_range);
 
-                        let mut rhs : LogicExpr = format!("{group_name_base}.{field_name}").into();
+                        let mut rhs : LogicExpr = (ExprId::from((group_name_base, field_name.clone()))).into();
                         if intr_info.enable.is_some() {
-                            let en : LogicExpr = format!("rif_{group_name}_en.{field_name}").into();
-                            rhs = LogicExpr::and_b(rhs.clone(), en);
+                            let en : ExprId = (format!("rif_{group_name}_en"), field_name.clone()).into();
+                            rhs = LogicExpr::and_b(rhs.clone(), en.into());
                         }
                         self.write_assign(intr_l.clone(), rhs);
                         // Next interrupt state
                         let intr_l = LogicExpr::Id(intr_l); // Convert ExprId into LogicExpr
-                        let intr_d1 : LogicExpr = format!("{group_name}_d1.{field_name}").into();
+                        let intr_d1 : LogicExpr = (ExprId::from((format!("{group_name}_d1"), field_name.clone()))).into();
                         let intr_set : LogicExpr = match field.intr_trig(intr_info.trigger) {
                             InterruptTrigger::High    => intr_l,
                             InterruptTrigger::Low     => LogicExpr::not_b(intr_l),
@@ -1169,14 +1169,16 @@ pub trait GeneratorHw : GeneratorBase {
                         if !field_impl.is_hw_write() && !field_impl.is_sw_write() {
                             continue;
                         }
-                        let field_name = self.casing(&field.name());
+                        let field_name = self.casing(&field.name);
                         let field_name_flat = self.casing(&field.name_flat());
-                        let field_range = SignalRange::from_field(field, true);
+                        let field_idx = if field.array.dim() > 0 {
+                            Some(SignalRange::new_bit(field.array.idx() as u8))
+                        } else {None};
                         let field_cast = field_impl.hdl_cast(&rif_pkg_name, &reg.reg_type);
                         let suffix_idx = field.partial_suffix();
                         let reg_field_name = format!("{group_name}{intr_suffix}{reg_idxf}_{field_name_flat}");
                         let field_id = if field_impl.is_local() && field.has_write_mod() && !reg.is_external() {
-                            ExprId::new_range(format!("{reg_field_name}__reg"), None/*SignalRange::from_field(field, false)*/)
+                            ExprId::new_range(format!("{reg_field_name}__reg"), None)
                         } else if field.is_password() {
                             ExprId::new_field_range(
                                 format!("rif_{group_name}{intr_suffix}"), reg_idx,
@@ -1184,7 +1186,7 @@ pub trait GeneratorHw : GeneratorBase {
                         } else {
                             ExprId::new_field_range(
                                 format!("rif_{group_name}{intr_suffix}"), reg_idx,
-                                field_name.clone(), None/*field_range.clone()*/)
+                                field_name.clone(), field_idx.clone())
                         };
                         // Get clock associated with the field
                         let f_clk =
@@ -1234,7 +1236,7 @@ pub trait GeneratorHw : GeneratorBase {
                         // Prevent counter update on saturation when increment/decrement is 1
                         if let Some(cnt_info) = field.counter_info() {
                             if cnt_info.sat && cnt_info.incr_val <= 1 && cnt_info.decr_val <= 1 {
-                                let sat = group_id.with_path(format!("{field_name}_event"), field_range);
+                                let sat = group_id.with_path(format!("{field_name}_event"), field_idx);
                                 let not_sat = LogicExpr::not(sat.into());
                                 if let Some(e) = &mut enable_expr {
                                     *e = LogicExpr::and((*e).clone(), not_sat);
@@ -1461,7 +1463,7 @@ pub trait GeneratorHw : GeneratorBase {
                 let mut values : Vec<LogicExpr> = Vec::with_capacity(nb_fields+1);
                 for field in fields {
                     let field_impl = reg_impl.get_field(&field.name)?;
-                    let field_name = field.name().to_casing(Snake);
+                    let field_name = field.name.to_casing(Snake);
                     // Fill register spaces with 0s
                     let spaces = prev_lsb.saturating_sub(field.msb()+1);
                     if spaces != 0 {
@@ -1605,8 +1607,11 @@ pub trait GeneratorHw : GeneratorBase {
                 format!("if_{:<1$}", comp.get_name(), name_len),
                 "rif_if".to_owned(), "ctrl".to_owned(),
                 comp.get_desc_short().to_owned());
+            self.set_addr_width(comp.get_addr_width());
             self.write_port_decl(&port, None, false);
         }
+        self.set_addr_width(rifmux.addr_width);
+        // Add top interface and close module declaration
         self.write_intf_ports(&rifmux.interface);
         self.write_module_decl_footer(&rifmux_name);
         self.write("\n");
@@ -1618,43 +1623,49 @@ pub trait GeneratorHw : GeneratorBase {
             "addr_invalid_next".to_owned(),
             "Combinatorial version of addr_invalid".to_owned()));
 
-        // Add interface bridge when not default
         let comp_info : CompInfo = rifmux.into();
+        if !rifmux.interface.is_default() {
+            self.write_rif_decl(&comp_info, true, &rifmux.sw_clocking.clk, &rifmux.sw_clocking.rst.name);
+        }
+        self.write_signal_decl_footer(false);
+        // Add interface bridge when not default
         self.write_intf_bridge(&rifmux.interface, &comp_info, &rifmux.sw_clocking.clk, &rifmux.sw_clocking.rst.name);
 
         // Address demultiplexing
         self.write_comment_box("Demux access");
         let msb = rifmux.addr_width - 1;
         let mut en_names : Vec<LogicExpr> = Vec::new();
+        let rif_addr : ExprId = ("if_rif","addr").into();
         for comp in rifmux.components.iter() {
             let name = comp.get_name();
             let width = comp.get_addr_width();
             let range = Some(SignalRange::new(width, msb));
             let addr_v = LogicExpr::eq(
                 ("if_rif", "addr", range).into(),
-               format!("{}", comp.addr >> width).into());
+                LogicExpr::ValueU((comp.addr >> width) as u128, (msb-width+1) as usize)
+            );
             self.write_comment(1, &name.to_casing(Casing::Title));
-            let pad_len = name_len + 11 - name.len();
+            let pad = name_len + 7 - name.len();
             // Enable: rif_en & addr_v
-            let en = format!("if_{name}.en");
+            let en : ExprId = (format!("if_{name}"),"en".to_owned()).into();
             self.write_assign(
-                format!("{en:<0$}", name_len+11).into(),
+                en.with_path(format!("{:<pad$}","en"), None),
                 LogicExpr::And(vec![("if_rif","en").into(), addr_v.clone()]));
             // Force address to 0 when not valid
             self.write_assign(
-                format!("if_{name}.addr{0:<1$}", "", pad_len-8).into(),
+                en.with_path(format!("{:<pad$}","addr"), None),
                 LogicExpr::ite(
                     addr_v,
-                    format!("if_rif.addr[{}:0]", width-1).into(),
+                    rif_addr.with_range(SignalRange::new(0, width-1)).into(),
                     LogicExpr::ValueU(0, width.into())
                 )
             );
             // Direct copy data & rd_wrn on the interface
             self.write_assign(
-                format!("if_{name}.wr_data{0:<1$}", "", pad_len-11).into(),
-                "if_rif.wr_data".into());
+                en.with_path(format!("{:<pad$}","wr_data"), None),
+                ("if_rif","wr_data").into());
             self.write_assign(
-                format!("if_{name}.rd_wrn{0:<1$}", "", pad_len-10).into(),
+                en.with_path(format!("{:<pad$}","rd_wrn"), None),
                 ("if_rif","rd_wrn").into());
             // Save enable list for later
             en_names.push(en.into());
@@ -1678,17 +1689,27 @@ pub trait GeneratorHw : GeneratorBase {
 
         let mut dones : Vec<LogicExpr> = ["addr_invalid".into()].to_vec();
         dones.extend(rifmux.components.iter()
-            .map(|c| LogicExpr::from(
-                format!("if_{}.done{:<2$}", c.get_name(), "", name_len-c.get_name().len())))
+            .map(|c| {
+                let id : ExprId = (
+                    format!("if_{}", c.get_name()),
+                    format!("{0:<1$}", "done", name_len-c.get_name().len()+4)
+                    ).into();
+                LogicExpr::from(id)
+            })
         );
-        self.write_assign("if_rif.done".into(), LogicExpr::Or(dones));
+        self.write_assign(("if_rif","done").into(), LogicExpr::Or(dones));
 
         let mut dones : Vec<LogicExpr> = ["addr_invalid_next".into()].to_vec();
         dones.extend(rifmux.components.iter()
-            .map(|c| LogicExpr::from(
-                format!("if_{}.done_next{:<2$}", c.get_name(), "", name_len-c.get_name().len())))
+            .map(|c| {
+                let id : ExprId = (
+                    format!("if_{}", c.get_name()),
+                    format!("{0:<1$}", "done_next", name_len-c.get_name().len()+9)
+                    ).into();
+                LogicExpr::from(id)
+            })
         );
-        self.write_assign("if_rif.done_next".into(), LogicExpr::Or(dones));
+        self.write_assign(("if_rif","done_next").into(), LogicExpr::Or(dones));
         self.write("\n");
 
         self.write_rifmux_muxfb(&rifmux.components, "rd_data", name_len, (0, rifmux.data_width.into()));
@@ -1700,24 +1721,21 @@ pub trait GeneratorHw : GeneratorBase {
         self.write_module_impl_footer(&rifmux_name);
 
         // Write file
-        self.save(&format!("{}.sv", rifmux_name))
+        self.save(&format!("{}.{}", rifmux_name, Self::EXT))
     }
 
     fn write_rifmux_muxfb(&mut self, comps: &[CompInst], name: &str, len: usize, err_val: (usize,usize)) {
         let suffix = if name.ends_with("_next") {"_next"} else {""};
         let mut rhs = LogicExpr::Ite(Vec::new(), Box::new(LogicExpr::ValueU(err_val.0 as u128, err_val.1)));
         for (i,comp) in comps.iter().enumerate() {
-            let top = comp.get_name();
-            let pad = len - top.len();
+            let top : ExprId = format!("if_{}",comp.get_name()).into();
+            let pad = len - comp.get_name().len();
             rhs.add_ite(
-                format!("if_{top}.done{suffix}{:<pad$}", "").into(),
-                format!("if_{top}.{name}{:<pad$}", "").into(),
+                top.with_path(format!("done{0:<1$}", suffix, pad+suffix.len()), None).into(),
+                top.with_path(format!("{0:<1$}", name, pad+name.len()), None).into(),
             );
         }
-        self.write_assign(
-            format!("if_rif.{name}").into(),
-            rhs
-        );
+        self.write_assign(("if_rif",name).into(),rhs);
     }
 
     fn gen_riftop(&mut self, rifmux: &RifmuxInst) -> Result<(), Box<dyn std::error::Error>> {
@@ -1843,7 +1861,7 @@ pub trait GeneratorHw : GeneratorBase {
         self.write_module_impl_footer(&riftop_name);
 
         // Write file
-        self.save(&format!("{}.sv", riftop_name))
+        self.save(&format!("{}.{}", riftop_name, Self::EXT))
     }
 
     fn write_intf_ports(&mut self, intf: &Interface) {
@@ -1882,6 +1900,7 @@ pub trait GeneratorHw : GeneratorBase {
     /// Save information for the current RIF
     fn set_rif_info(&mut self, rif: &RifInst) {}
     fn set_rifmux_info(&mut self, rifmux: &RifmuxInst) {}
+    fn set_addr_width(&mut self, width: u8) {}
 
     //----------------------------------
     // Generic functions
@@ -1896,7 +1915,7 @@ pub trait GeneratorHw : GeneratorBase {
     fn write_struct_footer(&mut self, name: &str) {}
     fn write_module_decl_header(&mut self, name: &str) {}
     fn write_module_decl_footer(&mut self, name: &str) {}
-    fn write_signal_decl_footer(&mut self) {}
+    fn write_signal_decl_footer(&mut self, is_rif: bool) {}
     fn write_module_impl_footer(&mut self, name: &str) {}
     fn write_port_decl(&mut self, port: &PortInfo, prefix: Option<&String>, is_last: bool) {}
     fn write_rif_decl(&mut self, comp: &CompInfo, single: bool, clk: &str, rst: &str) {}
