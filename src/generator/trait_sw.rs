@@ -84,7 +84,7 @@ pub trait GeneratorSw : GeneratorBase {
         self.write_rif_header(rif, base_addr);
         let rif_name = remove_rif(&rif.type_name);
         let nb_byte = (rif.data_width >> 3) as u64;
-        let is_public = self.setting().privacy.is_public();
+        let is_public = self.is_public();
         // Declare types for enum
         if Self::HAS_ENUM {
             for def in rif.enum_defs.iter().filter(|d| !d.name.starts_with("doc:")) {
@@ -225,7 +225,7 @@ pub trait GeneratorSw : GeneratorBase {
     fn write_reg_footer(&mut self,  basename: &str, reg: &RifRegInst, is_last: bool) {}
 
     fn write_fields_decl(&mut self, rif: &RifInst, basename: &str, reg: &RifRegInst) {
-        let is_public = self.setting().privacy.is_public();
+        let is_public = self.is_public();
         let mut fields = reg.fields.iter().filter(|f| !(f.visibility.is_hidden() && is_public)).peekable();
         let mut pos_l = 0;
         while let Some(f) = fields.next() {
@@ -257,7 +257,7 @@ pub trait GeneratorSw : GeneratorBase {
     fn get_field_iter<'a>(&self, reg: &'a RifRegInst, ) -> impl std::iter::Iterator<Item = &'a RifFieldInst> {
         reg.fields.iter()
             .filter(|f| {
-                !(f.visibility.is_hidden() && self.setting().privacy.is_public())
+                !(f.visibility.is_hidden() && self.is_public())
             })
             .peekable()
     }
@@ -331,7 +331,7 @@ pub trait GeneratorSw : GeneratorBase {
                     self.set_rif_info(r);
                     let mut pages = r.pages.iter().peekable();
                     while let Some(page) = pages.next() {
-                        let desc = if page.description.is_empty() {&r.description} else {&page.description};
+                        let desc = if page.description.is_empty(self.is_public()) {&r.description} else {&page.description};
                         let cntxt = RifContext::new(&prefix, &comp.group, &page.name, page.addr + addr);
                         self.write_rif_inst(r, cntxt, desc, pages.peek().is_none(), last_comp);
                         if !Self::INST_BY_PAGE {

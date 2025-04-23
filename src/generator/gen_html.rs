@@ -96,7 +96,7 @@ impl GeneratorDoc for GeneratorHtml {
         self.write("</h1>\n");
     }
 
-    fn write_page_title(&mut self, idx_rif: (&str,usize), idx_page: (&str, usize), desc: (&str, Option<&str>)) {
+    fn write_page_title(&mut self, idx_rif: (&str,usize), idx_page: (&str, usize), desc: (String, Option<String>)) {
         if !self.multipage {
             return;
         }
@@ -105,11 +105,11 @@ impl GeneratorDoc for GeneratorHtml {
         if desc.0.is_empty() {
             self.write(&idx_page.0.to_casing(Casing::Title));
         } else {
-            self.write(desc.0);
+            self.write(&desc.0);
         }
         self.write("</h2>\n");
         if let Some(desc_detail) = desc.1 {
-            self.write_info(desc_detail);
+            self.write_info(&desc_detail);
         }
     }
 
@@ -219,7 +219,7 @@ impl GeneratorDoc for GeneratorHtml {
         desc.push_str("<table class=\"noborders\">\n");
         for entry in def.values.iter() {
             let entry_name = self.sanitize(&entry.name);
-            let entry_desc = self.sanitize(entry.description.get());
+            let entry_desc = self.sanitize(&entry.description.get(self.is_public()));
             desc.push_str(&format!("   <tr><td class=\"enum-name\">{}&nbsp;({entry_name})</td>", entry.value));
             desc.push_str(&format!("<td width=\"*\" class=\"enum-desc\">{entry_desc}</td></tr>\n"));
         }

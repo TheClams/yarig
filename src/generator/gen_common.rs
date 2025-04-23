@@ -60,7 +60,7 @@ impl<'a> RifList<'a> {
                     self.scan(c, true, addr)
                 },
                 Comp::Rif(c) => {
-                    let info = (addr, c.inst_name.to_owned(), c.description.get_short().to_owned());
+                    let info = (addr, c.inst_name.to_owned(), c.description.get_short(false));
                     if let Some(ri) = self.0.iter_mut().find(|x| x.0.type_name==c.type_name) {
                         ri.1.push(info);
                     } else {
@@ -296,6 +296,11 @@ pub trait GeneratorBase {
     /// Get reference to the core generator
     fn setting(&self) -> &GeneratorBaseSetting {
         &self.core().setting
+    }
+
+    /// True when privacy setting is set to Public
+    fn is_public(&self) -> bool {
+        self.core().setting.privacy.is_public()
     }
 
     /// Write a string in main buffer

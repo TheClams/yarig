@@ -130,8 +130,8 @@ impl CompInst {
         self.inst.get_addr_width()
     }
 
-    pub fn get_desc_short(&self) -> &str {
-        self.inst.get_desc_short()
+    pub fn get_desc_short(&self, is_public: bool) -> String {
+        self.inst.get_desc_short(is_public)
     }
 
     pub fn full_addr(&self, groups: &[RifmuxGroupInst]) -> u64 {
@@ -340,7 +340,7 @@ impl RifInst {
             addr_width: rif.addr_width,
             data_width: rif.data_width.value(),
             enum_defs,
-            description: if description.is_empty() {rif.description.clone()} else {description},
+            description: if description.is_empty(false) {rif.description.clone()} else {description},
             base_description: rif.description.no_dollar(),
             pages,
             reg_impl_defs, hw_regs,
@@ -737,7 +737,7 @@ impl RifRegInst {
         if let RegInstArgs::Intr(kind,idx,_) = args {
             let info = if kind.is_derived() {def.interrupt[idx].get_rst_desc(kind)} else {None};
             if let Some(info) = info {
-                if !info.1.is_empty() {
+                if !info.1.is_empty(false) {
                     r.base_description = info.1.no_dollar();
                     r.description = info.1.interpolate(idx as u16);
                 }
@@ -911,8 +911,8 @@ impl RifRegInst {
     }
 
     /// Return a one-line description of the register
-    pub fn get_desc_short(&self) -> &str {
-        self.description.get_short()
+    pub fn get_desc_short(&self, is_public: bool) -> String {
+        self.description.get_short(is_public)
     }
 
     /// True when register is defined as an array
@@ -1009,7 +1009,7 @@ impl RifFieldInst {
                     InterruptRegKind::Pending => &intr_desc.pending,
                     _ => &field.description
                 }.to_owned();
-                if desc_.is_empty() {field.description.to_owned()} else {desc_}
+                if desc_.is_empty(false) {field.description.to_owned()} else {desc_}
             } else {
                 field.description.with_format(&format_str)
             };
@@ -1411,11 +1411,11 @@ impl Comp {
         }
     }
 
-    pub fn get_desc_short(&self) -> &str {
+    pub fn get_desc_short(&self, is_public: bool) -> String {
         match self {
-            Comp::Rifmux(r)   => r.description.get_short(),
-            Comp::Rif(r)      => r.description.get_short(),
-            Comp::External(r) => r.description.get_short(),
+            Comp::Rifmux(r)   => r.description.get_short(is_public),
+            Comp::Rif(r)      => r.description.get_short(is_public),
+            Comp::External(r) => r.description.get_short(is_public),
         }
     }
 

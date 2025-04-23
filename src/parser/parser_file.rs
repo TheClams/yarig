@@ -9,10 +9,12 @@ use winnow::Parser;
 use crate::error::{RifError, RifErrorKind, ERROR_CONTEXT};
 use crate::parser::parser_expr::parse_expr;
 use crate::parser::{
-    bool_or_default, clk_en, enum_kind, generic_def, intr_desc, limit_def, password_info, path_val, reg_incl_or_decl, reg_inst_array_properties, reg_inst_properties, reg_pulse_info, rif_inst_suffix, rifmux_group, rifmux_map, signal_or_expr, val_isize, val_u16
+    bool_or_default, clk_en, enum_kind, generic_def, intr_desc, is_hidden, limit_def, password_info, path_val,
+    reg_incl_or_decl, reg_inst_array_properties, reg_inst_properties, reg_pulse_info, rif_inst_suffix, rifmux_group, rifmux_map, signal_or_expr, val_isize, val_u16
 };
 use crate::rifgen::{
-    Access, ClockingInfo, Context, DataWidth, EnumDef, EnumKind, ExternalKind, Field, FieldHwKind, FieldSwKind, Interface, InterruptInfo, Lock, OverrideIndex, RegDef, RegDefOrIncl, RegInst, RegPulseKind, ResetDef, Rif, RifPage, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility
+    Access, ClockingInfo, Context, DataWidth, EnumDef, EnumKind, ExternalKind, Field, FieldHwKind, FieldSwKind,
+    Interface, InterruptInfo, Lock, OverrideIndex, RegDef, RegDefOrIncl, RegInst, RegPulseKind, ResetDef, Rif, RifPage, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility
 };
 
 use super::{
@@ -37,6 +39,7 @@ pub struct RifGenSrc {
     pub top: RifGenTop,
     pub rifs: HashMap<String, Rif>,
     pub rifmux: HashMap<String, Rifmux>,
+    last_hidden: bool,
     last_data_width: DataWidth,
     last_obj: String,
     last_group: String,
@@ -81,6 +84,7 @@ impl RifGenSrc {
             top: RifGenTop::None,
             rifs: HashMap::new(),
             rifmux: HashMap::new(),
+            last_hidden: false,
             last_data_width: DataWidth::default(),
             last_obj: "".to_owned(),
             last_group: "".to_owned(),
@@ -220,8 +224,10 @@ impl RifGenSrc {
                     let info = rif_properties_or_item(&mut l)?;
                     match info {
                         Context::Description => {
+                            self.last_hidden = is_hidden(&mut l)?;
                             if !l.is_empty() {
-                                self.last_rif().description.updt(desc(l)?);
+                                let hidden = self.last_hidden;
+                                self.last_rif().description.updt(desc(l)?, hidden);
                             }
                             context_stack.push((Context::Description, ilvl + 1));
                             desc_lvl = 0;
@@ -267,7 +273,8 @@ impl RifGenSrc {
                         Context::Item(name) => {
                             self.last_rif().pages.push(RifPage::new(name));
                             if !l.is_empty() {
-                                self.last_page_mut().description.updt(desc(l)?);
+                                let hidden = self.last_hidden;
+                                self.last_page_mut().description.updt(desc(l)?, hidden);
                             }
                             context_stack.push((Context::Page, ilvl + 1));
                         }
@@ -297,8 +304,10 @@ impl RifGenSrc {
                     match info {
                         Context::BaseAddress => self.last_page_mut().addr = val_u64(&mut l)?,
                         Context::Description => {
+                            self.last_hidden = is_hidden(&mut l)?;
                             if !l.is_empty() {
-                                self.last_page_mut().description.updt(desc(l)?);
+                                let hidden = self.last_hidden;
+                                self.last_page_mut().description.updt(desc(l)?, hidden);
                             }
                             context_stack.push((Context::Description, ilvl + 1));
                             desc_lvl = 0;
@@ -359,8 +368,10 @@ impl RifGenSrc {
                     match info {
                         Context::Info => context_stack.push((Context::Info, ilvl + 1)),
                         Context::Description => {
+                            self.last_hidden = is_hidden(&mut l)?;
                             if !l.is_empty() {
-                                self.last_reg_mut().description.updt(desc(l)?);
+                                let hidden = self.last_hidden;
+                                self.last_reg_mut().description.updt(desc(l)?, hidden);
                             }
                             context_stack.push((Context::Description, ilvl + 1));
                             desc_lvl = 0;
@@ -368,15 +379,19 @@ impl RifGenSrc {
                         Context::DescIntrEnable
                         | Context::DescIntrMask
                         | Context::DescIntrPending => {
+                            self.last_hidden = is_hidden(&mut l)?;
                             if !l.is_empty() {
-                                self.last_reg_mut().desc_intr_updt(&info, "", desc(l)?)?;
+                                let hidden = self.last_hidden;
+                                self.last_reg_mut().desc_intr_updt(&info, "", desc(l)?, hidden)?;
                             }
                             context_stack.push((info, ilvl + 1));
                         }
                         Context::PathStart(name) => {
                             let info_desc = intr_desc(&mut l)?;
+                            self.last_hidden = is_hidden(&mut l)?;
                             if !l.is_empty() {
-                                self.last_reg_mut().desc_intr_updt(&info_desc, &name, desc(l)?)?;
+                                let hidden = self.last_hidden;
+                                self.last_reg_mut().desc_intr_updt(&info_desc, &name, desc(l)?, hidden)?;
                             }
                             context_stack.push((info_desc, ilvl + 1));
                         }
@@ -452,8 +467,10 @@ impl RifGenSrc {
                     let info = field_properties(&mut l)?;
                     match info {
                         Context::Description => {
+                            self.last_hidden = is_hidden(&mut l)?;
                             if !l.is_empty() {
-                                self.last_field_mut().description.updt(desc(l)?);
+                                let hidden = self.last_hidden;
+                                self.last_field_mut().description.updt(desc(l)?, hidden);
                             }
                             context_stack.push((Context::Description, ilvl + 1));
                             desc_lvl = 0;
@@ -461,7 +478,12 @@ impl RifGenSrc {
                         Context::DescIntrEnable
                         | Context::DescIntrMask
                         | Context::DescIntrPending => {
-                            self.last_field_mut().desc_intr_updt(&info, desc(l)?)
+                            self.last_hidden = is_hidden(&mut l)?;
+                            if !l.is_empty() {
+                                let hidden = self.last_hidden;
+                                self.last_field_mut().desc_intr_updt(&info, desc(l)?, hidden);
+                            }
+                            context_stack.push((info, ilvl + 1));
                         }
                         Context::HwClock => {
                             self.last_field_mut().clk = Some(identifier_last(l)?.to_owned())
@@ -532,13 +554,14 @@ impl RifGenSrc {
                         Context::Enum => {
                             let regname = self.last_reg().get_group_name().to_owned();
                             let enum_kind = EnumKind::new( enum_kind(&mut l)?, &regname, &self.last_field_mut().name);
-                            let mut desc = desc(l)?;
+                            let mut desc = (desc(l)?).to_owned();
                             if let Some(enum_name) = enum_kind.name() {
                                 if !self.last_rif().enum_defs.iter().any(|d| d.name==enum_name) {
+                                    // set the enum description to the one from the field if none was provided
                                     if desc.is_empty() {
-                                        desc = self.last_field_mut().description.get_short();
+                                        desc = self.last_field_mut().description.get_short(true);
                                     }
-                                    let enum_def = EnumDef::new(enum_name.to_owned(), desc.to_owned());
+                                    let enum_def = EnumDef::new(enum_name.to_owned(), desc);
                                     last_enum = Some(enum_def.name.to_owned());
                                     self.last_rif().enum_defs.push(enum_def);
                                     context_stack.push((Context::Enum, ilvl + 1));
@@ -565,21 +588,28 @@ impl RifGenSrc {
                     }
                     // if desc_lvl!=ilvl {println!("Description: {l} | Base indent = {desc_lvl} vs {ilvl}")};
                     txt.push_str(desc(l)?);
+                    let hidden = self.last_hidden;
                     match context_stack.get(context_stack.len() - 2) {
-                        Some((Context::Rifmux, _))  => self.last_rifmux().description.updt(&txt),
-                        Some((Context::Rif, _))     => self.last_rif().description.updt(&txt),
-                        Some((Context::Page, _))    => self.last_page_mut().description.updt(&txt),
-                        Some((Context::RegDecl, _)) => self.last_reg_mut().description.updt(&txt),
-                        Some((Context::Field, _))   => self.last_field_mut().description.updt(&txt),
-                        Some((Context::RifInst, _)) => self.last_rif_inst().description.updt(&txt),
-                        Some((Context::RegInst, _)) => self.last_reg_inst().desc_updt(&ovr_idx, &txt),
+                        Some((Context::Rifmux, _))  => self.last_rifmux().description.updt(&txt, hidden),
+                        Some((Context::Rif, _))     => self.last_rif().description.updt(&txt, hidden),
+                        Some((Context::Page, _))    => self.last_page_mut().description.updt(&txt, hidden),
+                        Some((Context::RegDecl, _)) => self.last_reg_mut().description.updt(&txt, hidden),
+                        Some((Context::Field, _))   => self.last_field_mut().description.updt(&txt, hidden),
+                        Some((Context::RifInst, _)) => self.last_rif_inst().description.updt(&txt, hidden),
+                        Some((Context::RegInst, _)) => self.last_reg_inst().desc_updt(&ovr_idx, &txt, hidden),
                         _ => unreachable!(), // Should never fail
                     }
                 }
                 Context::DescIntrEnable |
                 Context::DescIntrMask |
                 Context::DescIntrPending => {
-                    self.last_reg_mut().desc_intr_updt(&cntxt.0, "", desc(l)?)?;
+                    let hidden = self.last_hidden;
+                    match context_stack.get(context_stack.len() - 2) {
+                        Some((Context::RegDecl, _)) => self.last_reg_mut().desc_intr_updt(&cntxt.0, "", desc(l)?, hidden)?,
+                        Some((Context::Field, _))   => self.last_field_mut().desc_intr_updt(&cntxt.0, desc(l)?, hidden),
+                        _ => unreachable!(), // Should never fail
+                    }
+
                 }
                 Context::Info => {
                     match context_stack.get(context_stack.len() - 2) {
@@ -617,8 +647,10 @@ impl RifGenSrc {
                     let info = rifmux_properties(&mut l)?;
                     match info {
                         Context::Description => {
+                            self.last_hidden = is_hidden(&mut l)?;
                             if !l.is_empty() {
-                                self.last_rifmux().description.updt(desc(l)?);
+                                let hidden = self.last_hidden;
+                                self.last_rifmux().description.updt(desc(l)?, hidden);
                             }
                             context_stack.push((Context::Description, ilvl + 1));
                         }
@@ -690,8 +722,10 @@ impl RifGenSrc {
                     let info = reg_inst_properties(&mut l)?;
                     match info {
                         Context::Description => {
+                            self.last_hidden = is_hidden(&mut l)?;
                             if !l.is_empty() {
-                                self.last_reg_inst().desc_updt(&ovr_idx, desc(l)?);
+                                let hidden = self.last_hidden;
+                                self.last_reg_inst().desc_updt(&ovr_idx, desc(l)?, hidden);
                             }
                             context_stack.push((Context::Description, ilvl + 1));
                         }
@@ -714,8 +748,10 @@ impl RifGenSrc {
                             let info = reg_inst_array_properties(&mut l)?;
                             match info {
                                 Context::Description => {
+                                    self.last_hidden = is_hidden(&mut l)?;
                                     if !l.is_empty() {
-                                        self.last_reg_inst().desc_updt(&ovr_idx, desc(l)?);
+                                        let hidden = self.last_hidden;
+                                        self.last_reg_inst().desc_updt(&ovr_idx, desc(l)?, hidden);
                                     }
                                     context_stack.push((Context::Description, ilvl + 1));
                                 }
@@ -772,8 +808,10 @@ impl RifGenSrc {
                     let info = rif_inst_properties(&mut l)?;
                     match info {
                         Context::Description => {
+                            self.last_hidden = is_hidden(&mut l)?;
                             if !l.is_empty() {
-                                self.last_rif_inst().description.updt(desc(l)?);
+                                let hidden = self.last_hidden;
+                                self.last_rif_inst().description.updt(desc(l)?, hidden);
                             }
                             context_stack.push((Context::Description, ilvl + 1));
                         }
@@ -869,8 +907,10 @@ impl RifGenSrc {
         let info = reg_inst_field_properties(line)?;
         match info {
             Context::Description => {
+                self.last_hidden = is_hidden(line)?;
                 if !line.is_empty() {
-                    self.last_reg_inst().desc_updt(ovr_idx, desc(line)?);
+                    let hidden = self.last_hidden;
+                    self.last_reg_inst().desc_updt(ovr_idx, desc(line)?, hidden);
                 }
                 context_stack.push((Context::Description, ilvl + 1));
             }

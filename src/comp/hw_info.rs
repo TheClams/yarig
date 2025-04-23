@@ -412,7 +412,7 @@ impl PortList {
             let pkg_base = if let Some(pkg) = &hw_reg_def.pkg {pkg} else {&rif_pkg_name};
             let pkg_name = format!("{}_pkg", pkg_base.to_casing(Casing::Snake));
             let group_type = hw_reg.group.to_casing(Casing::Snake);
-            let desc = hw_reg_def.description.get_short();
+            let desc = hw_reg_def.description.get_short(false);
             if hw_reg.port.is_in() {
                 let port = PortInfo::new(
                     group_name.to_owned(),

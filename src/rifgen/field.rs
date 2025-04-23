@@ -1079,7 +1079,7 @@ impl Field {
     }
 
     /// Update an interrupt description
-    pub fn desc_intr_updt(&mut self, cntxt: &Context, desc: &str) {
+    pub fn desc_intr_updt(&mut self, cntxt: &Context, desc: &str, is_private: bool) {
         if self.intr_desc.is_none() {
             self.intr_desc = Some(InterruptDesc::default());
         }
@@ -1089,7 +1089,7 @@ impl Field {
             Context::DescIntrPending => &mut self.intr_desc.as_mut().unwrap().pending,
             _ => unreachable!(),
         };
-        d.updt(desc);
+        d.updt(desc, is_private);
     }
 
     /// Return the lock name if it is part of the structure (i.e. not a path to a different structure)

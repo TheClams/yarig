@@ -68,7 +68,7 @@ impl GeneratorDoc for GeneratorLatex {
         }
     }
 
-    fn write_page_title(&mut self, _idx_rif: (&str,usize), idx_page: (&str, usize), desc: (&str, Option<&str>)) {
+    fn write_page_title(&mut self, _idx_rif: (&str,usize), idx_page: (&str, usize), desc: (String, Option<String>)) {
         if self.multipage {
             let k = if self.is_rifmux {"*"} else {""};
             self.write(&format!("\t\\subsection{k}{{"));
@@ -80,11 +80,11 @@ impl GeneratorDoc for GeneratorLatex {
             }
             self.write("}\n");
         } else if !desc.0.is_empty() {
-            self.write(&self.sanitize(desc.0));
+            self.write(&self.sanitize(&desc.0));
             self.write("\n");
         }
         if let Some(desc_detail) = desc.1 {
-            self.write_info(&self.sanitize(desc_detail));
+            self.write_info(&self.sanitize(&desc_detail));
             self.write("\n");
         }
     }
@@ -176,7 +176,7 @@ impl GeneratorDoc for GeneratorLatex {
         let mut enum_iter = def.values.iter().peekable();
         while let Some(entry) = enum_iter.next() {
             let entry_name = self.sanitize(&entry.name);
-            let entry_desc = self.sanitize(entry.description.get());
+            let entry_desc = self.sanitize(&entry.description.get(self.is_public()));
             desc.push_str(&format!("{:3} - {entry_name} : {entry_desc}", entry.value));
             if enum_iter.peek().is_some() {
                 desc.push_str("\\\\");

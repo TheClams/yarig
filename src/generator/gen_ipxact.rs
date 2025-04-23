@@ -36,10 +36,10 @@ impl GeneratorIpXact {
     }
 
     fn desc_to_string(&mut self, desc: &Description) -> String {
-        if desc.is_empty() {
+        if desc.is_empty(self.is_public()) {
             return "-".to_owned();
         }
-        desc.get()
+        desc.get(self.is_public())
             .replace("\n","\\n")
             .replace("&","&amp;")
             .replace("<","&lt;")

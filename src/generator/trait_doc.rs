@@ -91,10 +91,10 @@ pub trait GeneratorDoc : GeneratorBase {
             Comp::Rifmux(rifmux) => {
                 filename = self.filename_rifmux(rifmux);
                 let name = remove_rif(&rifmux.inst_name);
-                let desc = rifmux.description.get_split();
-                self.write_rif_title((name,0), desc.0);
+                let desc = rifmux.description.get_split(self.is_public());
+                self.write_rif_title((name,0), &desc.0);
                 if let Some(desc_detail) = desc.1 {
-                    let desc_detail = self.sanitize(desc_detail);
+                    let desc_detail = self.sanitize(&desc_detail);
                     self.write_info(&desc_detail);
                 }
                 // Table with all RIF instances
@@ -170,7 +170,7 @@ pub trait GeneratorDoc : GeneratorBase {
                 if let Comp::Rif(rif) = inst {
                     self.set_rif_info(rif);
                 }
-                self.write_rifmux_entry(&instname, tn, (addr,w), inst.get_desc_short(), Self::SHOW_TYPE);
+                self.write_rifmux_entry(&instname, tn, (addr,w), &inst.get_desc_short(self.is_public()), Self::SHOW_TYPE);
             }
         }
     }
@@ -190,11 +190,11 @@ pub trait GeneratorDoc : GeneratorBase {
     /// Add RIF description
     fn add_rif(&mut self, rif: &RifInst, idx: usize, info: &[RifInstInfo]) -> Result<(), String> {
         let rif_name = remove_rif(&rif.type_name);
-        let desc = rif.base_description.get_split();
+        let desc = rif.base_description.get_split(self.is_public());
         self.set_rif_info(rif);
-        self.write_rif_title((rif_name, idx), desc.0);
+        self.write_rif_title((rif_name, idx), &desc.0);
         if let Some(desc_detail) = desc.1 {
-            let desc_detail = self.sanitize(desc_detail);
+            let desc_detail = self.sanitize(&desc_detail);
             self.write_info(&desc_detail);
         }
         self.add_reg_summary(rif, info);
@@ -238,6 +238,7 @@ pub trait GeneratorDoc : GeneratorBase {
                 let reg_name = self.casing(&reg.name_i());
                 let addr = offset + page.addr + reg.addr;
                 let id_reg = &format!("{rif_name}.{reg_type}");
+                let desc = self.sanitize(&reg.get_desc_short(self.is_public()));
                 self.write_table_row_header(None);
                 self.write_table_cell((TableKind::Page, CellKind::Addr), 0, &format!("0x{addr:0addr_w$X}"), "", None);
                 if Self::SHOW_TYPE {
@@ -247,7 +248,7 @@ pub trait GeneratorDoc : GeneratorBase {
                 if Self::SHOW_RESET {
                     self.write_table_cell((TableKind::Page, CellKind::Reset), 0, &format!("0x{:0data_w$X}", reg.reset), "", None);
                 }
-                self.write_table_cell((TableKind::Page, CellKind::Desc), 0, &self.sanitize(reg.get_desc_short()), "", None);
+                self.write_table_cell((TableKind::Page, CellKind::Desc), 0, &desc, "", None);
                 self.write_table_row_footer();
             }
             self.write_table_footer(TableKind::Page);
@@ -291,7 +292,7 @@ pub trait GeneratorDoc : GeneratorBase {
                 id_page.push_str(&page.name);
             }
             // Add paragraph per page only if more than one
-            let desc = page.description.get_split();
+            let desc = page.description.get_split(self.is_public());
             self.write_page_title((rif_name, idx_c), (page_name, idx_p+1), desc);
             let mut idx_r = 0;
             let regs = page.regs.iter()
@@ -310,13 +311,13 @@ pub trait GeneratorDoc : GeneratorBase {
                 let reg_impl = rif.get_hw_reg(&reg.group_type);
                 // Title
                 idx_r += 1;
-                let desc = reg.base_description.get_split();
+                let desc = reg.base_description.get_split(self.is_public());
                 let reg_type = self.casing(&reg_type);
                 // let addr = if let Some(ba) = base_addr {Some(ba+reg.addr)} else {None};
                 let addr = base_addr.map(|ba| ba+reg.addr);
-                self.write_reg_title((rif_name, idx_c), (page_name, idx_p+1), (&reg_type, idx_r), &self.sanitize(desc.0), addr);
+                self.write_reg_title((rif_name, idx_c), (page_name, idx_p+1), (&reg_type, idx_r), &self.sanitize(&desc.0), addr);
                 if let Some(desc_detail) = desc.1 {
-                    self.write_info(&self.sanitize(desc_detail));
+                    self.write_info(&self.sanitize(&desc_detail));
                 }
                 // Table with all register instance for current type
                 if Self::SHOW_SINGLE_REG || instances.len() > 1 {
@@ -340,7 +341,8 @@ pub trait GeneratorDoc : GeneratorBase {
                         self.write_table_cell((TableKind::RegInst, CellKind::Inst ), 0, &reg_name, &reg_type, None);
                         self.write_table_cell((TableKind::RegInst, CellKind::Reset), 0, &format!("0x{:0data_w$X}", inst.reset), "", None);
                         if instances.len() > 1 {
-                            self.write_table_cell((TableKind::RegInst, CellKind::Desc), 0, &self.sanitize(inst.get_desc_short()), "", None);
+                            let desc = self.sanitize(&inst.get_desc_short(self.is_public()));
+                            self.write_table_cell((TableKind::RegInst, CellKind::Desc), 0, &desc, "", None);
                         }
                         self.write_table_row_footer();
                     }
@@ -460,7 +462,7 @@ pub trait GeneratorDoc : GeneratorBase {
                         };
                         self.write_table_cell((TableKind::Field, CellKind::Reset), 0, &rst, "", tip);
                         // Description
-                        let mut desc = self.sanitize(f.description.get());
+                        let mut desc = self.sanitize(&f.description.get(self.is_public()));
                         if let Some(enum_name) = f.enum_kind.name() {
                             let name = if let Some(pkg) = &reg_impl.pkg {
                                 if enum_name.contains(':') {enum_name.to_owned()}
@@ -528,7 +530,7 @@ pub trait GeneratorDoc : GeneratorBase {
     fn write_rif_title(&mut self, idx_rif: (&str,usize), desc: &str) {}
 
     /// Write page title
-    fn write_page_title(&mut self, idx_rif: (&str,usize), idx_page: (&str, usize), desc: (&str, Option<&str>)) {}
+    fn write_page_title(&mut self, idx_rif: (&str,usize), idx_page: (&str, usize), desc: (String, Option<String>)) {}
 
     /// Write register title
     fn write_reg_title(&mut self, idx_rif: (&str,usize), idx_page: (&str, usize), idx_reg: (&str, usize), desc: &str, base_addr: Option<u64>) {}

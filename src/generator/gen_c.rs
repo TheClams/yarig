@@ -114,12 +114,11 @@ impl GeneratorSw for GeneratorC {
     /// Write enum entry
     fn write_enum_entry(&mut self, entry: &EnumEntry , is_last: bool) {
         let sep = if is_last {""} else {","};
-        self.write(&format!("    {}_{} = {}{} //!< {}\n",
+        let desc = entry.description.get_short(self.is_public());
+        self.write(&format!("    {}_{} = {}{sep} //!< {desc}\n",
             remove_rif(&self.comp_name).to_uppercase(),
             entry.name.to_uppercase(),
-            entry.value,
-            sep,
-            entry.description.get_short()
+            entry.value
         ));
     }
 
@@ -134,7 +133,7 @@ impl GeneratorSw for GeneratorC {
         self.write(&format!("/// {} {} register bitfields\n",
             basename.to_casing(Casing::Title),
             reg.reg_type.to_casing(Casing::Title)));
-        for l in reg.base_description.get().lines() {
+        for l in reg.base_description.get(self.is_public()).lines() {
             self.write(&format!("/// {l}\n"));
         }
         let reg_type = reg.reg_type.to_lowercase(); // self.casing(reg_type); //
@@ -150,7 +149,7 @@ impl GeneratorSw for GeneratorC {
         let mask =
             if field.visibility.is_unused() {None}
             else {Some((((1_u128<<field.width)-1)<<field.lsb) as usize)};
-        let desc = field.base_description.get_short(); // TODO: handle visibility/privacy
+        let desc = field.base_description.get_short(self.is_public()); // TODO: handle visibility/privacy
         let mask = if let Some(v) = mask {format!("0x{v:08X} ")} else {"".to_owned()};
         let l = self.max_len_field_name;
         self.write(&format!("    uint{}_t {name:<l$} : {:>2}; //!< {mask}{desc}\n",
@@ -184,7 +183,7 @@ impl GeneratorSw for GeneratorC {
     /// Write register start of declaration statement
     fn write_page_header(&mut self, name: &str, page: &RifPageInst) {
         self.push_stash(1, &format!("/// {} module struct\n", name.to_casing(Casing::Title)));
-        for l in page.description.get().lines() {
+        for l in page.description.get(self.is_public()).lines() {
             self.push_stash(1, &format!("/// {l}\n"));
         }
         self.push_stash(1, &format!("typedef struct {}_regs {{\n", name.to_lowercase()));
@@ -229,8 +228,8 @@ impl GeneratorSw for GeneratorC {
         let ln = self.max_len_reg_name;
         let type_name = format!("{}_reg_t", &reg.reg_type.to_lowercase());
         let desc =
-            if dim > 1 {reg.base_description.get_short()}
-            else {reg.description.get_short()};
+            if dim > 1 {reg.base_description.get_short(self.is_public())}
+            else {reg.description.get_short(self.is_public())};
         let mut inst_name = self.casing(&reg.reg_name);
         if dim > 1 {
             inst_name.push_str(&format!("[{dim}]"));
@@ -307,7 +306,7 @@ impl GeneratorSw for GeneratorC {
             page_type.push_str(&format!("_{}",cntxt.page.to_lowercase()));
         }
         let name_uc = name.to_uppercase();
-        self.write(&format!("/// {name_tt} base address: {}\n", desc.get_short()));
+        self.write(&format!("/// {name_tt} base address: {}\n", desc.get_short(self.is_public())));
         self.write(&format!("#define {name_uc}_BASE_ADDR ({base_addr_name} + 0x{:08X})\n", cntxt.addr));
         self.push_stash(0, &format!("/// Pointer to {name_tt} registers\n"));
         self.push_stash(0, &format!("#define P_{name_uc} ((volatile {page_type}_regs_t* ) {name_uc}_BASE_ADDR)\n"));
@@ -320,7 +319,7 @@ impl GeneratorSw for GeneratorC {
     fn write_rifmux_group(&mut self, group: &RifmuxGroupInst, is_last: bool) {
         self.write(&format!("/// Base address of group {}: {}\n",
             group.name.to_casing(Casing::Title),
-            group.description.get_short()));
+            group.description.get_short(self.is_public())));
         self.write(&format!("#define {0}_{1} ({0} + 0x{2:08X})\n",
             self.base_addr_name.to_uppercase(),
             group.name.to_uppercase(),

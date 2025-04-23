@@ -269,7 +269,7 @@ impl RegInst {
         reg.fields.entry(field_name).or_default()
     }
 
-    pub fn desc_updt(&mut self, idx: &OverrideIndex, desc: &str) {
+    pub fn desc_updt(&mut self, idx: &OverrideIndex, desc: &str, is_private: bool) {
         let reg = self.reg_override.entry(idx.0).or_default();
         match &idx.1 {
             Some(name) => {
@@ -277,14 +277,14 @@ impl RegInst {
                 if field.description.is_none() {
                     field.description = Some(desc.into());
                 } else {
-                    field.description.as_mut().unwrap().updt(desc);
+                    field.description.as_mut().unwrap().updt(desc, is_private);
                 }
             }
             None => {
                 if reg.description.is_none() {
                     reg.description = Some(desc.into());
                 } else {
-                    reg.description.as_mut().unwrap().updt(desc);
+                    reg.description.as_mut().unwrap().updt(desc, is_private);
                 }
             }
         }

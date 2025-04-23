@@ -88,7 +88,7 @@ impl GeneratorPy {
     }
 
     fn desc_to_string(&mut self, desc: &Description, lvl: usize) -> Option<String> {
-        let (desc_short, desc_details) = desc.get_split();
+        let (desc_short, desc_details) = desc.get_split(self.is_public());
         if desc_short.is_empty() {
             return None;
         }

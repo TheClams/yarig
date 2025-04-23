@@ -117,7 +117,7 @@ impl RegDef {
         }
     }
 
-    pub fn desc_intr_updt(&mut self, cntxt: &Context, name: &str, desc: &str) -> Result<(), RifErrorKind> {
+    pub fn desc_intr_updt(&mut self, cntxt: &Context, name: &str, desc: &str, is_private: bool) -> Result<(), RifErrorKind> {
         let intr = self.interrupt.iter_mut().find(|intr| intr.name==*name).ok_or(RifErrorKind::NotIntr)?;
         let d = match cntxt {
             Context::DescIntrEnable => &mut intr.description.enable,
@@ -125,7 +125,7 @@ impl RegDef {
             Context::DescIntrPending => &mut intr.description.pending,
             _ => unreachable!(),
         };
-        d.updt(desc);
+        d.updt(desc, is_private);
         Ok(())
     }
 

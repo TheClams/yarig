@@ -72,7 +72,7 @@ impl GeneratorDoc for GeneratorAdoc {
         }
     }
 
-    fn write_page_title(&mut self, idx_rif: (&str,usize), idx_page: (&str, usize), desc: (&str, Option<&str>)) {
+    fn write_page_title(&mut self, idx_rif: (&str,usize), idx_page: (&str, usize), desc: (String, Option<String>)) {
         if self.multipage {
             self.write(&format!("\n=== [[{}.{}]]", idx_rif.0, idx_page.0));
             let name = self.sanitize(idx_page.0);
@@ -82,11 +82,11 @@ impl GeneratorDoc for GeneratorAdoc {
                 self.write(&format!("{} ({name})", desc.0));
             }
         } else if !desc.0.is_empty() {
-            self.write(&self.sanitize(desc.0));
+            self.write(&self.sanitize(&desc.0));
             self.write("\n");
         }
         if let Some(desc_detail) = desc.1 {
-            self.write_info(&self.sanitize(desc_detail));
+            self.write_info(&self.sanitize(&desc_detail));
             self.write("\n");
         }
     }
@@ -203,7 +203,7 @@ impl GeneratorDoc for GeneratorAdoc {
         desc.push_str("\n\n");
         for entry in &def.values {
             let entry_name = self.sanitize(&entry.name);
-            let entry_desc = self.sanitize(entry.description.get());
+            let entry_desc = self.sanitize(&entry.description.get(self.is_public()));
             desc.push_str(&format!(" * {} - {entry_name} : {entry_desc}\n", entry.value));
         }
         desc

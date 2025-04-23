@@ -1,5 +1,12 @@
 # Change Log
 
+## [Unrelease 0.10.0] - 2025-xx-xx
+
+### Added
+ - Description: support for private description.
+   * Syntax is `description.hidden`
+   * Description structure is now composed of two strings (public and private) which are concatenated when privacy is private.
+     For public privacy on the public part of the description is returned
 
 ## [0.9.4] - 2025-04-23
 

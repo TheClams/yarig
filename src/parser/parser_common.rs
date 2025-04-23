@@ -167,6 +167,13 @@ pub fn desc(input: &str) -> ResF<&str> {
         .parse(input)
 }
 
+pub fn is_hidden<'a>(input: &mut &'a str) -> Res<'a, bool> {
+    alt((
+        terminated(".hidden", opt(ws(":"))).value(true),
+        space0.value(false),
+    )).parse_next(input)
+}
+
 /// parse a comment starting by // or # or just spaces
 pub fn comment(input: &str) -> ResF<()> {
     alt((
@@ -396,6 +403,15 @@ mod tests_parsing {
         assert_eq!(key_val("- Key0 = 5"), Ok(("Key0", "5")));
         assert_eq!(key_val("- Key1 : 5*8 + 3"), Ok(("Key1", "5*8 + 3")));
         assert_eq!(key_val("- Key2 : log2($Key1)"), Ok(("Key2", "log2($Key1)")));
+    }
+
+    #[test]
+    fn test_is_hidden() {
+        assert_eq!(is_hidden(&mut "Description"), Ok(false));
+        assert_eq!(is_hidden(&mut ".hidden: Description"), Ok(true));
+        assert_eq!(is_hidden(&mut ".hidden : Description"), Ok(true));
+        assert_eq!(is_hidden(&mut ".hidden"), Ok(true));
+        assert_eq!(is_hidden(&mut ".hidden :"), Ok(true));
     }
 
     #[test]

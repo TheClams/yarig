@@ -107,7 +107,7 @@ pub trait GeneratorHw : GeneratorBase {
                 let field_name = if f.sw_kind.is_password() {format!("{name}_locked")} else {name.to_owned()};
                 let field_decl = SignalDecl::new(
                     SignalDef::new(field_name, kind, f.array) ,
-                    f.description.get_short().to_owned()
+                    f.description.get_short(false)
                 );
                 // Add field to SW structure writable by firmware or readable by hardware
                 if f.has_sw_value() && (!f.is_local() || ctrl.external.is_rw()) {
@@ -322,7 +322,7 @@ pub trait GeneratorHw : GeneratorBase {
                     format!("t_{}_{kind}", self.casing(&hw_reg.group)))),
                 PortDir::In,
                 hw_reg.dim,
-                hw_reg_def.description.get_short().to_owned()
+                hw_reg_def.description.get_short(false)
             );
             if hw_reg.port.is_in() {
                 self.write_port_decl(&port, None, false);
@@ -1610,7 +1610,7 @@ pub trait GeneratorHw : GeneratorBase {
             let port = PortInfo::new_intf(
                 format!("if_{:<1$}", comp.get_name(), name_len),
                 "rif_if".to_owned(), "ctrl".to_owned(),
-                comp.get_desc_short().to_owned());
+                comp.get_desc_short(false));
             self.set_addr_width(comp.get_addr_width());
             self.write_port_decl(&port, None, false);
         }

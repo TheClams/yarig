@@ -156,7 +156,7 @@ impl GeneratorDoc for GeneratorMif {
         }
     }
 
-    fn write_page_title(&mut self, _idx_rif: (&str,usize), idx_page: (&str, usize), desc: (&str, Option<&str>)) {
+    fn write_page_title(&mut self, _idx_rif: (&str,usize), idx_page: (&str, usize), desc: (String, Option<String>)) {
         if self.is_rifmux {
             return;
         }
@@ -168,7 +168,7 @@ impl GeneratorDoc for GeneratorMif {
         };
         self.write_mif_heading(&title, idx_page.1, PgfKind::Heading2);
         if let Some(desc_detail) = desc.1 {
-            self.write_info(&self.sanitize(desc_detail));
+            self.write_info(&self.sanitize(&desc_detail));
         }
     }
 
@@ -276,7 +276,7 @@ impl GeneratorDoc for GeneratorMif {
         let mut enum_iter = def.values.iter().peekable();
         while let Some(entry) = enum_iter.next() {
             let entry_name = self.sanitize(&entry.name);
-            let entry_desc = self.sanitize(entry.description.get());
+            let entry_desc = self.sanitize(&entry.description.get(self.is_public()));
             desc.push_str(&format!("\t\t\t\t\t<ParaLine <String `{:3} - {entry_name} : {entry_desc}'>", entry.value));
             if enum_iter.peek().is_some() {
                 desc.push_str("<Char HardReturn>");

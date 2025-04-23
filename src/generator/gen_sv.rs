@@ -282,7 +282,7 @@ impl GeneratorHw for GeneratorSv {
         self.write(&format!("      {} = {}", entry.name, entry.value));
         self.write(if is_last {" "} else {","});
         self.write(" // ");
-        self.write(entry.description.get_short());
+        self.write(&entry.description.get_short(false));
         self.write("\n");
     }
 
