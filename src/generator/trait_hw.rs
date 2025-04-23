@@ -1489,7 +1489,11 @@ pub trait GeneratorHw : GeneratorBase {
                         let name = format!("{prefix}{group_name}{intr_suffix}");
                         let field_range = SignalRange::from_field(field, true);
                         let value = ExprId::new_field_range(name, reg_idx, field_name.to_owned(), field_range);
-                        values.push(value.into());
+                        if let EnumKind::Type(n) = &field.enum_kind {
+                            values.push(LogicExpr::CastFrom(n.to_owned(), field.width, Box::new(value.into())));
+                        } else {
+                            values.push(value.into());
+                        }
                     }
                     // Save LSB
                     prev_lsb = field.lsb;
@@ -1889,7 +1893,7 @@ pub trait GeneratorHw : GeneratorBase {
         if Self::SUPPORT_IMPL_BIND {
             self.write_port_bind("*", "", true);
         } else {
-            let intf_ports = RifIntfPorts::new(&intf, Self::SUPPORT_INTF);
+            let intf_ports = RifIntfPorts::new(intf, Self::SUPPORT_INTF);
             for port in intf_ports.iter() {
                 self.write_port_bind(port.name(), port.name(), false);
             }

@@ -38,7 +38,7 @@ impl GeneratorVhdl {
 
     pub fn new(setting: GeneratorBaseSetting) -> Self {
         GeneratorVhdl {
-            core: GeneratorCore::new(1,setting),
+            core: GeneratorCore::new(3,setting),
             data_width: 32,
             addr_width: 16,
             enum_width: 0,
@@ -107,13 +107,21 @@ impl GeneratorVhdl {
             LogicExpr::Id(expr_id) => self.write_expr_id(expr_id, kind),
             LogicExpr::Cast(cast_info, expr) => {
                 if let CastInfo::Custom(_, name) = cast_info {
+                    self.core.write("to_");
                     self.core.write(name);
-                    self.core.write("'val(to_integer(unsigned(");
+                    self.core.write("(");
                 }
                 self.add_logic_expr(expr, 0, kind, false);
                 if cast_info.is_custom() {
-                    self.core.write(")))");
+                    self.core.write(")");
                 }
+            }
+            LogicExpr::CastFrom(name, _, expr) => {
+                self.core.write("from_");
+                self.core.write(name);
+                self.core.write("(");
+                self.add_logic_expr(expr, 0, kind, false);
+                self.core.write(")");
             }
             LogicExpr::ValueU(v, w) => {
                 match w {
@@ -324,11 +332,12 @@ impl GeneratorHw for GeneratorVhdl {
         if !vec_a.is_empty() {
             vec_a.sort();
             let mut sizes = vec_a.iter().peekable();
+            // Handle case of array of bit: the sorted vector ensure this is the first entry
             if let Some(1) = sizes.peek()  {
                 self.write("   type t_sla is array (natural range <>) of std_logic;\n");
                 sizes.next();
             }
-            while let Some(s) = sizes.next() {
+            for s in sizes {
                 self.write(&format!("   type t_slv_a{s} is array (natural range <>) of std_logic_vector({} downto 0);\n", s-1));
             }
             self.write("\n");
@@ -345,6 +354,13 @@ impl GeneratorHw for GeneratorVhdl {
     }
     fn write_pkg_footer(&mut self, name: &str) {
         self.write(&format!("end package {name}_pkg;\n"));
+        if !self.stash_is_empty(1) {
+            self.write(&format!("\npackage body {name}_pkg is \n"));
+            self.pop_stash(1);
+            self.pop_stash(2);
+            self.write(&format!("end package body {name}_pkg;\n"));
+
+        }
     }
 
     fn write_const(&mut self, signal: &SignalDecl, value: LogicExpr) {
@@ -381,6 +397,11 @@ impl GeneratorHw for GeneratorVhdl {
     fn write_enum_header(&mut self, name: &str, width: u8) {
         self.write(&format!("   type {name} is ("));
         self.enum_width = width;
+        // Start function body for encoding/decoding
+        self.push_stash(1, &format!("   function to_{name}(val: std_logic_vector({} downto 0)) return {name} is begin\n", width -1));
+        self.push_stash(1, "      case(val) is\n");
+        self.push_stash(2, &format!("   function from_{name}(val: {name}) return std_logic_vector is begin\n"));
+        self.push_stash(2, "      case(val) is\n");
     }
 
     fn write_enum_entry(&mut self, entry: &EnumEntry, is_last: bool) {
@@ -390,12 +411,24 @@ impl GeneratorHw for GeneratorVhdl {
         let w = self.enum_width as usize;
         self.push_stash(0,&format!("{:0w$b}", entry.value));
         self.push_stash(0,if is_last {"\""} else {" "});
+        // Push encoding/decoding case
+        let case = if is_last {"others".to_owned()} else {format!("\"{:0w$b}\"", entry.value)};
+        self.push_stash(1, &format!("         when {case} => return {};\n", entry.name));
+        let case = if is_last {"others"} else {&entry.name};
+        self.push_stash(2, &format!("         when {case} => return \"{:0w$b}\";\n", entry.value));
     }
 
-    fn write_enum_footer(&mut self, name: &str, _width: u8) {
+    fn write_enum_footer(&mut self, name: &str, width: u8) {
         self.write(&format!("   attribute ENUM_ENCODING of {name} : type is \""));
         self.pop_stash(0);
-        self.write(";\n\n");
+        self.write(";\n");
+        self.write(&format!("   function to_{name}(val: std_logic_vector({} downto 0)) return {name};\n", width -1));
+        self.write(&format!("   function from_{name}(val: {name}) return std_logic_vector;\n"));
+        // Close function declaration
+        self.push_stash(1, "      end case;\n");
+        self.push_stash(1, &format!("   end function to_{name};\n\n"));
+        self.push_stash(2, "      end case;\n");
+        self.push_stash(2, &format!("   end function from_{name};\n\n"));
     }
 
     // Structure declaration
@@ -446,6 +479,9 @@ impl GeneratorHw for GeneratorVhdl {
                 let n = p.name().strip_prefix("reg_").unwrap_or(p.name());
                 let d = if p.dir.is_in() {"out"} else {"in "};
                 let desc = p.desc.strip_prefix("Register ").unwrap_or(&p.desc);
+                if self.is_bridge {
+                    self.write("      ");
+                }
                 self.write(&format!("   {base}_{n}{pad} : {d} "));
                 self.write_signal_kind(p.kind(), 0);
                 self.write(&format!("; -- {} {desc}\n", &port.desc));
@@ -516,6 +552,7 @@ impl GeneratorHw for GeneratorVhdl {
 
     fn write_inst_header(&mut self, type_name: &str, inst_name: &str, params: &[(String, isize)]) {
         self.is_bridge = inst_name=="bridge";
+        let type_name = type_name.replace("bridge_", "bridge_vhd_");
         self.write(&format!("   i_{inst_name} : {type_name}\n"));
         if !params.is_empty() {
             self.write("      generic map(\n");
@@ -541,7 +578,7 @@ impl GeneratorHw for GeneratorVhdl {
     fn write_intf_bind(&mut self, name: &str, is_last: bool) {
         let port_list = RifIntfPorts::new(&Interface::Default, false);
         let names = ["reg_err_addr_next", "reg_err_access_next"];
-        let mut ports = port_list.iter().filter(|p| !names.contains(&p.name())).peekable();
+        let mut ports = port_list.iter().filter(|p| !names.contains(&p.name().trim())).peekable();
         while let Some(port) = ports.next() {
             let last = is_last && ports.peek().is_none();
             let sig_name =
@@ -655,21 +692,20 @@ impl GeneratorHw for GeneratorVhdl {
             self.write("         rst_n          : in  std_logic;\n");
             let mut ports = RifIntfPorts::new(&Interface::Default, false);
             let names = ["reg_err_addr_next", "reg_err_access_next"];
-            for port in ports.iter_mut().filter(|p| !names.contains(&p.name())) {
-                if port.name()=="reg_err_addr_next" || port.name()=="reg_err_access_next" {
-                    continue;
-                }
+            for port in ports.iter_mut().filter(|p| !names.contains(&p.name().trim())) {
                 if port.dir == PortDir::In {port.dir = PortDir::Out;}
                 else {port.dir = PortDir::In;}
+                self.write("      ");
                 self.write_port_decl(port, None, false);
             }
             let intf_ports = RifIntfPorts::new(&self.intf, false);
             let mut ports = intf_ports.iter().peekable();
             while let Some(port) = ports.next() {
+                self.write("      ");
                 self.write_port_decl(port, None, ports.peek().is_none());
             }
             self.write("      );\n");
-            self.write(&format!("\n   end component bridge_vhd_{}_rif;\n", self.intf.name()));
+            self.write(&format!("   end component bridge_vhd_{}_rif;\n", self.intf.name()));
         }
         self.write("\nbegin\n\n");
         self.pop_stash(0);

@@ -44,12 +44,12 @@ impl GeneratorSv {
         }
         if let Some(prefix) = prefix {
             if let Some(base_name) = def.name.strip_prefix("rif_") {
-                self.write(&format!("rif_{prefix}_{base_name}"));
+                self.write(&format!("rif_{prefix}_{}", base_name.trim()));
             } else {
-                self.write(&format!("{prefix}_{}",def.name));
+                self.write(&format!("{prefix}_{}",def.name.trim()));
             }
         } else {
-            self.write(&def.name);
+            self.write(def.name.trim());
         }
         if def.dim > 0 {
             self.write(&format!("[{}]", def.dim));
@@ -68,7 +68,7 @@ impl GeneratorSv {
         self.core.write(&" ".repeat(3*lvl));
         match expr {
             LogicExpr::Id(expr_id) => self.add_expr_id(expr_id),
-            LogicExpr::Cast(cast_info, expr) => {
+            LogicExpr::Cast(cast_info, e) => {
                 let has_par = !cast_info.is_none();
                 match cast_info {
                     CastInfo::None => {}
@@ -83,11 +83,12 @@ impl GeneratorSv {
                         self.core.write("'(");
                     }
                 }
-                self.add_logic_expr(expr, 0, false);
+                self.add_logic_expr(e, 0, false);
                 if has_par {
                     self.core.write(")");
                 }
             }
+            LogicExpr::CastFrom(_,_, e) => self.add_logic_expr(e, lvl, is_part),
             LogicExpr::ValueU(v, w) => {
                 let n = (w+3)>>2;
                 match w {
@@ -109,13 +110,13 @@ impl GeneratorSv {
                     _ => self.core.write(&format!("{w}'sh{v:0n$x}")),
                 }
             }
-            LogicExpr::Not(logic_expr) => {
+            LogicExpr::Not(e) => {
                 self.core.write("!");
-                self.add_logic_expr(logic_expr, 0, true);
+                self.add_logic_expr(e, 0, true);
             }
-            LogicExpr::NotB(logic_expr) => {
+            LogicExpr::NotB(e) => {
                 self.core.write("~");
-                self.add_logic_expr(logic_expr, 0, true);
+                self.add_logic_expr(e, 0, true);
             }
             LogicExpr::Concat(exprs) => {
                 self.core.write("{");

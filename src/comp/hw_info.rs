@@ -492,29 +492,29 @@ impl RifIntfPorts {
                 }
             },
             Interface::Apb => vec![
-                PortInfo::new("paddr".to_owned(), SignalKind::Address, PortDir::In, 0, "APB Address".to_owned()),
-                PortInfo::new_in("psel".to_owned(), "APB Select".to_owned()),
-                PortInfo::new_in("penable".to_owned(), "APB Enable".to_owned()),
-                PortInfo::new_in("pwrite".to_owned(), "APB Write".to_owned()),
-                PortInfo::new("pwdata".to_owned(), SignalKind::Data, PortDir::In, 0, "APB Write Data".to_owned()),
-                PortInfo::new("prdata".to_owned(), SignalKind::Data, PortDir::Out, 0, "APB Read Data".to_owned()),
-                PortInfo::new_out("pready".to_owned(), "APB Ready".to_owned()),
+                PortInfo::new(    "paddr  ".to_owned(), SignalKind::Address, PortDir::In, 0, "APB Address".to_owned()),
+                PortInfo::new_in( "psel   ".to_owned(), "APB Select".to_owned()),
+                PortInfo::new_in( "penable".to_owned(), "APB Enable".to_owned()),
+                PortInfo::new_in( "pwrite ".to_owned(), "APB Write".to_owned()),
+                PortInfo::new(    "pwdata ".to_owned(), SignalKind::Data, PortDir::In, 0, "APB Write Data".to_owned()),
+                PortInfo::new(    "prdata ".to_owned(), SignalKind::Data, PortDir::Out, 0, "APB Read Data".to_owned()),
+                PortInfo::new_out("pready ".to_owned(), "APB Ready".to_owned()),
                 PortInfo::new_out("pslverr".to_owned(), "APB Slave Error".to_owned()),
             ],
             Interface::Uaux => vec![
-                PortInfo::new("uaux_addr".to_owned(), SignalKind::Address, PortDir::In, 0, "AUX Address".to_owned()),
-                PortInfo::new_in("uaux_en".to_owned(), "AUX Enable".to_owned()),
-                PortInfo::new_in("uaux_cmt_phase".to_owned(), "AUX Commit status".to_owned()),
-                PortInfo::new_in("uaux_cmt_valid".to_owned(), "AUX Commit Valid".to_owned()),
-                PortInfo::new_in("uaux_read".to_owned(), "AUX Read".to_owned()),
-                PortInfo::new_in("uaux_write".to_owned(), "AUX Write".to_owned()),
-                PortInfo::new("uaux_wdata".to_owned(), SignalKind::Data, PortDir::In, 0, "AUX Write Data".to_owned()),
-                PortInfo::new("uaux_rdata".to_owned(), SignalKind::Data, PortDir::Out, 0, "AUX Read Data".to_owned()),
-                PortInfo::new_out("uaux_busy".to_owned(), "AUX Busy".to_owned()),
-                PortInfo::new_out("uaux_illegal".to_owned()  , "SR/LR illegal".to_owned()),
-                PortInfo::new_out("uaux_k_rd".to_owned()     , "AUX read privilege violation".to_owned()),
-                PortInfo::new_out("uaux_k_wr".to_owned()     , "AUX write privilege violation".to_owned()),
-                PortInfo::new_out("uaux_unimpl".to_owned()   , "AUX unimplemented address".to_owned()),
+                PortInfo::new(   "uaux_addr      ".to_owned(), SignalKind::Address, PortDir::In, 0, "AUX address".to_owned()),
+                PortInfo::new_in("uaux_en        ".to_owned(), "AUX enable".to_owned()),
+                PortInfo::new_in("uaux_cmt_phase ".to_owned(), "AUX commit status".to_owned()),
+                PortInfo::new_in("uaux_cmt_valid ".to_owned(), "AUX commit Valid".to_owned()),
+                PortInfo::new_in("uaux_read      ".to_owned(), "AUX read".to_owned()),
+                PortInfo::new_in("uaux_write     ".to_owned(), "AUX write".to_owned()),
+                PortInfo::new(   "uaux_wdata     ".to_owned(), SignalKind::Data, PortDir::In, 0, "AUX write Data".to_owned()),
+                PortInfo::new(   "uaux_rdata     ".to_owned(), SignalKind::Data, PortDir::Out, 0, "AUX read Data".to_owned()),
+                PortInfo::new_out("uaux_busy     ".to_owned(), "AUX busy".to_owned()),
+                PortInfo::new_out("uaux_illegal  ".to_owned(), "SR/LR illegal".to_owned()),
+                PortInfo::new_out("uaux_k_rd     ".to_owned(), "AUX read privilege violation".to_owned()),
+                PortInfo::new_out("uaux_k_wr     ".to_owned(), "AUX write privilege violation".to_owned()),
+                PortInfo::new_out("uaux_unimpl   ".to_owned(), "AUX unimplemented address".to_owned()),
                 PortInfo::new_out("uaux_serial_sr".to_owned(), "AUX SR group flush ".to_owned()),
                 PortInfo::new_out("uaux_strict_sr".to_owned(), "AUX SR single flush".to_owned()),
             ],
@@ -728,6 +728,8 @@ pub enum LogicExpr {
     Id(ExprId),
     /// Cast a value to a scope::type
     Cast(CastInfo, Box<LogicExpr>),
+    /// Cast a value from enumerated type to bit vector
+    CastFrom(String, u8, Box<LogicExpr>),
     /// Unsigned value with width
     ValueU(u128, usize),
     /// Signed value with width
@@ -963,6 +965,7 @@ impl LogicExpr {
             LogicExpr::Concat(vec) => vec.len(),
             LogicExpr::Id(_)       |
             LogicExpr::Cast(_,_)   |
+            LogicExpr::CastFrom(_,_,_) |
             LogicExpr::ValueU(_,_) |
             LogicExpr::ValueI(_,_) |
             LogicExpr::Not(_)      |

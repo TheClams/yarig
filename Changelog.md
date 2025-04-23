@@ -1,6 +1,16 @@
 # Change Log
 
 
+## [0.9.4] - 2025-04-23
+
+### Bug Fixes
+ - Trait HW:
+   * Fix a few legacy usage of full path (if_rif.en) instead of proper LogicExpr
+   * Fix rifmux file extension (was hard-coded to sv)
+   * Fix RIF package filename call not properly flagged as package
+   * Add new LogicExpr::CastFrom when an enum is used as bit vector (explicit conversion required in VHDL)
+ - Fixes VHDL output: missing cast around enum, missing component declaration, RIFmux support, ...
+
 ## [0.9.2] - 2025-04-13
 
 ### Bug Fixes
