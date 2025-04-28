@@ -12,14 +12,6 @@ use yarig_macro::add_gen_core;
 
 #[add_gen_core("h")]
 pub struct GeneratorC {
-    /// Flag when current RIF has multiple pages
-    multipage : bool,
-    /// Current RIF data bus width
-    data_width : u8,
-    /// Current RIF address bus width
-    addr_width : u8,
-    /// Current Component name (Rifmux or rif)
-    comp_name : String,
     /// Maximum length of field name inside current register
     max_len_field_name : usize,
     /// Maximum length of field name inside current page
@@ -36,16 +28,12 @@ impl GeneratorC {
 
     pub fn new(setting: GeneratorBaseSetting, extra: CfgC) -> Self {
         let mut core = GeneratorCore::new(3,setting);
-        // Override gen_inc if defined in the python settings
+        // Override gen_inc if defined in the extra settings
         if let Some(gen_inc) = extra.gen_inc {
             core.setting.gen_inc = gen_inc;
         }
         GeneratorC {
             core,
-            data_width: 32,
-            addr_width: 16,
-            multipage: false,
-            comp_name: "".to_owned(),
             base_addr_name : extra.base_offset.unwrap_or("PERIPH_BASE_ADDR".to_owned()),
             max_len_field_name : 0,
             max_len_reg_name : 0,
@@ -65,13 +53,6 @@ impl GeneratorSw for GeneratorC {
 
 
     //-------- Save some state variables --------//
-    /// Set the width of address/data for current RIF
-    fn set_rif_info(&mut self, rif: &RifInst) {
-        self.comp_name = rif.type_name.to_owned();
-        self.addr_width = rif.addr_width;
-        self.data_width = rif.data_width;
-        self.multipage = rif.pages.len() > 1;
-    }
 
     /// Set the max length  of field name inside a register (for pretty formatting)
     fn set_max_field_name_len(&mut self, len: usize) {
@@ -91,7 +72,7 @@ impl GeneratorSw for GeneratorC {
     // - 2 : Define of register Offset/reset
     /// Write RIF header start of file
     fn write_rif_header(&mut self, _rif: &RifInst, _base_addr: Option<u64>) {
-        let rifname_uc = self.comp_name.to_uppercase();
+        let rifname_uc = self.comp_name().to_uppercase();
         self.write(&format!("// Register definition for P_{rifname_uc}\n"));
         self.write(&format!("#ifndef __{rifname_uc}_H__\n"));
         self.write(&format!("#define __{rifname_uc}_H__\n\n"));
@@ -101,12 +82,12 @@ impl GeneratorSw for GeneratorC {
     /// Write RIF end of ifdef
     fn write_rif_footer(&mut self) {
         self.pop_stash(1);
-        self.write(&format!("#endif /* __{}_H__ */\n", self.comp_name.to_uppercase()));
+        self.write(&format!("#endif /* __{}_H__ */\n", self.comp_name().to_uppercase()));
     }
 
     /// Write enum start of declaration statement
     fn write_enum_header(&mut self, type_name: &str, desc: &str) {
-        let etn = format!("{}_{type_name}_t", remove_rif(&self.comp_name));
+        let etn = format!("{}_{type_name}_t", remove_rif(&self.comp_name()));
         self.write(&format!("/// {}\n", desc));
         self.write(&format!("typedef enum {etn} {{\n"));
     }
@@ -116,7 +97,7 @@ impl GeneratorSw for GeneratorC {
         let sep = if is_last {""} else {","};
         let desc = entry.description.get_short(self.is_public());
         self.write(&format!("    {}_{} = {}{sep} //!< {desc}\n",
-            remove_rif(&self.comp_name).to_uppercase(),
+            remove_rif(self.comp_name()).to_uppercase(),
             entry.name.to_uppercase(),
             entry.value
         ));
@@ -124,12 +105,12 @@ impl GeneratorSw for GeneratorC {
 
     /// Write enum end of declaration
     fn write_enum_footer(&mut self, type_name: &str) {
-        self.write(&format!("}} {}_{type_name}_t;\n\n", remove_rif(&self.comp_name)));
+        self.write(&format!("}} {}_{type_name}_t;\n\n", remove_rif(self.comp_name())));
     }
 
     /// Write register start of declaration statement
     fn write_reg_header(&mut self, basename: &str, reg: &RifRegInst) {
-        let w = self.data_width;
+        let w = self.data_width();
         self.write(&format!("/// {} {} register bitfields\n",
             basename.to_casing(Casing::Title),
             reg.reg_type.to_casing(Casing::Title)));
@@ -153,7 +134,7 @@ impl GeneratorSw for GeneratorC {
         let mask = if let Some(v) = mask {format!("0x{v:08X} ")} else {"".to_owned()};
         let l = self.max_len_field_name;
         self.write(&format!("    uint{}_t {name:<l$} : {:>2}; //!< {mask}{desc}\n",
-            self.data_width, field.width,
+            self.data_width(), field.width,
         ));
         // Prepare some define as well for each field in a register (except for unused)
         if !field.visibility.is_unused() {
@@ -215,7 +196,7 @@ impl GeneratorSw for GeneratorC {
         if span > 1 {
             inst_name.push_str(&format!("[{span}]"));
         }
-        let type_name = format!("uint{}_t", self.data_width);
+        let type_name = format!("uint{}_t", self.data_width());
         let lt = self.max_len_reg_type + basename.len() + 1;
         let ln = self.max_len_reg_name;
         self.push_stash(1, &format!("  {type_name:<lt$} {inst_name:<ln$};\n"));
@@ -299,7 +280,7 @@ impl GeneratorSw for GeneratorC {
         let mut name_tt = format!("{}{inst_name}", cntxt.prefix).to_casing(Casing::Title);
         let mut name = format!("{}{}", cntxt.prefix, &inst_name.replace('_', ""));
         let mut page_type = remove_rif(&rif_inst.type_name).to_lowercase();
-        if self.multipage {
+        if self.comp().cnt > 1 {
             name.push_str(&cntxt.page.replace('_', ""));
             name_tt.push(' ');
             name_tt.push_str(&cntxt.page.to_casing(Casing::Title));

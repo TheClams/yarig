@@ -1,4 +1,7 @@
-use crate::{comp::{comp_inst::{RifInst, RifmuxInst}, hw_info::{CastInfo, ExprId, LogicExpr, PortDir, PortInfo, SignalDecl, SignalDef, SignalInfo, SignalKind}}, rifgen::{EnumEntry, ResetDef}};
+use crate::{
+    comp::hw_info::{CastInfo, ExprId, LogicExpr, PortDir, PortInfo, SignalDecl, SignalDef, SignalInfo, SignalKind},
+    rifgen::{EnumEntry, ResetDef}
+};
 
 use super::{
     gen_common::{CompInfo, GeneratorBase, GeneratorBaseSetting, GeneratorCore},
@@ -8,10 +11,6 @@ use super::{
 use yarig_macro::add_gen_core;
 #[add_gen_core("sv")]
 pub struct GeneratorSv {
-    /// Current RIF data bus width
-    data_width : u8,
-    /// Current RIF address bus width
-    addr_width : u8,
     /// True when current module instance is a bridge
     is_bridge : bool,
 }
@@ -21,8 +20,6 @@ impl GeneratorSv {
     pub fn new(setting: GeneratorBaseSetting) -> Self {
         GeneratorSv {
             core: GeneratorCore::new(0,setting),
-            data_width: 32,
-            addr_width: 16,
             is_bridge: false
         }
     }
@@ -39,8 +36,8 @@ impl GeneratorSv {
             SignalKind::Custom((Some(pkg),n)) => self.write(&format!("{pkg}::{n} ")),
             SignalKind::Custom((None,n))      => self.write(&format!("{n} ")),
             SignalKind::Integer     => self.write("int "),
-            SignalKind::Address     => self.write(&format!("logic [{}:0] ", self.addr_width-1)),
-            SignalKind::Data        => self.write(&format!("logic [{}:0] ", self.data_width-1)),
+            SignalKind::Address     => self.write(&format!("logic [{}:0] ", self.addr_width()-1)),
+            SignalKind::Data        => self.write(&format!("logic [{}:0] ", self.data_width()-1)),
         }
         if let Some(prefix) = prefix {
             if let Some(base_name) = def.name.strip_prefix("rif_") {
@@ -214,18 +211,6 @@ impl GeneratorHw for GeneratorSv {
         // Add header : TODO: configurable header
         self.write_comment(0, "File generated automatically: DO NOT EDIT.");
         self.write("\n");
-    }
-
-    /// Set the width of address/data for current RIF
-    fn set_rif_info(&mut self, rif: &RifInst) {
-        self.addr_width = rif.addr_width;
-        self.data_width = rif.data_width;
-    }
-
-    /// Set the width of address/data for current RIF
-    fn set_rifmux_info(&mut self, rifmux: &RifmuxInst) {
-        self.addr_width = rifmux.addr_width;
-        self.data_width = rifmux.data_width;
     }
 
     fn write_pkg_header(&mut self, name: &str) {

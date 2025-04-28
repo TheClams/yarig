@@ -2,7 +2,7 @@
 use std::error::Error;
 use clap::Parser;
 use yarig::{
-    cfg::{RifGenTargets, YarigCfg},
+    cfg::{RifGenTarget, YarigCfg},
     generator::{casing::Casing, gen_py::PyVersion},
     rifgen::{Interface, SuffixInfo}
 };
@@ -24,7 +24,7 @@ struct RifGenArgs{
     include: Vec<String>,
     /// List of targets
     #[arg(short, long, num_args = 1..)]
-    targets: Vec<RifGenTargets>,
+    targets: Vec<RifGenTarget>,
     /// List of included component to generate. Use "*" to select all.
     #[arg(long, num_args = 0..)]
     gen_inc: Vec<String>,
@@ -57,7 +57,7 @@ struct RifGenArgs{
     suffix: Option<SuffixInfo>,
     /// List of target which should split their output. Supported targets are: html, mif, adoc
     #[arg(long, num_args = 0..)]
-    split: Vec<RifGenTargets>,
+    split: Vec<RifGenTarget>,
     /// Rename field using reserved keyword
     #[arg(long, action)]
     keyword_rename: bool,
@@ -138,14 +138,14 @@ fn main() {
     if args.interface.is_some() {cfg.interface = args.interface};
     if args.suffix_rtl_only {cfg.suffix_rtl_only = true;}
     if args.keyword_rename {cfg.keywords.error = false;}
-    if args.targets.contains(&RifGenTargets::Sv) {cfg.keywords.sv = true;}
-    if args.targets.contains(&RifGenTargets::Vhdl) {cfg.keywords.vhdl = true;}
+    if args.targets.contains(&RifGenTarget::Sv) {cfg.keywords.sv = true;}
+    if args.targets.contains(&RifGenTarget::Vhdl) {cfg.keywords.vhdl = true;}
 
     for t in args.split.iter() {
         match t {
-            RifGenTargets::Html => cfg.html.split = Some(true),
-            RifGenTargets::Adoc => cfg.adoc.split = Some(true),
-            RifGenTargets::Mif  => cfg.mif.split  = Some(true),
+            RifGenTarget::Html => cfg.html.split = Some(true),
+            RifGenTarget::Adoc => cfg.adoc.split = Some(true),
+            RifGenTarget::Mif  => cfg.mif.split  = Some(true),
             _ => eprintln!("Split target {t} not supported ! Expecting html, adoc, mif."),
         }
     }

@@ -1,5 +1,3 @@
-use std::fs::create_dir_all;
-
 use crate::{
     comp::comp_inst::{val_str, Comp, CompInst, RifInst, RifmuxGroupInst},
     parser::remove_rif,
@@ -82,13 +80,12 @@ pub trait GeneratorDoc : GeneratorBase {
 
     /// Main generator function
     fn gen_all(&mut self, obj: &Comp) -> Result<(), Box<dyn std::error::Error>> {
-        // Create output directory if it does not exist
-        create_dir_all(self.setting().path.clone())?;
         //
         self.write_header(remove_rif(obj.get_name()));
         let filename;
         match obj {
             Comp::Rifmux(rifmux) => {
+                self.set_comp(rifmux.into());
                 filename = self.filename_rifmux(rifmux);
                 let name = remove_rif(&rifmux.inst_name);
                 let desc = rifmux.description.get_split(self.is_public());
@@ -191,6 +188,10 @@ pub trait GeneratorDoc : GeneratorBase {
     fn add_rif(&mut self, rif: &RifInst, idx: usize, info: &[RifInstInfo]) -> Result<(), String> {
         let rif_name = remove_rif(&rif.type_name);
         let desc = rif.base_description.get_split(self.is_public());
+        // Set component info only when RIF is generated as top level
+        if info.is_empty() {
+            self.set_comp(rif.into());
+        }
         self.set_rif_info(rif);
         self.write_rif_title((rif_name, idx), &desc.0);
         if let Some(desc_detail) = desc.1 {

@@ -11,7 +11,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum RifGenTargets {
+pub enum RifGenTarget {
     /// SystemVerilog
     Sv,
     /// Register Abstraction Layer (UVM)
@@ -40,57 +40,57 @@ pub enum RifGenTargets {
     Custom(String),
 }
 
-impl From<&str> for RifGenTargets {
+impl From<&str> for RifGenTarget {
 
     fn from(s: &str) -> Self {
         let s_lc = s.to_lowercase();
         match s_lc.as_ref() {
-            "sv" => RifGenTargets::Sv,
-            "ral" => RifGenTargets::Ral,
-            "vhdl" => RifGenTargets::Vhdl,
-            "c" => RifGenTargets::C,
-            "py" => RifGenTargets::Py,
-            "html" => RifGenTargets::Html,
-            "latex" => RifGenTargets::Latex,
-            "mif" => RifGenTargets::Mif,
-            "svd" => RifGenTargets::Svd,
-            "json" => RifGenTargets::Json,
-            "adoc" => RifGenTargets::Adoc,
-            _ => RifGenTargets::Custom(s_lc),
+            "sv" => RifGenTarget::Sv,
+            "ral" => RifGenTarget::Ral,
+            "vhdl" => RifGenTarget::Vhdl,
+            "c" => RifGenTarget::C,
+            "py" => RifGenTarget::Py,
+            "html" => RifGenTarget::Html,
+            "latex" => RifGenTarget::Latex,
+            "mif" => RifGenTarget::Mif,
+            "svd" => RifGenTarget::Svd,
+            "json" => RifGenTarget::Json,
+            "adoc" => RifGenTarget::Adoc,
+            _ => RifGenTarget::Custom(s_lc),
         }
     }
 }
 
-impl std::fmt::Display for RifGenTargets {
+impl std::fmt::Display for RifGenTarget {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RifGenTargets::Sv        => write!(f, "SystemVerilog"),
-            RifGenTargets::Ral       => write!(f, "UVM Register Abstraction Layer"),
-            RifGenTargets::Vhdl      => write!(f, "VHDL"),
-            RifGenTargets::C         => write!(f, "C"),
-            RifGenTargets::Py        => write!(f, "Python"),
-            RifGenTargets::Html      => write!(f, "HTML"),
-            RifGenTargets::Latex     => write!(f, "LaTeX"),
-            RifGenTargets::Mif       => write!(f, "Framemaker MIF"),
-            RifGenTargets::Svd       => write!(f, "SVD"),
-            RifGenTargets::Json      => write!(f, "JSON"),
-            RifGenTargets::Adoc      => write!(f, "AsciiDoctor"),
-            RifGenTargets::IpXact    => write!(f, "IpXact"),
-            RifGenTargets::Custom(n) => write!(f, "'{n}'"),
+            RifGenTarget::Sv        => write!(f, "SystemVerilog"),
+            RifGenTarget::Ral       => write!(f, "UVM Register Abstraction Layer"),
+            RifGenTarget::Vhdl      => write!(f, "VHDL"),
+            RifGenTarget::C         => write!(f, "C"),
+            RifGenTarget::Py        => write!(f, "Python"),
+            RifGenTarget::Html      => write!(f, "HTML"),
+            RifGenTarget::Latex     => write!(f, "LaTeX"),
+            RifGenTarget::Mif       => write!(f, "Framemaker MIF"),
+            RifGenTarget::Svd       => write!(f, "SVD"),
+            RifGenTarget::Json      => write!(f, "JSON"),
+            RifGenTarget::Adoc      => write!(f, "AsciiDoctor"),
+            RifGenTarget::IpXact    => write!(f, "IpXact"),
+            RifGenTarget::Custom(n) => write!(f, "'{n}'"),
         }
     }
 }
 
-impl<'de> serde::Deserialize<'de> for RifGenTargets {
+impl<'de> serde::Deserialize<'de> for RifGenTarget {
     fn deserialize<D: serde::Deserializer<'de> >(d: D) -> Result<Self, D::Error> {
         let s = String::deserialize(d)?;
-        Ok(RifGenTargets::from(s.as_ref()))
+        Ok(RifGenTarget::from(s.as_ref()))
     }
 }
 
-impl RifGenTargets {
+impl RifGenTarget {
     pub fn custom_name(&self) -> Option<String> {
-        if let RifGenTargets::Custom(n) = self {
+        if let RifGenTarget::Custom(n) = self {
             Some(n.to_owned())
         } else {
             None
@@ -109,8 +109,10 @@ pub struct YarigCfg {
     pub include: Vec<String>,
     /// List of included reference to generate (use ["*"] for all)
     pub gen_inc: Vec<String>,
+    /// List of included reference which must be generated locally (use ["*"] to match all component in the gen_inc definition)
+    pub local: Vec<String>,
     /// List of targets to generate
-    pub targets: Vec<RifGenTargets>,
+    pub targets: Vec<RifGenTarget>,
     /// Flag when the output is for public usage (i.e. hide private register/field)
     pub public: bool,
     /// Specify an HDL interface
@@ -147,7 +149,12 @@ pub struct CfgHtml {
 
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct CfgAdoc {
+    /// Split the AsciiDoc output in multiple files
     pub split: Option<bool>,
+    /// List of included reference to generate (use ["*"] for all): valid only if split is enabled
+    pub gen_inc: Option<Vec<String>>,
+    /// List of included reference which must be generated locally (use ["*"] to match all component in the gen_inc definition)
+    pub local: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -156,17 +163,30 @@ pub struct CfgC {
     pub base_offset: Option<String>,
     /// List of included reference to generate (use ["*"] for all)
     pub gen_inc: Option<Vec<String>>,
+    /// List of included reference which must be generated locally (use ["*"] to match all component in the gen_inc definition)
+    pub local: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct CfgRtl {
+    /// Number of pipe level for register access (default 1 on the read value)
     pub nb_pipe: u8,
+    /// List of included reference to generate (use ["*"] for all)
+    pub gen_inc: Option<Vec<String>>,
+    /// List of included reference which must be generated locally (use ["*"] to match all component in the gen_inc definition)
+    pub local: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct CfgRal {
+    /// Name of the register block class (default to uvm_reg_block)
     pub class: Option<String>,
+    /// Name of the macro use to instantiate the RAL (default to an internal macro ral_create_reg_block)
     pub macro_name: Option<String>,
+    /// List of included reference to generate (use ["*"] for all)
+    pub gen_inc: Option<Vec<String>>,
+    /// List of included reference which must be generated locally (use ["*"] to match all component in the gen_inc definition)
+    pub local: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -177,6 +197,8 @@ pub struct CfgPy {
     pub version: Option<PyVersion>,
     /// List of included reference to generate (use ["*"] for all)
     pub gen_inc: Option<Vec<String>>,
+    /// List of included reference which must be generated locally (use ["*"] to match all component in the gen_inc definition)
+    pub local: Option<Vec<String>>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -194,15 +216,25 @@ pub struct CfgIpXact {
 
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct CfgMif {
+    /// Split the MIF output in multiple files
     pub split              : Option<bool>,
+    /// Style of anchor paragraph
     pub anchor             : Option<String>,
+    /// Style of Header level 2
     pub h2                 : Option<String>,
+    /// Style of Header level 3
     pub h3                 : Option<String>,
+    /// Style of Table title
     pub table_title        : Option<String>,
+    /// Style of Table heading
     pub table_heading      : Option<String>,
+    /// Style of Table cell
     pub table_cell         : Option<String>,
+    /// Style of Table for Rifmux
     pub table_kind_rifmux  : Option<String>,
+    /// Style of Table for address mapping
     pub table_kind_mapping : Option<String>,
+    /// Style of Table for register definitino
     pub table_kind_reg     : Option<String>,
     /// Dimension of the table for Rifmux, Pages (3 columns)
     pub width_3col     : Option<[f32;3]>,
@@ -210,6 +242,10 @@ pub struct CfgMif {
     pub width_4col     : Option<[f32;4]>,
     /// Dimension of the table for fields (5 columns)
     pub width_5col     : Option<[f32;5]>,
+    /// List of included reference to generate (use ["*"] for all)
+    pub gen_inc: Option<Vec<String>>,
+    /// List of included reference which must be generated locally (use ["*"] to match all component in the gen_inc definition)
+    pub local: Option<Vec<String>>,
 }
 
 impl FromStr for YarigCfg {
@@ -235,7 +271,28 @@ impl YarigCfg {
         Ok(cfg)
     }
 
-    pub fn get_output_path(&self, keys: &[&str], def: &str) -> (PathBuf, Option<String>) {
+    /// Retrieve output path definition from the configuration given a target
+    pub fn get_output_path(&self, target: &RifGenTarget) -> (PathBuf, Option<String>, String) {
+        let (keys,def) = match target {
+            RifGenTarget::C => (["c", "sw"],"c"),
+            RifGenTarget::Html => (["html", "doc"],"doc"),
+            RifGenTarget::Mif => (["mif", "doc"], "doc"),
+            RifGenTarget::Latex => (["latex", "doc"], "doc"),
+            RifGenTarget::Sv => (["sv", "rtl"], "rtl"),
+            RifGenTarget::Vhdl => (["vhdl", "rtl"], "rtl"),
+            RifGenTarget::Ral => (["ral", "sim"], "sim"),
+            RifGenTarget::Py => (["py", "sw"], "py"),
+            RifGenTarget::Json => (["json", "doc"], "doc"),
+            RifGenTarget::Adoc => (["adoc", "doc"], "doc"),
+            RifGenTarget::Svd => (["svd", "sw"], "sw"),
+            RifGenTarget::IpXact => (["ipxact", "sw"], "sw"),
+            RifGenTarget::Custom(n) => ([n.as_str(),n.as_str()], n.as_str()),
+        };
+        self.get_output_path_kd(&keys, def)
+    }
+
+    /// Retrieve output path definition from the configuration given an array of keys and a default
+    pub fn get_output_path_kd(&self, keys: &[&str], def: &str) -> (PathBuf, Option<String>, String) {
         let mut path = format!("./{def}");
         for k in keys.iter() {
             if let Some(p) = self.outputs.get(*k) {
@@ -246,22 +303,39 @@ impl YarigCfg {
         let is_rel = path.starts_with('.') || !path.contains('/');
         let path_buf : PathBuf = match (&self.path, is_rel) {
             (Some(cwd), true) => [cwd, &path].iter().collect(),
-            _ => path.into()
+            _ => path.clone().into()
         };
 
         match (path_buf.extension().is_some(),path_buf.file_name()) {
             (true, Some(name)) => {
                 let fname = name.to_string_lossy().to_string();
                 let parent = path_buf.parent().unwrap_or(&path_buf).to_path_buf();
-                (parent, Some(fname))
+                (parent, Some(fname), path)
             }
-            _ => (path_buf, None)
+            _ => (path_buf, None, path)
         }
     }
 
-    pub fn gen_all(&self) -> Result<Comp, String> {
+    pub fn get_local(&self, target: &RifGenTarget) -> Option<&Vec<String>> {
+        let local = match target {
+            RifGenTarget::C    => self.c.local.as_ref(),
+            RifGenTarget::Mif  => self.mif.local.as_ref(),
+            RifGenTarget::Sv   => self.rtl.local.as_ref(),
+            RifGenTarget::Vhdl => self.rtl.local.as_ref(),
+            RifGenTarget::Ral  => self.ral.local.as_ref(),
+            RifGenTarget::Py   => self.py.local.as_ref(),
+            RifGenTarget::Adoc => self.adoc.local.as_ref(),
+            _ => None
+        };
+        if local.is_none() {
+            Some(&self.local)
+        } else {
+            local
+        }
+    }
 
-        let base_setting = GeneratorBaseSetting::new(self.casing, self.public, &self.gen_inc);
+    pub fn gen_all(&self) -> Result<(Comp, HashMap<String, PathBuf>), String> {
+
         let mut params = ParamValues::new();
         self.parameters.iter().for_each(
             |(k,v)| params.insert(k.to_owned(), *v)
@@ -275,6 +349,7 @@ impl YarigCfg {
             .map_err(|e| format!("Parsing Error : {e}"))?;
         let mut rif_obj = Comp::compile(&rif_src, &self.suffixes, &params)
             .map_err(|e| format!("Compilation failed: {e}"))?;
+        // println!("{:#?}", rif_src.paths);
         // Handle case where suffixes are enabled only for RTL targets
         // Force to None by default and will set it properly only in the appropriate target
         let no_suffixes = HashMap::new();
@@ -285,36 +360,41 @@ impl YarigCfg {
         if let Some(intf) = &self.interface {
             rif_obj.set_interface(intf);
         }
+        //
+        let base_setting = GeneratorBaseSetting::new(self.casing, self.public, &self.gen_inc);
         for target in self.targets.iter() {
             let mut setting = base_setting.clone();
+            let out = self.get_output_path(target);
+            setting.set_output((out.0, out.1));
+            if let Some(local) = self.get_local(target) {
+                setting.set_locals(target, local, &rif_src.paths, &out.2);
+            }
             match target {
-                RifGenTargets::C => {
-                    setting.set_output(self.get_output_path(&["c", "sw"],"c"));
+                RifGenTarget::C => {
                     let mut g = GeneratorC::new(setting, self.c.clone());
                     g.gen_all(&rif_obj).map_err(|e| format!("C generation failed: {e}"))?;
                 },
-                RifGenTargets::Html => {
-                    setting.set_output(self.get_output_path(&["html", "doc"],"doc"));
+                RifGenTarget::Html => {
                     if let Some(split) = self.html.split {setting.split = split;}
                     let mut g = GeneratorHtml::new(setting, self.html.clone());
                     g.gen_all(&rif_obj).map_err(|e| format!("Html generation failed: {e}"))?;
                 }
-                RifGenTargets::Mif => {
-                    setting.set_output(self.get_output_path(&["mif", "doc"], "doc"));
-                    if let Some(split) = self.mif.split {setting.split = split;}
+                RifGenTarget::Mif => {
                     let mut g = GeneratorMif::new(setting, self.mif.clone());
                     g.gen_all(&rif_obj).map_err(|e| format!("MIF generation failed: {e}"))?;
                 }
-                RifGenTargets::Latex => {
-                    setting.set_output(self.get_output_path(&["latex", "doc"], "doc"));
+                RifGenTarget::Latex => {
                     // if let Some(split) = self.latex.split {setting.split = split;}
                     let mut g = GeneratorLatex::new(setting);
                     g.gen_all(&rif_obj).map_err(|e| format!("Latex generation failed: {e}"))?;
                 }
-                RifGenTargets::Sv => {
-                    setting.set_output(self.get_output_path(&["sv", "rtl"], "rtl"));
+                RifGenTarget::Sv => {
                     if self.suffix_rtl_only {
                         rif_obj.set_suffixes(&self.suffixes);
+                    }
+                    // Override gen_inc if defined in the python settings
+                    if let Some(gen_inc) = &self.rtl.gen_inc {
+                        setting.gen_inc = gen_inc.clone();
                     }
                     let mut g = GeneratorSv::new(setting);
                     g.gen_all(&rif_obj).map_err(|e| format!("SystemVerilog generation failed: {e}"))?;
@@ -322,10 +402,13 @@ impl YarigCfg {
                         rif_obj.set_suffixes(&no_suffixes);
                     }
                 }
-                RifGenTargets::Vhdl => {
-                    setting.set_output(self.get_output_path(&["vhdl", "rtl"], "rtl"));
+                RifGenTarget::Vhdl => {
                     if self.suffix_rtl_only {
                         rif_obj.set_suffixes(&self.suffixes);
+                    }
+                    // Override gen_inc if defined in the python settings
+                    if let Some(gen_inc) = &self.rtl.gen_inc {
+                        setting.gen_inc = gen_inc.clone();
                     }
                     let mut g = GeneratorVhdl::new(setting);
                     g.gen_all(&rif_obj).map_err(|e| format!("VHDL generation failed: {e}"))?;
@@ -333,41 +416,34 @@ impl YarigCfg {
                         rif_obj.set_suffixes(&no_suffixes);
                     }
                 }
-                RifGenTargets::Ral => {
-                    setting.set_output(self.get_output_path(&["ral", "sim"], "sim"));
+                RifGenTarget::Ral => {
                     let mut g = GeneratorRal::new(setting, self.ral.clone());
                     g.gen_all(&rif_obj).map_err(|e| format!("RAL generation failed: {e}"))?;
                 }
-                RifGenTargets::Py => {
-                    setting.set_output(self.get_output_path(&["py", "sw"], "py"));
+                RifGenTarget::Py => {
                     let mut g = GeneratorPy::new(setting, self.py.clone());
                     g.gen_all(&rif_obj).map_err(|e| format!("Python generation failed: {e}"))?;
                 }
-                RifGenTargets::Json => {
-                    setting.set_output(self.get_output_path(&["json", "doc"], "doc"));
+                RifGenTarget::Json => {
                     let mut g = GeneratorJson::new(setting);
                     g.gen_all(&rif_obj).map_err(|e| format!("JSON generation failed: {e}"))?;
                 }
-                RifGenTargets::Adoc => {
-                    setting.set_output(self.get_output_path(&["adoc", "doc"], "doc"));
-                    if let Some(split) = self.adoc.split {setting.split = split;}
-                    let mut g = GeneratorAdoc::new(setting);
+                RifGenTarget::Adoc => {
+                    let mut g = GeneratorAdoc::new(setting, self.adoc.clone());
                     g.gen_all(&rif_obj).map_err(|e| format!("AsciiDoctor generation failed: {e}"))?;
                 }
-                RifGenTargets::Svd => {
-                    setting.set_output(self.get_output_path(&["svd", "sw"], "sw"));
+                RifGenTarget::Svd => {
                     let mut g = GeneratorSvd::new(setting, self.svd.clone());
                     g.gen_all(&rif_obj).map_err(|e| format!("SVD generation failed: {e}"))?;
                 }
-                RifGenTargets::IpXact => {
-                    setting.set_output(self.get_output_path(&["ipxact", "sw"], "sw"));
+                RifGenTarget::IpXact => {
                     let mut g = GeneratorIpXact::new(setting, self.ipxact.clone());
                     g.gen_all(&rif_obj).map_err(|e| format!("IP XACT generation failed: {e}"))?;
                 }
                 _ => {},
             }
         }
-        Ok(rif_obj)
+        Ok((rif_obj, rif_src.paths))
     }
 
 }

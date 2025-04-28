@@ -1,5 +1,3 @@
-use std::fs::create_dir_all;
-
 use crate::{
     comp::comp_inst::{Comp, RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxGroupInst, RifmuxInst},
     parser::remove_rif, rifgen::{Access, Description, EnumDef, EnumEntry}
@@ -48,8 +46,6 @@ pub trait GeneratorSw : GeneratorBase {
 
     /// Main generator function
     fn gen_all(&mut self, obj: &Comp) -> Result<(), Box<dyn std::error::Error>> {
-        // Create output directory if it does not exist
-        create_dir_all(self.setting().path.clone())?;
         // Create resource file if needed
         self.create_resource()?;
         // Dispatch generator: RIF or rifmux
@@ -80,6 +76,7 @@ pub trait GeneratorSw : GeneratorBase {
 
     /// Generate structure associated to a RIF
     fn gen_rif(&mut self, rif: &RifInst, base_addr: Option<u64>) -> Result<(), Box<dyn std::error::Error>> {
+        self.set_comp(rif.into());
         self.set_rif_info(rif);
         self.write_rif_header(rif, base_addr);
         let rif_name = remove_rif(&rif.type_name);
@@ -291,6 +288,7 @@ pub trait GeneratorSw : GeneratorBase {
 
     /// Generate structure associated to a RIFmux
     fn gen_rifmux(&mut self, rifmux: &RifmuxInst, rif_list: &RifList) -> Result<(), Box<dyn std::error::Error>> {
+        self.set_comp(rifmux.into());
         let rifmux_list : Vec<&RifmuxInst> = rifmux.components.iter()
             .filter_map(|c| if let Comp::Rifmux(m) = &c.inst {Some(m)} else {None})
             .collect();

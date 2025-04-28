@@ -3,20 +3,28 @@
 ## [Unrelease 0.10.0] - 2025-xx-xx
 
 ### Added
- - Description: support for private description.
-   * Syntax is `description.hidden`
-   * Description structure is now composed of two strings (public and private) which are concatenated when privacy is private.
-     For public privacy on the public part of the description is returned
+  - Description: support for private description.
+    * Syntax is `description.hidden`
+    * Description structure is now composed of two strings (public and private) which are concatenated when privacy is private.
+      For public privacy on the public part of the description is returned
+  - New setting local: When a file is included and its target must be generated (through the use of gen_inc setting)
+    it is now possible to generate it relative to its RIF file rather the top file which included it.
+    The local setting can be set at top and/or overridden directly in the target specific section.
+
+### Changed
+  - The get_output_path function now takes target rather than array of string as input.
+    Old function is still available and was renamed as get_output_path_kd.
+  - GeneratoreCore now include some basic RIF information available to all generator (like name, address/data width)
 
 ## [0.9.4] - 2025-04-23
 
 ### Bug Fixes
- - Trait HW:
-   * Fix a few legacy usage of full path (if_rif.en) instead of proper LogicExpr
-   * Fix rifmux file extension (was hard-coded to sv)
-   * Fix RIF package filename call not properly flagged as package
-   * Add new LogicExpr::CastFrom when an enum is used as bit vector (explicit conversion required in VHDL)
- - Fixes VHDL output: missing cast around enum, missing component declaration, RIFmux support, ...
+  - Trait HW:
+    * Fix a few legacy usage of full path (if_rif.en) instead of proper LogicExpr
+    * Fix rifmux file extension (was hard-coded to sv)
+    * Fix RIF package filename call not properly flagged as package
+    * Add new LogicExpr::CastFrom when an enum is used as bit vector (explicit conversion required in VHDL)
+  - Fixes VHDL output: missing cast around enum, missing component declaration, RIFmux support, ...
 
 ## [0.9.2] - 2025-04-13
 

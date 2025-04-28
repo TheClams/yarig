@@ -14,16 +14,12 @@ use super::{
 use yarig_macro::add_gen_core;
 #[add_gen_core("vhd")]
 pub struct GeneratorVhdl {
-    /// Current RIF data bus width
-    data_width : u8,
     /// Current RIF address bus width
     addr_width : u8,
     /// Current enumerated type width
     enum_width : u8,
     /// True when current module instance is a bridge
     is_bridge : bool,
-    /// True when current module is a rifmux
-    is_rifmux : bool,
     /// Component interface
     intf : Interface,
     /// List of outputs port (needed to add intermediate signals)
@@ -39,11 +35,9 @@ impl GeneratorVhdl {
     pub fn new(setting: GeneratorBaseSetting) -> Self {
         GeneratorVhdl {
             core: GeneratorCore::new(3,setting),
-            data_width: 32,
             addr_width: 16,
             enum_width: 0,
             is_bridge: false,
-            is_rifmux: false,
             outputs: OrderDict::new(),
             outputs_locked: false,
             intf: Interface::Default,
@@ -89,7 +83,7 @@ impl GeneratorVhdl {
             }
             SignalKind::Integer     => self.core.write("integer "),
             SignalKind::Address     => self.core.write(&format!("std_logic_vector({} downto 0)", self.addr_width-1)),
-            SignalKind::Data        => self.core.write(&format!("std_logic_vector({} downto 0)", self.data_width-1)),
+            SignalKind::Data        => self.core.write(&format!("std_logic_vector({} downto 0)", self.data_width()-1)),
         }
     }
 
@@ -225,7 +219,7 @@ impl GeneratorVhdl {
     }
 
     fn write_expr_id(&mut self, expr: &ExprId, kind: LogicExprKind) {
-        let is_intf = expr.name.starts_with("if_") && self.is_rifmux;
+        let is_intf = expr.name.starts_with("if_") && self.comp().is_rifmux;
         match kind {
             LogicExprKind::MathU => self.write("unsigned("),
             LogicExprKind::MathS => self.write("signed("),
@@ -282,19 +276,13 @@ impl GeneratorHw for GeneratorVhdl {
 
     /// Set the width of address/data for current RIF
     fn set_rif_info(&mut self, rif: &RifInst) {
-        self.addr_width = rif.addr_width;
-        self.data_width = rif.data_width;
         self.outputs.clear();
         self.outputs_locked = false;
-        self.is_rifmux = false;
         self.intf = rif.interface.clone();
     }
 
     /// Set the width of address/data for current RIF
     fn set_rifmux_info(&mut self, rifmux: &RifmuxInst) {
-        self.is_rifmux = true;
-        self.addr_width = rifmux.addr_width;
-        self.data_width = rifmux.data_width;
         self.intf = rifmux.interface.clone();
     }
 

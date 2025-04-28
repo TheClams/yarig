@@ -50,8 +50,16 @@ impl GeneratorMif {
         table_dim.extend(cfg.width_3col.unwrap_or([2.5, 3.4, 11.1]));
         table_dim.extend(cfg.width_4col.unwrap_or([2.5, 3.4, 2.1, 9.4]));
         table_dim.extend(cfg.width_5col.unwrap_or([1.4, 3.4, 2.0, 2.1, 8.5]));
+        let mut core = GeneratorCore::new(1,setting);
+        // Override gen_inc if defined in the extra settings
+        if let Some(gen_inc) = cfg.gen_inc {
+            core.setting.gen_inc = gen_inc;
+        }
+        if let Some(split) = cfg.split {
+            core.setting.split = split;
+        }
         GeneratorMif {
-            core: GeneratorCore::new(1,setting),
+            core,
             addr_width: 8,
             is_rifmux: false,
             multipage: false,

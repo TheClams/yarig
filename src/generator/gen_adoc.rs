@@ -1,6 +1,6 @@
 use yarig_macro::add_gen_core;
 
-use crate::{comp::comp_inst::RifInst, generator::casing::ToCasing, parser::remove_rif, rifgen::EnumDef};
+use crate::{cfg::CfgAdoc, comp::comp_inst::RifInst, generator::casing::ToCasing, parser::remove_rif, rifgen::EnumDef};
 
 use super::{
     casing::Casing,
@@ -24,9 +24,15 @@ pub struct GeneratorAdoc {
 
 impl GeneratorAdoc {
 
-    pub fn new(setting: GeneratorBaseSetting) -> Self {
+    pub fn new(setting: GeneratorBaseSetting, cfg: CfgAdoc) -> Self {
+        let mut core = GeneratorCore::new(0,setting);
+        if let Some(split) = cfg.split {core.setting.split = split;}
+        // Override gen_inc if defined in the extra settings
+        if let Some(gen_inc) = cfg.gen_inc {
+            core.setting.gen_inc = gen_inc;
+        }
         GeneratorAdoc {
-            core: GeneratorCore::new(0,setting),
+            core,
             addr_width: 8,
             comp_name: "".to_owned(),
             comp_fname: "".to_owned(),

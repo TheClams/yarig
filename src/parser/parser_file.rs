@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::env::current_dir;
 use std::fs::{self, File};
 use std::io::{self, BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -36,9 +37,15 @@ pub enum RifGenTop {#[default]
 #[derive(Debug)]
 /// Source RIF Generator (result of parsing)
 pub struct RifGenSrc {
+    /// Top level
     pub top: RifGenTop,
+    /// Dictionary of all rif definitions parsed
     pub rifs: HashMap<String, Rif>,
+    /// Dictionary of all rifmux parsed
     pub rifmux: HashMap<String, Rifmux>,
+    /// Path of each rif/rifmux
+    pub paths: HashMap<String, PathBuf>,
+    // Internal state used for parsgin
     last_hidden: bool,
     last_data_width: DataWidth,
     last_obj: String,
@@ -84,6 +91,7 @@ impl RifGenSrc {
             top: RifGenTop::None,
             rifs: HashMap::new(),
             rifmux: HashMap::new(),
+            paths: HashMap::new(),
             last_hidden: false,
             last_data_width: DataWidth::default(),
             last_obj: "".to_owned(),
@@ -163,6 +171,11 @@ impl RifGenSrc {
         if let Some(file_path) = filename.as_ref().file_name() {
             err_set_name!(file_path.to_string_lossy().to_string());
         }
+        let filedir : PathBuf = filename.as_ref()
+            .parent()
+            .expect("Filename should have a parent")
+            .to_path_buf();
+        let filedir = if filedir.as_os_str().is_empty() {current_dir()?} else {filedir.canonicalize()?};
         let mut lines = read_lines(filename)?;
         let mut context_stack: ContextStack = vec![(Context::Top, 0)];
         let mut line_num = 0;
@@ -202,6 +215,7 @@ impl RifGenSrc {
                         self.last_obj = name.to_owned();
                         let rif = Rif::new(name);
                         self.rifs.insert(name.to_owned(), rif);
+                        self.paths.insert(remove_rif(name).to_owned(), filedir.clone());
                         self.last_data_width = DataWidth::default();
                         context_stack.push((Context::Rif, ilvl));
                     }
@@ -212,6 +226,7 @@ impl RifGenSrc {
                         self.last_obj = name.to_owned();
                         let rifmux = Rifmux::new(name);
                         self.rifmux.insert(name.to_owned(), rifmux);
+                        self.paths.insert(remove_rif(name).to_owned(), filedir.clone());
                         self.last_data_width = DataWidth::default();
                         context_stack.push((Context::Rifmux, ilvl));
                     }

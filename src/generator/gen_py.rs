@@ -128,10 +128,10 @@ impl GeneratorSw for GeneratorPy {
     /// Create the regmap.py containing base class if not defined in another python module
     fn create_resource(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if self.base_module==".regmap" {
-            let path : std::path::PathBuf = [
-                self.setting().path.clone(),
-                "regmap.py".into()
-            ].iter().collect();
+            let dir = self.setting().path("");
+            // Create output directory if it does not exist
+            std::fs::create_dir_all(dir.clone())?;
+            let path : std::path::PathBuf = [dir.clone(), "regmap.py".into()].iter().collect();
             match self.version {
                 PyVersion::V3_10 => {
                     let mut file = File::create(path)?;

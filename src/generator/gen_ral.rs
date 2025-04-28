@@ -30,8 +30,13 @@ pub struct GeneratorRal {
 impl GeneratorRal {
 
     pub fn new(setting: GeneratorBaseSetting, extra: CfgRal) -> Self {
+        let mut core = GeneratorCore::new(3,setting);
+        // Override gen_inc if defined in the python settings
+        if let Some(gen_inc) = extra.gen_inc {
+            core.setting.gen_inc = gen_inc;
+        }
         GeneratorRal {
-            core: GeneratorCore::new(3,setting),
+            core,
             ral_class: extra.class.unwrap_or("uvm_reg_block".to_owned()),
             ral_macro: extra.macro_name,
             comp_name: "".to_owned(),

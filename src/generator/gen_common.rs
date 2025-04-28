@@ -1,8 +1,7 @@
 use std::{collections::HashMap, ops::Deref, path::PathBuf};
 
 use crate::{
-    comp::comp_inst::{Comp, RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxInst},
-    parser::remove_rif
+    cfg::{RifGenTarget, YarigCfg}, comp::comp_inst::{Comp, RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxInst}, parser::remove_rif
 };
 
 use super::casing::{Casing, ToCasing};
@@ -98,8 +97,6 @@ impl Privacy {
 
 #[derive(Clone, Debug)]
 pub struct GeneratorBaseSetting {
-    /// Output directory path
-    pub path: PathBuf,
     /// Top filename
     pub fname: Option<String>,
     /// Casing used on register/field
@@ -110,8 +107,10 @@ pub struct GeneratorBaseSetting {
     pub gen_inc: Vec<String>,
     /// True when generator should split output in multiple files (if implemented by the generator)
     pub split: bool,
-    /// For multi-file output, output path is local to each individual RIFs
-    pub local: bool,
+    /// Output directory path
+    path: PathBuf,
+    /// Path to the different included component when it must be generated locally to its definition rather than the top one
+    locals: HashMap<String, PathBuf>,
 }
 
 impl GeneratorBaseSetting {
@@ -123,14 +122,75 @@ impl GeneratorBaseSetting {
             casing: casing.unwrap_or(Casing::Snake),
             privacy: if public {Privacy::Public} else {Privacy::Internal},
             gen_inc: gen_inc.to_vec(),
+            locals: HashMap::new(),
             split: false,
-            local: false,
         }
     }
 
     pub fn set_output(&mut self, info: (PathBuf, Option<String>) ) {
         self.path = info.0;
         self.fname = info.1;
+    }
+
+    fn get_path<'a>(name: &'a str, paths: &'a HashMap<String,PathBuf>) -> Option<(&'a str,&'a PathBuf)> {
+        if let Some(v) = paths.get(name) {Some((name, v))}
+        else if let Some(v) = paths.get(remove_rif(name)) {Some((remove_rif(name), v))}
+        else {None}
+    }
+
+    pub fn set_locals(&mut self, target: &RifGenTarget,  locals: &[String], paths: &HashMap<String,PathBuf>, out: &str) {
+        self.locals.clear();
+        let iter : Box<dyn Iterator<Item = (&str, &PathBuf)>> =
+            if locals.first().map(|c| c.as_str())==Some("*") {
+                if self.is_gen_all() {
+                    Box::new(paths.iter().map(|(k,v)| (k.as_str(), v)))
+                } else {
+                    Box::new(self.gen_inc.iter().filter_map(|k| Self::get_path(k,paths)))
+                }
+            } else {
+                Box::new(locals.iter().filter_map(|k| Self::get_path(k,paths)))
+            };
+        for (k,v) in iter {
+            let mut path : PathBuf;
+            // Check for toml file in same directory as RIF: take first if only one or one with matching name
+            let Ok(files) = std::fs::read_dir(v) else {
+                eprintln!("Unable to read dir '{v:?}'");
+                continue;
+            };
+            let toml_files : Vec<_> = files.filter(|p| {
+                p.as_ref()
+                    .unwrap()
+                    .path()
+                    .extension()
+                    .map(|s| s == "toml")
+                    .unwrap_or(false)
+            }).map(|p| p.unwrap().path()).collect();
+            let toml =
+                if let Some(toml) = toml_files.iter().find(|p| p.file_stem()==Some(&std::ffi::OsStr::new(k))) {
+                    Some(toml)
+                } else  {
+                    toml_files.first()
+            };
+            let (mut cfg_out, mut filepath) : (PathBuf, Option<String> ) = (out.into(), None);
+            if let Some(toml) = toml {
+                if let Ok(cfg) = YarigCfg::from_file(toml) {
+                    (cfg_out, filepath, _) = cfg.get_output_path(target);
+                }
+            }
+
+            // Apply output path
+            if cfg_out.is_relative() {
+                path = v.to_owned();
+                path.push(cfg_out);
+            } else {
+                path = cfg_out;
+            }
+            self.locals.insert(k.to_owned(), path);
+            if let Some(p) = filepath {
+                println!(" - Ignoring target {target} filename output ({p}) defined in local toml {toml:?} (not supported yet)");
+            }
+        }
+        // println!("locals = {:?}", self.locals)
     }
 
     pub fn is_gen_inc(&self, rif: &RifInst) -> bool {
@@ -141,11 +201,21 @@ impl GeneratorBaseSetting {
     pub fn is_gen_all(&self) -> bool {
         self.gen_inc.first().map(|c| c.as_str())==Some("*")
     }
+
+    pub fn path(&self, name: &str) -> PathBuf {
+        if let Some(path) = self.locals.get(remove_rif(name)) {
+            path.to_owned()
+        } else {
+            self.path.clone()
+        }
+    }
 }
 
 /// Component basic information: name, addr/data bus width, page/group number
+#[derive(Clone, Debug)]
 pub struct CompInfo {
     pub name: String,
+    pub is_rifmux: bool,
     pub addr_width: u8,
     pub data_width: u8,
     pub cnt: usize,
@@ -155,6 +225,7 @@ impl From<&RifInst> for CompInfo {
     fn from(rif: &RifInst) -> Self {
         CompInfo {
             name: rif.type_name.to_owned(),
+            is_rifmux: false,
             addr_width: rif.addr_width,
             data_width: rif.data_width,
             cnt: rif.pages.len()
@@ -166,6 +237,7 @@ impl From<&RifmuxInst> for CompInfo {
     fn from(rifmux: &RifmuxInst) -> Self {
         CompInfo {
             name: rifmux.type_name.to_owned(),
+            is_rifmux: true,
             addr_width: rifmux.addr_width,
             data_width: rifmux.data_width,
             cnt: rifmux.groups.len()
@@ -182,10 +254,17 @@ impl From<&Comp> for CompInfo {
         };
         CompInfo {
             name: comp.get_name().to_owned(),
+            is_rifmux: comp.is_rifmux(),
             addr_width: comp.get_addr_width(),
             data_width: comp.get_data_width(),
             cnt
         }
+    }
+}
+
+impl Default for CompInfo {
+    fn default() -> Self {
+        CompInfo { name: "".to_owned(), is_rifmux: false, addr_width: 16, data_width: 32, cnt: 0}
     }
 }
 
@@ -194,6 +273,8 @@ impl From<&Comp> for CompInfo {
 pub struct GeneratorCore {
     /// Basic settings
     pub setting: GeneratorBaseSetting,
+    /// Info of current component
+    pub comp: CompInfo,
     /// Main text buffer
     pub txt: String,
     /// Secondary buffer
@@ -211,6 +292,7 @@ impl GeneratorCore {
         }
         GeneratorCore {
             setting,
+            comp: CompInfo::default(),
             txt: String::with_capacity(10000),
             stash,
         }
@@ -254,10 +336,10 @@ impl GeneratorCore {
 
     /// Save the main text to a file
     pub fn save(&mut self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
-        let path : PathBuf = [
-            self.setting.path.clone(),
-            filename.into()
-        ].iter().collect();
+        let dir = self.setting.path(&self.comp.name);
+        // Create output directory if it does not exist
+        std::fs::create_dir_all(dir.clone())?;
+        let path : PathBuf = [dir, filename.into()].iter().collect();
         std::fs::write(path, self.txt.as_bytes())?;
         self.txt.clear();
         for s in self.stash.iter_mut() {
@@ -301,6 +383,31 @@ pub trait GeneratorBase {
     /// True when privacy setting is set to Public
     fn is_public(&self) -> bool {
         self.core().setting.privacy.is_public()
+    }
+
+    /// Get reference to the core generator
+    fn set_comp(&mut self, comp: CompInfo) {
+        self.core_mut().comp = comp;
+    }
+
+    /// Return access to component info
+    fn comp(&self) -> &CompInfo {
+        &self.core().comp
+    }
+
+    /// Return address width of current compoment
+    fn addr_width(&self) -> u8 {
+        self.core().comp.addr_width
+    }
+
+    /// Return data width of current compoment
+    fn data_width(&self) -> u8 {
+        self.core().comp.data_width
+    }
+
+    /// Return data width of current compoment
+    fn comp_name(&self) -> &str {
+        &self.core().comp.name
     }
 
     /// Write a string in main buffer
