@@ -16,8 +16,6 @@ pub struct GeneratorIpXact {
     pub vendor: String,
     pub version: String,
     pub library: String,
-    pub data_width: u8,
-    pub addr_width: u8,
     pub page_range: Vec<u64>,
 }
 
@@ -30,8 +28,6 @@ impl GeneratorIpXact {
             version : cfg.version.map_or("1.0".to_owned(), |s| s),
             library : cfg.library.map_or("IP".to_owned(), |s| s),
             page_range: Vec::new(),
-            data_width: 32,
-            addr_width: 8,
         }
     }
 
@@ -59,10 +55,8 @@ impl GeneratorSw for GeneratorIpXact {
     const HAS_REG_DECL    : bool = false;
 
     fn write_rif_header(&mut self, rif: &RifInst, _base_addr: Option<u64>) {
-        self.data_width = rif.data_width;
-        self.addr_width = rif.addr_width;
         self.page_range = rif.pages.iter().rev()
-            .scan(1<<self.addr_width, |p,e| {
+            .scan(1<<rif.addr_width, |p,e| {
                 let r = *p - e.addr;
                 *p = e.addr;
                 Some(r)
@@ -90,12 +84,12 @@ impl GeneratorSw for GeneratorIpXact {
 
     fn write_page_header(&mut self, name: &str, page: &RifPageInst) {
         let tab = "      ";
-        let range = self.page_range.pop().unwrap_or(1<<self.addr_width);
+        let range = self.page_range.pop().unwrap_or(1<<self.addr_width());
         self.write(&format!("{tab}<ipxact:addressBlock>\n"));
         self.write(&format!("{tab}  <ipxact:name>{name}</ipxact:name>\n"));
         self.write(&format!("{tab}  <ipxact:baseAddress>'h{:x}</ipxact:baseAddress>\n", page.addr));
         self.write(&format!("{tab}  <ipxact:range>'h{range:x}</ipxact:range>\n"));
-        self.write(&format!("{tab}  <ipxact:width>{}</ipxact:width>\n", self.data_width));
+        self.write(&format!("{tab}  <ipxact:width>{}</ipxact:width>\n", self.data_width()));
         self.write(&format!("{tab}  <ipxact:access>read-write</ipxact:access>\n"));
 
     }
@@ -109,7 +103,7 @@ impl GeneratorSw for GeneratorIpXact {
         self.write(&format!("{tab}  <ipxact:name>{reg_name}</ipxact:name>\n"));
         self.write(&format!("{tab}  <ipxact:description>{desc}</ipxact:description>\n"));
         self.write(&format!("{tab}  <ipxact:addressOffset>'h{addr:x}</ipxact:addressOffset>\n"));
-        self.write(&format!("{tab}  <ipxact:size>{}</ipxact:size>\n", self.data_width));
+        self.write(&format!("{tab}  <ipxact:size>{}</ipxact:size>\n", self.data_width()));
     }
 
     fn write_field_decl(&mut self, _basename: &str, _reg: &RifRegInst, field: &RifFieldInst, enum_def: Option<&EnumDef>, _is_last: bool) {

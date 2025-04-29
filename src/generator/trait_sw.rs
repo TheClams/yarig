@@ -58,12 +58,16 @@ pub trait GeneratorSw : GeneratorBase {
                         if !gen_all && !self.setting().is_gen_inc(rif) {
                             continue;
                         }
+                        self.set_comp((*rif).into(), true);
                         self.gen_rif(rif, info.first().map(|e| e.0))?;
                     }
                 }
                 self.gen_rifmux(rifmux, &riflist)
             }
-            Comp::Rif(rif) => self.gen_rif(rif, None),
+            Comp::Rif(rif) => {
+                self.set_comp(rif.into(), false);
+                self.gen_rif(rif, None)
+            }
             // Nothing todo for external RIF
             Comp::External(_) => Ok(())
         }
@@ -76,7 +80,6 @@ pub trait GeneratorSw : GeneratorBase {
 
     /// Generate structure associated to a RIF
     fn gen_rif(&mut self, rif: &RifInst, base_addr: Option<u64>) -> Result<(), Box<dyn std::error::Error>> {
-        self.set_comp(rif.into());
         self.set_rif_info(rif);
         self.write_rif_header(rif, base_addr);
         let rif_name = remove_rif(&rif.type_name);
@@ -288,7 +291,7 @@ pub trait GeneratorSw : GeneratorBase {
 
     /// Generate structure associated to a RIFmux
     fn gen_rifmux(&mut self, rifmux: &RifmuxInst, rif_list: &RifList) -> Result<(), Box<dyn std::error::Error>> {
-        self.set_comp(rifmux.into());
+        self.set_comp(rifmux.into(), true);
         let rifmux_list : Vec<&RifmuxInst> = rifmux.components.iter()
             .filter_map(|c| if let Comp::Rifmux(m) = &c.inst {Some(m)} else {None})
             .collect();
@@ -298,6 +301,7 @@ pub trait GeneratorSw : GeneratorBase {
             self.write_rifmux_group(group, groups.peek().is_none());
         }
         self.scan_rifmux(rifmux, "", 0, true )?;
+        self.set_comp(rifmux.into(), true);
         self.write_rifmux_footer(rifmux);
         // Save file
         let fname = self.setting().fname.clone()
@@ -326,6 +330,7 @@ pub trait GeneratorSw : GeneratorBase {
                     }
                 }
                 Comp::Rif(r) => {
+                    self.set_comp(r.into(), true);
                     self.set_rif_info(r);
                     let mut pages = r.pages.iter().peekable();
                     while let Some(page) = pages.next() {

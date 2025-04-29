@@ -92,28 +92,14 @@ The exact behavior of each traits can be tweaked with some associated constant.
 ---
 # TODO
 
-## Generators
- - [x] Implement base generator for documentation (from html) :
-   - [ ] html: view with a sidebar showing the hierarchy.
-   - [x] latex
-   - [x] mif
- - [x] Implement base generator for hardware (from SV):
-   - [ ] VHDL
-
-## API
- - [x] Add derive macro to omplement the generator base part (core field, and function to access it)
-
 ## Feature
  - [ ] Improve nb_frac support:
    - [ ] Support reset value in floating-point
    - [x] Use floating-point value in documentation when nb_frac is non-zero (and use a tool-tip in html to display corresponding integer value)
- - [x] Support casing option
  - [ ] Support pipe option RTL
  - [ ] Support option to repeat field description for interrupt derived register
- - [x] Support TOML config file
  - [ ] Support latex equation in description
  - [ ] Implement a TUI ? (ratatui)
- - [x] Implement a GUI (eGui Based, in an external crate, visualizer only)
  - [ ] Support overlapping register in hardware: need to check exclusive access (RO/WO)
  - [ ] Check enum size matches the field size
  - [ ] Option to add representation value for enum. Syntax could be 'NAME = VAL (repr) "description"'. Could be usefull when enum is representing a limited set of integer or real values.

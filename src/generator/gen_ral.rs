@@ -18,10 +18,6 @@ pub struct GeneratorRal {
     ral_class : String,
     /// Name of macro to instantiate register block
     ral_macro : Option<String>,
-    /// Current Component name (Rifmux or rif)
-    comp_name : String,
-    /// Current RIF data bus width
-    data_width : u8,
     /// Flag when current register is defined in another rif
     reg_is_incl : bool,
 }
@@ -39,8 +35,6 @@ impl GeneratorRal {
             core,
             ral_class: extra.class.unwrap_or("uvm_reg_block".to_owned()),
             ral_macro: extra.macro_name,
-            comp_name: "".to_owned(),
-            data_width: 32,
             reg_is_incl: false,
         }
     }
@@ -97,21 +91,15 @@ impl GeneratorSw for GeneratorRal {
     const INST_ARRAY      : bool = false;
     const IS_HIERARCHICAL : bool = true;
 
-    // TODO: move into generatorCore, those infos will be often usefull
-    fn set_rif_info(&mut self, rif: &RifInst) {
-        self.data_width = rif.data_width;
-        self.comp_name = rif.type_name.to_owned().to_lowercase();
-    }
-
     fn write_rif_header(&mut self, _rif: &RifInst, _base_addr: Option<u64>) {
-        let name_uc = self.comp_name.to_uppercase();
+        let name_uc = self.comp_name().to_uppercase();
         self.write(&format!("`ifndef RAL_{name_uc}\n"));
         self.write(&format!("`define RAL_{name_uc}\n"));
         self.write("\nimport uvm_pkg::*;\n\n");
     }
 
     fn write_rif_footer(&mut self) {
-        self.write(&format!("`endif // RAL_{}\n", self.comp_name.to_uppercase()));
+        self.write(&format!("`endif // RAL_{}\n", self.comp_name().to_uppercase()));
     }
 
     fn write_reg_header(&mut self, _basename: &str, reg: &RifRegInst) {
@@ -125,8 +113,8 @@ impl GeneratorSw for GeneratorRal {
                 self.reg_is_incl = false;
                 "uvm_reg".to_owned()
             };
-        self.write(&format!("class ral_reg_{}_{reg_type} extends {baseclass};\n",
-            remove_rif(&self.comp_name)));
+        let comp_name = remove_rif(self.comp_name()).to_lowercase();
+        self.write(&format!("class ral_reg_{comp_name}_{reg_type} extends {baseclass};\n"));
     }
 
     fn write_reg_footer(&mut self,  basename: &str, reg: &RifRegInst, _is_last: bool) {
@@ -135,7 +123,7 @@ impl GeneratorSw for GeneratorRal {
         if self.reg_is_incl {
             self.write("      super.new(name);\n");
         } else {
-            self.write(&format!("      super.new(name, {}, UVM_NO_COVERAGE);\n", self.data_width));
+            self.write(&format!("      super.new(name, {}, UVM_NO_COVERAGE);\n", self.data_width()));
         }
         self.write(         "   endfunction : new\n\n");
         self.write(         "   virtual function void build();\n");
@@ -175,7 +163,7 @@ impl GeneratorSw for GeneratorRal {
         self.write(         "      super.new(name, UVM_NO_COVERAGE);\n");
         self.write(         "   endfunction : new\n\n");
         self.write(         "   virtual function void build();\n");
-        self.write(&format!("      this.default_map = create_map(\"\", 0, {}, UVM_LITTLE_ENDIAN, 0);\n", self.data_width>>3));
+        self.write(&format!("      this.default_map = create_map(\"\", 0, {}, UVM_LITTLE_ENDIAN, 0);\n", self.data_width()>>3));
         self.pop_stash(2);
         self.write(         "   endfunction : build\n\n");
         self.write(&format!("   `uvm_object_utils(ral_block_{name})\n\n"));
@@ -184,7 +172,8 @@ impl GeneratorSw for GeneratorRal {
 
     fn write_reginst(&mut self, _basename: &str, page: &RifPageInst, reg: &RifRegInst, inst_dict: &InstDict, _is_last: bool) {
         let regname = reg.name().to_lowercase();
-        let regtype = format!("ral_reg_{}_{}", remove_rif(&self.comp_name), reg.reg_type.to_lowercase());
+        let comp_name = remove_rif(self.comp_name()).to_lowercase();
+        let regtype = format!("ral_reg_{comp_name}_{}", reg.reg_type.to_lowercase());
         // Declare register instance as members of the class
         self.push_stash(1, &format!("   rand {regtype} {regname};\n"));
 
@@ -192,7 +181,7 @@ impl GeneratorSw for GeneratorRal {
         self.push_stash(2, &format!("      this.{regname} = {regtype}::type_id::create(\"{regname}\",,get_full_name());\n"));
         self.push_stash(2, &format!("      this.{regname}.configure(this, null, \"\");\n"));
         self.push_stash(2, &format!("      this.{regname}.build();\n"));
-        self.push_stash(2, &format!("      this.{regname}.add_hdl_path_slice(\"{regname}__read_data\", 0, {});\n", self.data_width));
+        self.push_stash(2, &format!("      this.{regname}.add_hdl_path_slice(\"{regname}__read_data\", 0, {});\n", self.data_width()));
         self.push_stash(2, &format!("      this.default_map.add_reg(this.{regname}, "));
         self.push_stash(2, &format!("`UVM_REG_ADDR_WIDTH\'h{:X}, ", page.addr + reg.addr));
         self.push_stash(2, &format!("\"{}\", 0);\n", reg.sw_access));

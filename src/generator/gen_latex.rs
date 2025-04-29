@@ -1,4 +1,4 @@
-use crate::{comp::comp_inst::RifInst, generator::casing::ToCasing, rifgen::EnumDef};
+use crate::{generator::casing::ToCasing, rifgen::EnumDef};
 
 use super::{casing::Casing, gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore}, trait_doc::{CellKind, GeneratorDoc, TableKind}};
 
@@ -7,14 +7,8 @@ use yarig_macro::add_gen_core;
 
 #[add_gen_core("tex")]
 pub struct GeneratorLatex {
-    /// Current component address width
-    addr_width: u8,
     /// Flag when next table column is the first of a row
     first_col: bool,
-    /// Flag when current document is for a RIFMux
-    is_rifmux: bool,
-    /// Flag when current RIF has multiple pages
-    multipage: bool,
 }
 
 impl GeneratorLatex {
@@ -22,10 +16,7 @@ impl GeneratorLatex {
     pub fn new(setting: GeneratorBaseSetting) -> Self {
         GeneratorLatex {
             core: GeneratorCore::new(0,setting),
-            addr_width: 8,
             first_col: true,
-            is_rifmux: false,
-            multipage: false,
         }
     }
 }
@@ -37,15 +28,11 @@ impl GeneratorDoc for GeneratorLatex {
     const SHOW_SINGLE_REG : bool = false;
     const SHOW_UNUSED : bool = true;
 
-    fn set_rif_info(&mut self, rif: &RifInst) {
-        self.addr_width = rif.addr_width;
-        self.multipage = rif.pages.len() > 1;
-    }
 
     fn write_rif_title(&mut self, idx_rif: (&str,usize), desc: &str) {
         // Show title only if sub-paragraph (i.e. RIFmux element)
-        // println!("Title RIF {} : {} | rifmux={}", idx_rif.1, idx_rif.0, self.is_rifmux);
-        if idx_rif.1 > 0 && self.is_rifmux {
+        // println!("Title RIF {} : {} | rifmux={}", idx_rif.1, idx_rif.0, self.comp().is_rifmux);
+        if idx_rif.1 > 0 && self.comp().is_rifmux {
             self.write("\\subsection{");
             if desc.is_empty() {
                 self.write(&self.sanitize(idx_rif.0));
@@ -53,24 +40,18 @@ impl GeneratorDoc for GeneratorLatex {
                 self.write(desc);
             }
             self.write("}");
-        } else {
-            if !desc.is_empty() {
-                self.write(desc);
-            }
-            // Function is first called with index 0 when it is a rifmux
-            if idx_rif.1==0 {
-                self.is_rifmux = true;
-            }
+        } else if !desc.is_empty() {
+            self.write(desc);
         }
         self.write("\n");
-        if !self.is_rifmux {
+        if !self.comp().is_rifmux {
             self.write("\t\\subsection{Address mapping}\n");
         }
     }
 
     fn write_page_title(&mut self, _idx_rif: (&str,usize), idx_page: (&str, usize), desc: (String, Option<String>)) {
-        if self.multipage {
-            let k = if self.is_rifmux {"*"} else {""};
+        if self.comp().cnt > 1 {
+            let k = if self.comp().is_rifmux {"*"} else {""};
             self.write(&format!("\t\\subsection{k}{{"));
             let name = self.sanitize(idx_page.0);
             if desc.0.is_empty() {
@@ -98,7 +79,7 @@ impl GeneratorDoc for GeneratorLatex {
             self.write(&format!("{desc} ({name})"));
         }
         if let Some(addr) = base_addr {
-            let w = ((self.addr_width+3) >> 2) as usize;
+            let w = ((self.addr_width()+3) >> 2) as usize;
             self.write(&format!(" @ 0x{addr:0w$x}"));
         }
         self.write("}\n");
@@ -108,7 +89,7 @@ impl GeneratorDoc for GeneratorLatex {
         let title = self.sanitize(title);
         let caption = match kind {
             TableKind::Page => {
-                if self.multipage {
+                if self.comp().cnt > 1 {
                     format!("{} registers address mapping", title.to_casing(Casing::Title))
                 } else {
                     "Registers address mapping".to_owned()
@@ -133,7 +114,7 @@ impl GeneratorDoc for GeneratorLatex {
 
     fn write_table_footer(&mut self, kind: TableKind) {
         self.write("\t\\end{longtblr}\n");
-        if kind==TableKind::Page && !self.multipage && !self.is_rifmux {
+        if kind==TableKind::Page && self.comp().cnt <= 1 && !self.comp().is_rifmux {
             self.write("\t\\subsection{Registers definition}\n");
         }
     }

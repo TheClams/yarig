@@ -17,7 +17,6 @@ pub struct GeneratorSvd {
     pub vendor: String,
     pub version: String,
     pub rif_top: bool,
-    pub data_width: u8,
 }
 
 impl GeneratorSvd {
@@ -28,7 +27,6 @@ impl GeneratorSvd {
             vendor : cfg.vendor.map_or("Unknown".to_owned(), |s| s),
             version : cfg.version.map_or("1.0".to_owned(), |s| s),
             rif_top: false,
-            data_width: 32,
         }
     }
 
@@ -80,7 +78,6 @@ impl GeneratorSw for GeneratorSvd {
             let cntxt = RifContext {prefix: "", group: "", page: "", addr: 0};
             self.write_rif_inst(rif, cntxt, &rif.description, true, true);
         }
-        self.data_width = rif.data_width;
     }
 
     fn write_rif_footer(&mut self) {
@@ -99,7 +96,7 @@ impl GeneratorSw for GeneratorSvd {
         self.write(&format!("{tab}  <name>{reg_name}</name>\n"));
         self.write(&format!("{tab}  <description>{desc}</description>\n"));
         self.write(&format!("{tab}  <addressOffset>0x{addr:x}</addressOffset>\n"));
-        self.write(&format!("{tab}  <size>{}</size>\n", self.data_width));
+        self.write(&format!("{tab}  <size>{}</size>\n", self.data_width()));
         self.write(&format!("{tab}  <resetValue>0x{:x}</resetValue>\n", reg.reset));
         self.write(&format!("{tab}  <fields>\n"));
     }

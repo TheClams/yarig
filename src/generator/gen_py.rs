@@ -53,10 +53,6 @@ pub struct GeneratorPy {
     base_module : String,
     /// Python version
     version : PyVersion,
-    /// Current Component name (Rifmux or rif)
-    comp_name : String,
-    /// Current RIF data bus width
-    data_width : u8,
     /// Flag when current RIF has enum definition
     has_enum : bool,
     /// Dictionary containing the register owning a field array definition
@@ -77,9 +73,7 @@ impl GeneratorPy {
         }
         GeneratorPy {
             core,
-            comp_name: "".to_owned(),
             version: extra.version.unwrap_or(PyVersion::V3_11),
-            data_width: 32,
             has_enum: false,
             base_module: extra.class.unwrap_or(".regmap".to_owned()),
             field_parent: BTreeMap::new(),
@@ -120,8 +114,6 @@ impl GeneratorSw for GeneratorPy {
     const IS_HIERARCHICAL : bool = false;
 
     fn set_rif_info(&mut self, rif: &RifInst) {
-        self.comp_name = rif.type_name.to_owned().to_lowercase();
-        self.data_width = rif.data_width;
         self.has_enum = rif.enum_defs.iter().any(|d| !d.name.starts_with("doc:"))
     }
 
@@ -148,7 +140,7 @@ impl GeneratorSw for GeneratorPy {
     }
 
     fn write_rif_header(&mut self, rif: &RifInst, _base_addr: Option<u64>) {
-        let rif_name = remove_rif(&self.comp_name).to_casing(Casing::Pascal);
+        let rif_name = remove_rif(self.comp_name()).to_casing(Casing::Pascal);
         self.write("from typing import final\n");
         if self.has_enum {
             self.write("from enum import IntEnum\n");
@@ -213,6 +205,7 @@ impl GeneratorSw for GeneratorPy {
     }
 
     fn write_field_decl(&mut self, _basename: &str, reg: &RifRegInst, field: &RifFieldInst, enum_def: Option<&EnumDef>, _is_last: bool) {
+        let comp_name = remove_rif(self.comp_name()).to_casing(Casing::Pascal);
         let field_type = field.name.to_casing(Casing::Pascal);
         let reg_type = reg.reg_type.to_casing(Casing::Pascal);
         let name = field.name.to_casing(Casing::Snake);
@@ -220,8 +213,7 @@ impl GeneratorSw for GeneratorPy {
         //
         if field.array.dim() > 0 && !self.field_array.contains(&field.name) {
             if field.array.dim() > 1 {
-                self.push_stash(0, &format!("         self.{name} : dict [int, {}.{}.{field_type}] = {{}}\n",
-                    remove_rif(&self.comp_name).to_casing(Casing::Pascal),
+                self.push_stash(0, &format!("         self.{name} : dict [int, {comp_name}.{}.{field_type}] = {{}}\n",
                     self.field_parent.get(&field.name).unwrap_or(&reg_type),
                 ));
             }
@@ -230,8 +222,7 @@ impl GeneratorSw for GeneratorPy {
                 self.field_parent.insert(field.name.clone(), reg_type.to_owned());
             }
         }
-        self.push_stash(0, &format!("         self.{name}{idx} = {}.{}.{field_type}(self, '{name}{idx}')\n",
-            remove_rif(&self.comp_name).to_casing(Casing::Pascal),
+        self.push_stash(0, &format!("         self.{name}{idx} = {comp_name}.{}.{field_type}(self, '{name}{idx}')\n",
             self.field_parent.get(&field.name).unwrap_or(&reg_type),
         ));
         // Doc-string
@@ -262,10 +253,9 @@ impl GeneratorSw for GeneratorPy {
             if self.version > PyVersion::V3_10 {
                 self.write(&format!("\n{tab}@typing.override"));
             }
-            let comp = remove_rif(&self.comp_name).to_casing(Casing::Pascal);
             let name = def.name.split("::").nth(1).unwrap_or(&def.name);
             self.write(&format!("\n{tab}def enum_kind(self) -> None| type[IntEnum]:\n"));
-            self.write(&format!("{tab}   return {comp}.{name}\n"));
+            self.write(&format!("{tab}   return {comp_name}.{name}\n"));
         }
     }
 
@@ -277,28 +267,23 @@ impl GeneratorSw for GeneratorPy {
 
     fn write_reginst(&mut self, _basename: &str, page: &RifPageInst, reg: &RifRegInst, _inst_dict: &InstDict, _is_last: bool) {
         let name = reg.reg_name.to_casing(Casing::Snake);
+        let comp_name = remove_rif(self.comp_name()).to_casing(Casing::Pascal);
+        let reg_type = reg.reg_type.to_casing(Casing::Pascal);
         if reg.array.dim() > 1 {
             if reg.array.idx() == 0 {
-                self.push_stash(1, &format!("      self.{name} : list[{}.{}] = []\n",
-                    remove_rif(&self.comp_name).to_casing(Casing::Pascal),
-                    reg.reg_type.to_casing(Casing::Pascal),
-                ));
+                self.push_stash(1, &format!("      self.{name} : list[{comp_name}.{reg_type}] = []\n"));
                 if let Some(desc) = self.desc_to_string(&reg.base_description,2) {
                     self.push_stash(1, &desc);
                 }
             }
-            self.push_stash(1, &format!("      self.{name}.append({}.{}(self, \"{name}{}\", {}, {:#x}))\n",
-                remove_rif(&self.comp_name).to_casing(Casing::Pascal),
-                reg.reg_type.to_casing(Casing::Pascal),
+            self.push_stash(1, &format!("      self.{name}.append({comp_name}.{reg_type}(self, \"{name}{}\", {}, {:#x}))\n",
                 reg.array.idx(),
                 page.addr + reg.addr,
                 reg.reset
             ));
 
         } else {
-            self.push_stash(1, &format!("      self.{name} = {}.{}(self, \"{name}\", {}, {:#x})\n",
-                remove_rif(&self.comp_name).to_casing(Casing::Pascal),
-                reg.reg_type.to_casing(Casing::Pascal),
+            self.push_stash(1, &format!("      self.{name} = {comp_name}.{reg_type}(self, \"{name}\", {}, {:#x})\n",
                 page.addr + reg.addr,
                 reg.reset
             ));

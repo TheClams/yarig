@@ -10,16 +10,8 @@ use super::{
 
 #[add_gen_core("adoc")]
 pub struct GeneratorAdoc {
-    /// Flag when current document is for a RIFMux
-    is_rifmux: bool,
-    /// Name of the current component
-    comp_name: String,
     /// Currrent component full name
     comp_fname: String,
-    /// Current compoment address width
-    addr_width: u8,
-    /// Flag when current RIF has multiple pages
-    multipage: bool,
 }
 
 impl GeneratorAdoc {
@@ -33,11 +25,7 @@ impl GeneratorAdoc {
         }
         GeneratorAdoc {
             core,
-            addr_width: 8,
-            comp_name: "".to_owned(),
             comp_fname: "".to_owned(),
-            is_rifmux: false,
-            multipage: false,
         }
     }
 }
@@ -50,19 +38,16 @@ impl GeneratorDoc for GeneratorAdoc {
     const SHOW_UNUSED : bool = true;
 
     fn set_rif_info(&mut self, rif: &RifInst) {
-        self.addr_width = rif.addr_width;
-        self.comp_name = remove_rif(&rif.type_name).to_owned();
-        self.multipage = rif.pages.len() > 1;
         self.comp_fname = rif.name(false);
     }
 
     fn write_rif_title(&mut self, idx_rif: (&str,usize), desc: &str) {
-        // println!("Title RIF {} : {} | rifmux={}", idx_rif.1, idx_rif.0, self.is_rifmux);
-        if idx_rif.1 > 0 && self.is_rifmux {
+        // println!("Title RIF {} : {} | rifmux={}", idx_rif.1, idx_rif.0, self.comp().is_rifmux);
+        if idx_rif.1 > 0 && self.comp().is_rifmux {
             self.write("=");
         }
         self.write("= ");
-        if idx_rif.1 == 0 || (!self.is_rifmux && idx_rif.1 == 1) {
+        if idx_rif.1 == 0 || (!self.comp().is_rifmux && idx_rif.1 == 1) {
             self.write("[[top]]");
         }
         self.write(&format!("[[{}]]", idx_rif.0));
@@ -72,14 +57,10 @@ impl GeneratorDoc for GeneratorAdoc {
             self.write(desc);
         }
         self.write("\n\n");
-        // Function is first called with index 0 when it is a rifmux
-        if idx_rif.1==0 {
-            self.is_rifmux = true;
-        }
     }
 
     fn write_page_title(&mut self, idx_rif: (&str,usize), idx_page: (&str, usize), desc: (String, Option<String>)) {
-        if self.multipage {
+        if self.comp().cnt > 1 {
             self.write(&format!("\n=== [[{}.{}]]", idx_rif.0, idx_page.0));
             let name = self.sanitize(idx_page.0);
             if desc.0.is_empty() {
@@ -99,10 +80,10 @@ impl GeneratorDoc for GeneratorAdoc {
 
     fn write_reg_title(&mut self, idx_rif: (&str,usize), _idx_page: (&str, usize), idx_reg: (&str, usize), desc: &str, base_addr: Option<u64>) {
         self.write("\n");
-        if self.is_rifmux {
+        if self.comp().is_rifmux {
             self.write("=");
         }
-        if self.multipage {
+        if self.comp().cnt > 1 {
             self.write("=");
         }
         self.write("=== ");
@@ -114,7 +95,7 @@ impl GeneratorDoc for GeneratorAdoc {
             self.write(&format!("{desc} ({name})"));
         }
         if let Some(addr) = base_addr {
-            let w = ((self.addr_width+3) >> 2) as usize;
+            let w = ((self.addr_width()+3) >> 2) as usize;
             self.write(&format!(" @ 0x{addr:0w$x}"));
         }
         self.write("\n");
@@ -122,7 +103,7 @@ impl GeneratorDoc for GeneratorAdoc {
 
     fn write_reg_summary_header(&mut self, _rif: &RifInst) {
         self.write("\n");
-        if self.is_rifmux {
+        if self.comp().is_rifmux {
             self.write("=");
         }
         self.write("== Address mapping\n");
@@ -131,13 +112,13 @@ impl GeneratorDoc for GeneratorAdoc {
     fn write_table_title(&mut self, kind: TableKind, title: &str, id: &str) {
         let caption = match kind {
             TableKind::Page => {
-                if self.multipage {
+                if self.comp().cnt > 1 {
                     format!("{} registers address mapping", title.to_casing(Casing::Title))
                 } else {
                     "Registers address mapping".to_owned()
                 }
             }
-            TableKind::Field => format!("Register {}.{title}", self.comp_name),
+            TableKind::Field => format!("Register {}.{title}", remove_rif(self.comp_name())),
             _ => self.sanitize(title)
         };
 
@@ -166,7 +147,7 @@ impl GeneratorDoc for GeneratorAdoc {
 
     fn write_reg_detail_header(&mut self, _rif: &RifInst) {
         self.write("\n");
-        if self.is_rifmux {
+        if self.comp().is_rifmux {
             self.write("=");
         }
         self.write("== Registers definition\n");

@@ -133,9 +133,9 @@ impl GeneratorBaseSetting {
     }
 
     fn get_path<'a>(name: &'a str, paths: &'a HashMap<String,PathBuf>) -> Option<(&'a str,&'a PathBuf)> {
+        let short_name = remove_rif(name);
         if let Some(v) = paths.get(name) {Some((name, v))}
-        else if let Some(v) = paths.get(remove_rif(name)) {Some((remove_rif(name), v))}
-        else {None}
+        else {paths.get(short_name).map(|v| (short_name,v))}
     }
 
     pub fn set_locals(&mut self, target: &RifGenTarget,  locals: &[String], paths: &HashMap<String,PathBuf>, out: &str) {
@@ -166,7 +166,7 @@ impl GeneratorBaseSetting {
                     .unwrap_or(false)
             }).map(|p| p.unwrap().path()).collect();
             let toml =
-                if let Some(toml) = toml_files.iter().find(|p| p.file_stem()==Some(&std::ffi::OsStr::new(k))) {
+                if let Some(toml) = toml_files.iter().find(|p| p.file_stem()==Some(std::ffi::OsStr::new(k))) {
                     Some(toml)
                 } else  {
                     toml_files.first()
@@ -386,8 +386,9 @@ pub trait GeneratorBase {
     }
 
     /// Get reference to the core generator
-    fn set_comp(&mut self, comp: CompInfo) {
+    fn set_comp(&mut self, comp: CompInfo, top_is_rifmux: bool) {
         self.core_mut().comp = comp;
+        self.core_mut().comp.is_rifmux = top_is_rifmux;
     }
 
     /// Return access to component info

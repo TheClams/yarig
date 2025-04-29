@@ -85,7 +85,7 @@ pub trait GeneratorDoc : GeneratorBase {
         let filename;
         match obj {
             Comp::Rifmux(rifmux) => {
-                self.set_comp(rifmux.into());
+                self.set_comp(rifmux.into(), true);
                 filename = self.filename_rifmux(rifmux);
                 let name = remove_rif(&rifmux.inst_name);
                 let desc = rifmux.description.get_split(self.is_public());
@@ -107,6 +107,7 @@ pub trait GeneratorDoc : GeneratorBase {
                     self.add_rifmux_entry(c, w,  0, None, &rifmux.groups);
                 }
                 self.write_table_footer(TableKind::Rifmux);
+                self.set_comp(rifmux.into(), true);
                 // Split output -> save current file
                 if self.setting().split {
                     self.write_footer(obj.get_name());
@@ -115,6 +116,7 @@ pub trait GeneratorDoc : GeneratorBase {
                 // Add description of all rif types
                 let rif_list = RifList::new(rifmux, true);
                 for (i,(rif,info)) in rif_list.iter().enumerate() {
+                    self.set_comp((*rif).into(), true);
                     if self.setting().split {
                         let name = rif.name(false);
                         let basename = remove_rif(&name);
@@ -129,6 +131,7 @@ pub trait GeneratorDoc : GeneratorBase {
             }
             Comp::Rif(rif) => {
                 filename = self.filename_rif(rif);
+                self.set_comp(rif.into(), false);
                 self.add_rif(rif, 1, &[])?;
             },
             // Nothing todo for external RIF
@@ -165,6 +168,7 @@ pub trait GeneratorDoc : GeneratorBase {
             inst => {
                 let tn = remove_rif(inst.get_type());
                 if let Comp::Rif(rif) = inst {
+                    self.set_comp(rif.into(), true);
                     self.set_rif_info(rif);
                 }
                 self.write_rifmux_entry(&instname, tn, (addr,w), &inst.get_desc_short(self.is_public()), Self::SHOW_TYPE);
@@ -188,10 +192,6 @@ pub trait GeneratorDoc : GeneratorBase {
     fn add_rif(&mut self, rif: &RifInst, idx: usize, info: &[RifInstInfo]) -> Result<(), String> {
         let rif_name = remove_rif(&rif.type_name);
         let desc = rif.base_description.get_split(self.is_public());
-        // Set component info only when RIF is generated as top level
-        if info.is_empty() {
-            self.set_comp(rif.into());
-        }
         self.set_rif_info(rif);
         self.write_rif_title((rif_name, idx), &desc.0);
         if let Some(desc_detail) = desc.1 {

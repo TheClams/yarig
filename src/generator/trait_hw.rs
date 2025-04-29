@@ -32,6 +32,7 @@ pub trait GeneratorHw : GeneratorBase {
         // Call relevant generator (Rif or Rifmux)
         match obj {
             Comp::Rif(rif) => {
+                self.set_comp(rif.into(), false);
                 self.gen_rif_pkg(rif)?;
                 self.gen_rif(rif)?;
             }
@@ -46,6 +47,7 @@ pub trait GeneratorHw : GeneratorBase {
                         if !gen_all && !self.setting().is_gen_inc(rif) {
                             continue;
                         }
+                        self.set_comp((*rif).into(), true);
                         self.gen_rif_pkg(rif)?;
                         self.gen_rif(rif)?;
                     }
@@ -278,7 +280,6 @@ pub trait GeneratorHw : GeneratorBase {
 
     /// Generate RIF module
     fn gen_rif(&mut self, rif: &RifInst) -> Result<(), Box<dyn std::error::Error>> {
-        self.set_comp(rif.into());
         self.set_rif_info(rif);
         let rif_name = self.casing(&rif.name(false));
         let rif_pkg_name = self.casing(&rif.name(true));
@@ -1592,7 +1593,7 @@ pub trait GeneratorHw : GeneratorBase {
     fn gen_rifmux(&mut self, rifmux: &RifmuxInst) -> Result<(), Box<dyn std::error::Error>> {
         let rifmux_name = self.casing(&rifmux.type_name);
         let name_len = rifmux.components.iter().map(|c| c.get_name().len()).max().unwrap_or(0);
-        self.set_comp(rifmux.into());
+        self.set_comp(rifmux.into(), true);
         self.set_rifmux_info(rifmux);
         self.write_file_header();
         self.write_module_decl_header(&rifmux_name);
@@ -1749,7 +1750,7 @@ pub trait GeneratorHw : GeneratorBase {
         let sw_rst = &rifmux.sw_clocking.rst.name;
         let intf_ports = RifIntfPorts::new(&rifmux.interface, Self::SUPPORT_INTF);
         let mut names : Vec<String> = [sw_clk.to_owned(), sw_rst.to_owned()].to_vec();
-        self.set_comp(rifmux.into());
+        self.set_comp(rifmux.into(), true);
         self.set_rifmux_info(rifmux);
         self.write_file_header();
         // Module declaration

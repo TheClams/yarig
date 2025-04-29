@@ -51,7 +51,7 @@ impl From<&str> for RifGenTarget {
             "c" => RifGenTarget::C,
             "py" => RifGenTarget::Py,
             "html" => RifGenTarget::Html,
-            "latex" => RifGenTarget::Latex,
+            "tex" | "latex" => RifGenTarget::Latex,
             "mif" => RifGenTarget::Mif,
             "svd" => RifGenTarget::Svd,
             "json" => RifGenTarget::Json,

@@ -11,12 +11,6 @@ use yarig_macro::add_gen_core;
 pub struct GeneratorHtml {
     /// Optional name of CSS file used instead of default one
     css: Option<String>,
-    /// Current component address width
-    addr_width: u8,
-    /// Number of column per bit for each register
-    nb_col : usize,
-    /// Flag when current RIF has multiple pages
-    multipage : bool,
     /// Currrent component full name
     comp_fname: String,
 }
@@ -30,9 +24,6 @@ impl GeneratorHtml {
             core: GeneratorCore::new(0,setting),
             css: cfg.css,
             comp_fname: "".to_owned(),
-            addr_width: 8,
-            nb_col: 1,
-            multipage: false
         }
     }
 }
@@ -44,9 +35,6 @@ impl GeneratorDoc for GeneratorHtml {
     const SHOW_SINGLE_REG : bool = true;
 
     fn set_rif_info(&mut self, rif: &RifInst) {
-        self.addr_width = rif.addr_width;
-        self.nb_col = 32 / rif.data_width as usize;
-        self.multipage = rif.pages.len() > 1;
         self.comp_fname = rif.name(false);
     }
 
@@ -97,7 +85,7 @@ impl GeneratorDoc for GeneratorHtml {
     }
 
     fn write_page_title(&mut self, idx_rif: (&str,usize), idx_page: (&str, usize), desc: (String, Option<String>)) {
-        if !self.multipage {
+        if self.comp().cnt <= 1 {
             return;
         }
         self.write(&format!("<h2 id=\"{}.{}\">", idx_rif.0, idx_page.0));
@@ -181,13 +169,14 @@ impl GeneratorDoc for GeneratorHtml {
     }
 
     fn write_table_cell(&mut self, kind: (TableKind, CellKind), span: usize, txt: &str, id: &str, tip: Option<String>) {
+        let nb_col = 32 / self.data_width() as usize;
         self.write("<td");
         match kind.0 {
             TableKind::RegInst => self.write(" class=\"noborders\""),
             TableKind::Layout => {
                 if kind.1==CellKind::Field && txt.is_empty() {
                     self.write(" class=\"rsvd\"");
-                } else if kind.1==CellKind::Field && span * 3 * self.nb_col <= txt.len()  {
+                } else if kind.1==CellKind::Field && span * 3 * nb_col <= txt.len()  {
                     self.write(" class=\"mapv\"");
                 } else {
                     self.write(" class=\"map\"");
@@ -195,8 +184,8 @@ impl GeneratorDoc for GeneratorHtml {
             }
             _ => {},
         }
-        if (self.nb_col>1 && span > 0) || span > 1 {
-            self.write(&format!(" colspan=\"{}\"", span * self.nb_col));
+        if (nb_col>1 && span > 0) || span > 1 {
+            self.write(&format!(" colspan=\"{}\"", span * nb_col));
         }
         if let Some(tip) = tip {
             self.write(&format!(" title=\"{tip}\""));
