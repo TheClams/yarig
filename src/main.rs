@@ -123,7 +123,7 @@ fn main() {
     // Update configuration with command line arguments
     if let Some(fname) = args.rif {cfg.filename = fname.to_owned()};
     if cfg.filename.is_empty() {
-        eprintln!("A RIF file must be specified ! (argument -r/--rif");
+        eprintln!("A RIF file must be specified ! (argument -r/--rif or through a command .toml file)");
         return;
     }
     if !args.include.is_empty() {cfg.include = args.include.clone()};

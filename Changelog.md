@@ -1,6 +1,13 @@
 # Change Log
 
-## [Unrelease 0.10.0] - 2025-xx-xx
+## [0.10.1] - 2025-05-06
+
+### Bug Fixes
+  - IpXact target: now passes validation at least for local RIF examples
+    * Missing conversion to target IpXact
+    * Fix various format changes for version 2022
+
+## [0.10.0] - 2025-04-29
 
 ### Added
   - Description: support for private description.

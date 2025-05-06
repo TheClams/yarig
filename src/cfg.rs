@@ -56,6 +56,7 @@ impl From<&str> for RifGenTarget {
             "svd" => RifGenTarget::Svd,
             "json" => RifGenTarget::Json,
             "adoc" => RifGenTarget::Adoc,
+            "ipxact" => RifGenTarget::IpXact,
             _ => RifGenTarget::Custom(s_lc),
         }
     }

@@ -90,8 +90,11 @@ impl GeneratorSw for GeneratorIpXact {
         self.write(&format!("{tab}  <ipxact:baseAddress>'h{:x}</ipxact:baseAddress>\n", page.addr));
         self.write(&format!("{tab}  <ipxact:range>'h{range:x}</ipxact:range>\n"));
         self.write(&format!("{tab}  <ipxact:width>{}</ipxact:width>\n", self.data_width()));
-        self.write(&format!("{tab}  <ipxact:access>read-write</ipxact:access>\n"));
-
+        self.write(&format!("{tab}  <ipxact:accessPolicies>\n"));
+        self.write(&format!("{tab}    <ipxact:accessPolicy>\n"));
+        self.write(&format!("{tab}      <ipxact:access>read-write</ipxact:access>\n"));
+        self.write(&format!("{tab}    </ipxact:accessPolicy>\n"));
+        self.write(&format!("{tab}  </ipxact:accessPolicies>\n"));
     }
 
     fn write_reginst(&mut self, _basename: &str, page: &RifPageInst, reg: &RifRegInst, _inst_dict: &InstDict, _is_last: bool) {
@@ -107,7 +110,7 @@ impl GeneratorSw for GeneratorIpXact {
     }
 
     fn write_field_decl(&mut self, _basename: &str, _reg: &RifRegInst, field: &RifFieldInst, enum_def: Option<&EnumDef>, _is_last: bool) {
-        let tab = "          ".repeat(6*2);
+        let tab = "  ".repeat(6);
         let name = self.casing(&field.name_flat());
         let desc = self.desc_to_string(&field.description);
 
@@ -124,13 +127,26 @@ impl GeneratorSw for GeneratorIpXact {
         self.write(&format!("{tab}  <ipxact:name>{name}</ipxact:name>\n"));
         self.write(&format!("{tab}  <ipxact:description>{desc}</ipxact:description>\n"));
         self.write(&format!("{tab}  <ipxact:bitOffset>{}</ipxact:bitOffset>\n", field.lsb));
+        self.write(&format!("{tab}  <ipxact:bitWidth>{}</ipxact:bitWidth>\n", field.width));
         self.write(&format!("{tab}  <ipxact:resets>\n"));
         self.write(&format!("{tab}    <ipxact:reset>\n"));
         self.write(&format!("{tab}      <ipxact:value>'h{:x}</ipxact:value>\n",field.reset()));
+        self.write(&format!("{tab}      <ipxact:mask>'h{:x}</ipxact:mask>\n",(1_u128<<field.width)-1));
         self.write(&format!("{tab}    </ipxact:reset>\n"));
         self.write(&format!("{tab}  </ipxact:resets>\n"));
-        self.write(&format!("{tab}  <ipxact:bitWidth>{}</ipxact:bitWidth>\n", field.width));
-        self.write(&format!("{tab}  <ipxact:access>{access}</ipxact:access>\n"));
+        self.write(&format!("{tab}  <ipxact:fieldAccessPolicies>\n"));
+        self.write(&format!("{tab}    <ipxact:fieldAccessPolicy>\n"));
+        self.write(&format!("{tab}      <ipxact:access>{access}</ipxact:access>\n"));
+        match field.sw_kind {
+            FieldSwKind::ReadClr => self.write(&format!("{tab}      <ipxact:readAction>clear</ipxact:readAction>\n")),
+            FieldSwKind::W1Clr   => self.write(&format!("{tab}      <ipxact:modifiedWriteValues>oneToClear</ipxact:modifiedWriteValues>\n")),
+            FieldSwKind::W0Clr   => self.write(&format!("{tab}      <ipxact:modifiedWriteValues>zeroToClear</ipxact:modifiedWriteValues>\n")),
+            FieldSwKind::W1Set   => self.write(&format!("{tab}      <ipxact:modifiedWriteValues>oneToSet</ipxact:modifiedWriteValues>\n")),
+            FieldSwKind::W1Tgl   => self.write(&format!("{tab}      <ipxact:modifiedWriteValues>oneToToggle</ipxact:modifiedWriteValues>\n")),
+            _ => {}
+        }
+        self.write(&format!("{tab}    </ipxact:fieldAccessPolicy>\n"));
+        self.write(&format!("{tab}  </ipxact:fieldAccessPolicies>\n"));
         if let Some(enum_def) = enum_def {
             self.write(&format!("{tab}  <ipxact:enumeratedValues>\n"));
             for entry in &enum_def.values {
@@ -142,14 +158,6 @@ impl GeneratorSw for GeneratorIpXact {
                 self.write(&format!("{tab}    </ipxact:enumeratedValue>\n"));
             }
             self.write(&format!("{tab}  </ipxact:enumeratedValues>\n"));
-        }
-        match field.sw_kind {
-            FieldSwKind::ReadClr => self.write(&format!("{tab}  <ipxact:readAction>clear</ipxact:readAction>\n")),
-            FieldSwKind::W1Clr => self.write(&format!("{tab}  <ipxact:modifiedWriteValues>oneToClear</ipxact:modifiedWriteValues>\n")),
-            FieldSwKind::W0Clr => self.write(&format!("{tab}  <ipxact:modifiedWriteValues>zeroToClear</ipxact:modifiedWriteValues>\n")),
-            FieldSwKind::W1Set => self.write(&format!("{tab}  <ipxact:modifiedWriteValues>oneToSet</ipxact:modifiedWriteValues>\n")),
-            FieldSwKind::W1Tgl => self.write(&format!("{tab}  <ipxact:modifiedWriteValues>oneToToggle</ipxact:modifiedWriteValues>\n")),
-            _ => {}
         }
         self.write(&format!("{tab}</ipxact:field>\n"));
     }
