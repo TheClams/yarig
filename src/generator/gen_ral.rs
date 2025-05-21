@@ -2,7 +2,7 @@ use crate::{
     cfg::CfgRal,
     comp::comp_inst::{RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxInst},
     parser::remove_rif,
-    rifgen::{Description, EnumDef}
+    rifgen::{Description, EnumDef, FieldSwKind}
 };
 
 use super::{
@@ -40,9 +40,18 @@ impl GeneratorRal {
     }
 
     fn field_acc(field: &RifFieldInst) -> &str {
-        if field.sw_kind.is_ro()      {"\"RO\""}
-        else if field.sw_kind.is_wo() {"\"WO\""}
-        else                          {"\"RW\""}
+        match field.sw_kind {
+            FieldSwKind::ReadWrite   => "\"RW\"",
+            FieldSwKind::ReadOnly    => "\"RO\"",
+            FieldSwKind::WriteOnly   => "\"WO\"",
+            FieldSwKind::ReadClr     => "\"RC\"",
+            FieldSwKind::W1Clr       => "\"W1C\"",
+            FieldSwKind::W0Clr       => "\"W0C\"",
+            FieldSwKind::W1Set       => "\"W1S\"",
+            FieldSwKind::W1Tgl       => "\"W1T\"",
+            FieldSwKind::W1Pulse(_,_)=> "\"RW\"", // Note: no good equivalent in UVM ...
+            FieldSwKind::Password(_) => "\"RW\"",
+        }
     }
 
     fn format_u128(val: u128, width: u8, is_signed: bool) -> String {
