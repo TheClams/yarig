@@ -852,11 +852,12 @@ impl RifRegInst {
 
     /// Flag when a register needs a decode signal
     /// The decode signal is not needed when the whole register is read-only,
-    /// not external, without pulse access
+    /// not external, without pulse access and with no clr/set fields
     pub fn has_decode(&self) -> bool {
         self.sw_access.is_writable() ||
         !self.pulse.is_empty() ||
-        !self.external.is_none()
+        !self.external.is_none() ||
+        self.fields.iter().any(|f| f.sw_kind.is_clr() || f.sw_kind.is_set())
     }
 
     /// Flag when a register needs to implement a sequential process
