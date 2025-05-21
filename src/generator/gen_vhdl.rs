@@ -1,9 +1,9 @@
 use crate::{
     comp::{
         comp_inst::{RifInst, RifmuxInst},
-        hw_info::{CastInfo, ExprId, LogicExpr, PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalInfo, SignalKind}
+        hw_info::{PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalInfo, SignalKind}
     },
-    rifgen::{order_dict::OrderDict, EnumEntry, Interface, ResetDef}
+    rifgen::{CastInfo, ExprId, LogicExpr, order_dict::OrderDict, EnumEntry, Interface, ResetDef}
 };
 
 use super::{
@@ -164,6 +164,7 @@ impl GeneratorVhdl {
             LogicExpr::Eq(lhs, rhs)  => self.add_two_expr(lhs, rhs, " = " , LogicExprKind::Basic, false),
             LogicExpr::Neq(lhs, rhs) => self.add_two_expr(lhs, rhs, " /= ", LogicExprKind::Basic, false),
             LogicExpr::Gte(lhs, rhs) => self.add_two_expr(lhs, rhs, " >= ", LogicExprKind::MathU, false),
+            LogicExpr::Gt (lhs, rhs) => self.add_two_expr(lhs, rhs, " > " , LogicExprKind::MathU, false),
             LogicExpr::Lte(lhs, rhs) => self.add_two_expr(lhs, rhs, " <= ", LogicExprKind::MathU, false),
             LogicExpr::Lt(lhs, rhs)  => self.add_two_expr(lhs, rhs, " < " , LogicExprKind::MathU, false),
             LogicExpr::Xor(lhs, rhs) => self.add_two_expr(lhs, rhs, " xor ", kind, is_part),
@@ -245,10 +246,10 @@ impl GeneratorVhdl {
             self.write(field);
         }
         if let Some(r) = &expr.range {
-            if let Some(msb) = r.msb {
-                self.write(&format!("({msb} downto {})", r.lsb));
-            } else {
+            if r.is_bit() {
                 self.write(&format!("({})",r.lsb));
+            } else {
+                self.write(&format!("({} downto {})", r.msb, r.lsb));
             }
         }
         match kind {

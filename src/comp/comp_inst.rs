@@ -3,9 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use crate::{
     parser::{get_rif, parser_expr::ParamValues, RifGenSrc, RifGenTop},
     rifgen::{
-        order_dict::{OrderDict, OrderedDictIterV},
-        Access, AddressKind, ClockingInfo, CounterInfo, Description, EnumDef, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, Interface,
-        InterruptRegKind, InterruptTrigger, Limit, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegPulseKind, ResetVal, ResetValOverride, Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SuffixInfo, Visibility
+        order_dict::{OrderDict, OrderedDictIterV}, Access, AddressKind, ClockingInfo, CounterInfo, Description, EnumDef, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, Interface, InterruptRegKind, InterruptTrigger, Limit, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegPulseKind, ResetVal, ResetValOverride, Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SignalRange, SuffixInfo, Visibility
     },
 };
 
@@ -1157,6 +1155,23 @@ impl RifFieldInst {
             format!("_{}",partial_pos)
         } else {
             "".to_owned()
+        }
+    }
+
+    /// Return a signal range if partial or part of an array
+    pub fn to_range(&self, array_en: bool) -> Option<SignalRange> {
+        if let (Some(lsb),_) = &self.partial {
+            let lsb = *lsb as u8;
+            Some(SignalRange::new(lsb, self.width - 1 + lsb))
+        } else if array_en {
+            // if let ArrayIdx::Inst(idx,_) = self.array {
+            if self.array.dim() > 0 {
+                Some(SignalRange::new_bit(self.array.idx() as u8))
+            } else {
+                None
+            }
+        } else {
+            None
         }
     }
 

@@ -6,6 +6,7 @@ pub mod parser_rifmux;
 pub mod parser_top;
 pub mod parser_file;
 pub mod parser_expr;
+pub mod parser_logic_expr;
 
 pub use {
 	parser_common::*,

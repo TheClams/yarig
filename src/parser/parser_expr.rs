@@ -7,7 +7,7 @@ use super::{identifier, val_f64, val_isize, ws, Res};
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum OpKind {
-    /// Addition opearator +
+    /// Addition operator +
     Plus,
     /// Subtraction opeartor
     Minus,
@@ -107,12 +107,12 @@ fn operator<'a>(input: &mut &'a str) -> Res<'a, Token> {
         ws("%").value(Operator(Rem)),
         ws("==").value(Operator(Equal)),
         ws("!=").value(Operator(NotEqual)),
-        ws(">").value(Operator(Greater)),
         ws(">=").value(Operator(GreaterEq)),
-        ws("<").value(Operator(Lesser)),
         ws("<=").value(Operator(LesserEq)),
         ws("<<").value(Operator(ShiftLeft)),
         ws(">>").value(Operator(ShiftRight)),
+        ws(">").value(Operator(Greater)),
+        ws("<").value(Operator(Lesser)),
     )).parse_next(input)
 }
 

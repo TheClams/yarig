@@ -338,7 +338,7 @@ dependencies = [
 
 [[package]]
 name = "yarig"
-version = "0.10.2"
+version = "0.11.0"
 dependencies = [
  "clap",
  "serde",

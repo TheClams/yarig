@@ -66,7 +66,7 @@ pub enum RifErrorKind {
     Generic,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct RifError {
     pub kind: RifErrorKind,
     pub name: String,
@@ -187,6 +187,15 @@ impl RifError {
             name: ERROR_CONTEXT.with(|c| c.borrow().name.to_owned()),
             line_num: ERROR_CONTEXT.with(|c| c.borrow().line_num),
             txt:  format!("{:?} and {:?}", kind, hw_kind)
+        }
+    }
+
+    pub fn generic(txt: &str) -> Self {
+        RifError {
+            kind: RifErrorKind::Generic,
+            name: ERROR_CONTEXT.with(|c| c.borrow().name.to_owned()),
+            line_num: ERROR_CONTEXT.with(|c| c.borrow().line_num),
+            txt: txt.to_owned()
         }
     }
 }

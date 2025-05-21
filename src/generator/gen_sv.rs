@@ -1,6 +1,6 @@
 use crate::{
-    comp::hw_info::{CastInfo, ExprId, LogicExpr, PortDir, PortInfo, SignalDecl, SignalDef, SignalInfo, SignalKind},
-    rifgen::{EnumEntry, ResetDef}
+    comp::hw_info::{PortDir, PortInfo, SignalDecl, SignalDef, SignalInfo, SignalKind},
+    rifgen::{CastInfo, ExprId, LogicExpr, EnumEntry, ResetDef}
 };
 
 use super::{
@@ -131,6 +131,7 @@ impl GeneratorSv {
             LogicExpr::Eq(lhs, rhs)   => self.add_two_expr(lhs, rhs, " == ", false),
             LogicExpr::Neq(lhs, rhs)  => self.add_two_expr(lhs, rhs, " != ", false),
             LogicExpr::Gte(lhs, rhs)  => self.add_two_expr(lhs, rhs, " >= ", false),
+            LogicExpr::Gt (lhs, rhs)  => self.add_two_expr(lhs, rhs, " > " , false),
             LogicExpr::Lte(lhs, rhs)  => self.add_two_expr(lhs, rhs, " <= ", false),
             LogicExpr::Lt(lhs, rhs)   => self.add_two_expr(lhs, rhs, " < " , false),
             LogicExpr::Xor(lhs, rhs)  => self.add_two_expr(lhs, rhs, " ^ ", is_part),
@@ -194,10 +195,10 @@ impl GeneratorSv {
             self.core.write(field);
         }
         if let Some(r) = &expr.range {
-            if let Some(msb) = r.msb {
-                self.core.write(&format!("[{msb}:{}]", r.lsb));
-            } else {
+            if r.is_bit() {
                 self.core.write(&format!("[{}]",r.lsb));
+            } else {
+                self.core.write(&format!("[{}:{}]", r.msb, r.lsb));
             }
         }
     }

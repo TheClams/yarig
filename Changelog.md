@@ -1,5 +1,18 @@
 # Change Log
 
+## [Unrelease 0.11.0] - 2025-xx-xx
+
+### Added
+  - Add parser for logical expression: this allow transalation from verilog locgical expression to VHDL seamlessly.
+
+## [0.10.2] - 2025-05-21
+
+### Bug Fixes
+  - HDL: fix case where the decode signal was missing
+
+### Changed
+  - RAL: use more accurate field access (clear on read, toggle, ...)
+
 ## [0.10.1] - 2025-05-06
 
 ### Bug Fixes

@@ -3,10 +3,11 @@ use std::collections::HashSet;
 use crate::{
     comp::{
         comp_inst::{ArrayIdx, Comp, CompInst, RifInst, RifmuxInst},
-        hw_info::{CastInfo, ExprId, LogicExpr, PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalInfo, SignalKind, SignalRange}
+        hw_info::{PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalInfo, SignalKind}
     },
     parser::parser_expr::ParamValues,
     rifgen::{
+        CastInfo, ExprId, LogicExpr, SignalRange,
         order_dict::OrderDict, Access, ClkEn, ClockingInfo, EnumEntry, EnumKind, ExternalKind, FieldHwKind, FieldSwKind, Interface, InterruptClr, InterruptRegKind, InterruptTrigger, LimitValue, RegPulseKind, ResetDef}
 };
 
@@ -725,8 +726,8 @@ pub trait GeneratorHw : GeneratorBase {
                 // Assign field
                 for field in reg.fields.iter() {
                     let field_impl = reg_impl.get_field(&field.name)?;
-                    let partial  = SignalRange::from_field(field, false);
-                    let field_range = SignalRange::from_field(field, true);
+                    let partial  = field.to_range(false);
+                    let field_range = field.to_range(true);
                     let field_name = self.casing(&field.name);
                     let field_name_flat = self.casing(&field.name_flat());
                     let reg_field_name = format!("{group_name}{intr_suffix}{reg_idxf}_{field_name_flat}");
@@ -1471,7 +1472,7 @@ pub trait GeneratorHw : GeneratorBase {
                     }
                     //
                     if !reg.is_external() && field_impl.is_local() && field.has_write_mod() {
-                        let partial  = SignalRange::from_field(field, false);
+                        let partial  = field.to_range(false);
                         let name = self.casing(&format!("{group_name}{intr_suffix}{reg_idxf}_{}__reg", field.name_flat()));
                         values.push(ExprId::new_range(name, partial.clone()).into());
                     } else if let FieldSwKind::Password(info) = &field.sw_kind {
@@ -1487,7 +1488,7 @@ pub trait GeneratorHw : GeneratorBase {
                     } else {
                         let prefix = if !reg.is_external() && (field_impl.is_sw_write() || field.is_hw_write() || field_impl.is_constant()) {"rif_"} else {""};
                         let name = format!("{prefix}{group_name}{intr_suffix}");
-                        let field_range = SignalRange::from_field(field, true);
+                        let field_range = field.to_range(true);
                         let value = ExprId::new_field_range(name, reg_idx, field_name.to_owned(), field_range);
                         if let EnumKind::Type(n) = &field.enum_kind {
                             values.push(LogicExpr::CastFrom(n.to_owned(), field.width, Box::new(value.into())));

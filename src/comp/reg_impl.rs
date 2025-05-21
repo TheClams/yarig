@@ -3,16 +3,12 @@ use std::collections::BTreeMap;
 use crate::{
     parser::{get_rif, parser_expr::ParamValues},
     rifgen::{
-        order_dict::{OrderDict, OrderedDictIterV},
-        Access, ClkEn, Description, EnumKind, ExternalKind,
-        Field, FieldHwKind, FieldSwKind, InterruptDesc, InterruptInfo,
-        Limit, Lock, RegDef, RegDefOrIncl, RegIncludePath, RegPulseKind, ResetVal, Rif
+        order_dict::{OrderDict, OrderedDictIterV}, Access, CastInfo, ClkEn, Description, EnumKind, ExternalKind, Field, FieldHwKind, FieldSwKind, InterruptDesc, InterruptInfo, Limit, Lock, RegDef, RegDefOrIncl, RegIncludePath, RegPulseKind, ResetVal, Rif
     }
 };
 
 use super::{
     comp_inst::{val_str, PartialFieldDict, PartialFieldInfos, RifPageInst, RifRegInst, RifsInfo},
-    hw_info::CastInfo
 };
 
 /// Field Implementation
