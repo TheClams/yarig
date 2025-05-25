@@ -401,6 +401,11 @@ pub trait GeneratorBase {
         self.core().comp.addr_width
     }
 
+    /// Return address width of current compoment
+    fn set_addr_width(&mut self, width: u8) {
+        self.core_mut().comp.addr_width = width;
+    }
+
     /// Return data width of current compoment
     fn data_width(&self) -> u8 {
         self.core().comp.data_width

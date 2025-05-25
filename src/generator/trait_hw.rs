@@ -24,6 +24,7 @@ pub trait GeneratorHw : GeneratorBase {
     const HAS_FIELD_CONST   : bool = false;
     const SUPPORT_INTF      : bool = true;
     const SUPPORT_IMPL_BIND : bool = true;
+    const IF_RIF_FIELDS: [&str; 11] = ["addr", "en", "rd_wrn", "wr_data", "rd_data", "done", "err_addr", "err_access", "done_next", "err_addr_next", "err_access_next"];
 
     /// Write generic header for a file
     fn write_file_header(&mut self) {}
@@ -594,12 +595,12 @@ pub trait GeneratorHw : GeneratorBase {
             self.write_assign_comb(2, "rif_err_addr_l".into(), LogicExpr::ValueU(1, 1));
         } else {
             let page_en = LogicExpr::Or(
-                ext_pages.iter().map(|(n,_,_)| LogicExpr::from(format!("{n}.en"))).collect());
+                ext_pages.iter().map(|(n,_,_)| LogicExpr::from((n.as_str(),"en"))).collect());
             let mut done_next : Vec<LogicExpr> = Vec::new();
             done_next.push(LogicExpr::and(rif_en.clone(), LogicExpr::not(page_en.clone())));
             done_next.extend(
                 ext_pages.iter().map(|(n,_,_)|
-                    LogicExpr::and(format!("{n}.en").into(),format!("{n}.done").into())
+                    LogicExpr::and((n.as_str(),"en").into(),(n.as_str(),"done").into())
                 )
             );
             self.write_assign_comb(2, "rif_done_next".into(), LogicExpr::Or(done_next));
@@ -665,7 +666,7 @@ pub trait GeneratorHw : GeneratorBase {
                     let hw_reg_def = rif.get_hw_reg(&reg.group_type);
                     let idx = if let ArrayIdx::Inst(idx,_)= reg.array {format!("[{idx}]")} else {"".to_owned()};
                     let qual = if hw_reg_def.is_multi_pulse() {format!("_{name_flat}")} else {"".to_owned()};
-                    let next = format!("{group_name}{idx}.ext{qual}_done");
+                    let next : ExprId = (format!("{group_name}{idx}"), format!("ext{qual}_done")).into();
                     self.write_assign_comb(4, "rif_done_next".into(), next.into());
                 }
                 self.write_match_case_footer();
@@ -675,15 +676,15 @@ pub trait GeneratorHw : GeneratorBase {
         self.write_match_case_header("default".into());
         if !ext_pages.is_empty() {
             for (i,pn) in ext_pages.iter().map(|p| p.0.as_str()).enumerate() {
-                let cond = LogicExpr::eq(format!("{pn}.done").into(), LogicExpr::ValueU(1, 1));
+                let cond = LogicExpr::eq((pn,"done").into(), LogicExpr::ValueU(1, 1));
                 if i==0 {
                     self.write_cond_if(4, cond);
                 } else {
                     self.write_cond_else(4, Some(cond));
                 }
-                self.write_assign_comb(5, "rif_read_data_l ".into(), format!("{pn}.rd_data").into());
-                self.write_assign_comb(5, "rif_err_addr_l  ".into(), format!("{pn}.err_addr").into());
-                self.write_assign_comb(5, "rif_err_access_l".into(), format!("{pn}.err_access").into());
+                self.write_assign_comb(5, "rif_read_data_l ".into(), (pn,"rd_data").into());
+                self.write_assign_comb(5, "rif_err_addr_l  ".into(), (pn,"err_addr").into());
+                self.write_assign_comb(5, "rif_err_access_l".into(), (pn,"err_access").into());
             }
             self.write_cond_end(4);
         }
@@ -694,14 +695,16 @@ pub trait GeneratorHw : GeneratorBase {
 
         // Control the external page interface
         for (name, addr, width) in ext_pages.iter() {
-            self.write_assign(format!("{name}.addr   ").into(),"if_rif.addr   ".into());
-            self.write_assign(format!("{name}.rd_wrn ").into(), rd_wrn.clone());
-            self.write_assign(format!("{name}.wr_data").into(),"if_rif.wr_data".into());
-            let addr_bus = format!("if_rif.addr[{}:{}]", rif.addr_width-1, width);
+            let addr_bus_lsb = ExprId::new_field_range("if_rif".to_owned(), None, "addr".to_owned(), Some(SignalRange::new(0, *width - 1)));
+            let addr_bus_msb = ExprId::new_field_range("if_rif".to_owned(), None, "addr".to_owned(), Some(SignalRange::new(*width, rif.addr_width-1)));
+            self.write_assign((name.as_str(),"addr   ").into(),addr_bus_lsb.into());
+            self.write_assign((name.as_str(),"rd_wrn ").into(), rd_wrn.clone());
+            self.write_assign((name.as_str(),"wr_data").into(),("if_rif","wr_data").into());
+            // format!("if_rif.addr[{}:{}]", rif.addr_width-1, width);
             let addr_val = LogicExpr::ValueU((addr >> width) as u128, (rif.addr_width - width)  as usize);
-            let addr_check = LogicExpr::eq(addr_bus.into(), addr_val);
+            let addr_check = LogicExpr::eq(addr_bus_msb.into(), addr_val);
             let en_expr = LogicExpr::and(rif_en.clone(), addr_check);
-            self.write_assign(format!("{name}.en     ").into(), en_expr);
+            self.write_assign((name.as_str(),"en     ").into(), en_expr);
         }
 
         // Register process
@@ -1763,6 +1766,7 @@ pub trait GeneratorHw : GeneratorBase {
             nb_ctrl += rif.ports.clk_ens.len() + rif.ports.ctrls.len();
             let ports = rif.ports.clocks.iter().skip(1)
                 .chain(rif.ports.resets.iter().skip(1));
+            self.set_addr_width(rif.addr_width);
             for port in ports {
                 if !names.iter().any(|n| n==port.name()) {
                     names.push(port.name().to_owned());
@@ -1786,6 +1790,7 @@ pub trait GeneratorHw : GeneratorBase {
         }
         // Register of each instances
         for rif in rifmux.components.iter().filter_map(|c| c.get_rif()) {
+            self.set_addr_width(rif.addr_width);
             let prefix = riftop.prefixes.get(&rif.inst_name);
             self.write_comment(1, &format!("{} registers", rif.inst_name.to_casing(Casing::Title)));
             for port in rif.ports.regs.iter().filter(|p| p.dir.is_in()) {
@@ -1800,12 +1805,14 @@ pub trait GeneratorHw : GeneratorBase {
         }
         // Control interface
         self.write_comment(1, "Control interface");
+        self.set_addr_width(rifmux.addr_width);
         self.write_intf_ports(&rifmux.interface);
         self.write_module_decl_footer(&riftop_name);
 
         // Interfaces declaration
         self.write_comment_box("Interfaces to sub-RIF");
         for comp in rifmux.components.iter().filter(|c| !c.is_external()) {
+            self.set_addr_width(comp.get_addr_width());
             self.write_rif_decl(&CompInfo::from(&comp.inst), false, sw_clk, sw_rst);
         }
 
@@ -1905,7 +1912,6 @@ pub trait GeneratorHw : GeneratorBase {
     /// Save information for the current RIF
     fn set_rif_info(&mut self, rif: &RifInst) {}
     fn set_rifmux_info(&mut self, rifmux: &RifmuxInst) {}
-    fn set_addr_width(&mut self, width: u8) {}
 
     //----------------------------------
     // Generic functions

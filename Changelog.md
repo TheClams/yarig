@@ -1,9 +1,18 @@
 # Change Log
 
-## [Unrelease 0.11.0] - 2025-xx-xx
+## [0.11.0] - 2025-05-25
 
 ### Added
-  - Add parser for logical expression: this allow transalation from verilog locgical expression to VHDL seamlessly.
+  - Add parser for logical expression: this allows translation from verilog logical expression to VHDL seamlessly.
+    Applies to register/field clear, and HwSet/HwClr/HwTgl/Lock
+
+### Bug Fixes
+  - HDL: Cleanup some remaining hard-coded rif interface field access
+    (now uses proper ExprId so that it works in all HDL generator)
+  - Fix clear generation: field setting now has precedence over register setting
+
+### Bug Fixes
+  - HDL: fix case where the decode signal was missing
 
 ## [0.10.2] - 2025-05-21
 

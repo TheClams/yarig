@@ -14,8 +14,6 @@ use super::{
 use yarig_macro::add_gen_core;
 #[add_gen_core("vhd")]
 pub struct GeneratorVhdl {
-    /// Current RIF address bus width
-    addr_width : u8,
     /// Current enumerated type width
     enum_width : u8,
     /// True when current module instance is a bridge
@@ -35,7 +33,6 @@ impl GeneratorVhdl {
     pub fn new(setting: GeneratorBaseSetting) -> Self {
         GeneratorVhdl {
             core: GeneratorCore::new(3,setting),
-            addr_width: 16,
             enum_width: 0,
             is_bridge: false,
             outputs: OrderDict::new(),
@@ -82,7 +79,7 @@ impl GeneratorVhdl {
                 }
             }
             SignalKind::Integer     => self.core.write("integer "),
-            SignalKind::Address     => self.core.write(&format!("std_logic_vector({} downto 0)", self.addr_width-1)),
+            SignalKind::Address     => self.core.write(&format!("std_logic_vector({} downto 0)", self.addr_width()-1)),
             SignalKind::Data        => self.core.write(&format!("std_logic_vector({} downto 0)", self.data_width()-1)),
         }
     }
@@ -220,7 +217,9 @@ impl GeneratorVhdl {
     }
 
     fn write_expr_id(&mut self, expr: &ExprId, kind: LogicExprKind) {
-        let is_intf = expr.name.starts_with("if_") && self.comp().is_rifmux;
+        let is_intf_field = expr.field.as_ref()
+            .map(|f| Self::IF_RIF_FIELDS.contains(&f.trim()));
+        let is_intf = expr.name.starts_with("if_") && is_intf_field==Some(true);
         match kind {
             LogicExprKind::MathU => self.write("unsigned("),
             LogicExprKind::MathS => self.write("signed("),
@@ -285,11 +284,6 @@ impl GeneratorHw for GeneratorVhdl {
     /// Set the width of address/data for current RIF
     fn set_rifmux_info(&mut self, rifmux: &RifmuxInst) {
         self.intf = rifmux.interface.clone();
-    }
-
-    /// Set address width
-    fn set_addr_width(&mut self, width: u8) {
-        self.addr_width = width;
     }
 
     // Hooks for RIF package
