@@ -437,4 +437,32 @@ impl LogicExpr {
         }
     }
 
+    /// Return the lock name if it is part of the structure (i.e. not a path to a different structure)
+    pub fn local_field(&self, regname: &str) -> Option<&str> {
+        if let LogicExpr::Id(id) = self {
+            if ["this", "self", regname].contains(&id.name.as_str()) {
+                id.field.as_deref()
+            } else if id.field.is_none() {
+                Some(&id.name)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Return the name if the expression is a simple ID in the form ".name"
+    pub fn port_name(&self) -> Option<&str> {
+        if let LogicExpr::Id(id) = self {
+            if id.name.is_empty() {
+                id.field.as_deref()
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
 }

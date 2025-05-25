@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{error::RifErrorKind, parser::parser_expr::ParamValues};
 
-use super::{Access, ClkEn, Context, Description, Field, FieldSwKind, InterruptInfo, InterruptInfoField, Visibility, Width};
+use super::{Access, ClkEn, Context, Description, Field, FieldSwKind, InterruptInfo, InterruptInfoField, LogicExpr, Visibility, Width};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum RegPulseKind {
@@ -93,7 +93,7 @@ pub struct RegDef {
     pub clk: Option<String>,
     pub rst: Option<String>,
     pub clk_en: ClkEn,
-    pub clear: Option<String>,
+    pub clear: Option<LogicExpr>,
     pub info: HashMap<String, String>,
     pub array: Width,
     /// Indicates if the register logic is internal, fully external or just for the register access done

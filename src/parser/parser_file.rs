@@ -14,8 +14,7 @@ use crate::parser::{
     reg_incl_or_decl, reg_inst_array_properties, reg_inst_properties, reg_pulse_info, rif_inst_suffix, rifmux_group, rifmux_map, signal_or_expr, val_isize, val_u16
 };
 use crate::rifgen::{
-    Access, ClockingInfo, Context, DataWidth, EnumDef, EnumKind, ExternalKind, Field, FieldHwKind, FieldSwKind,
-    Interface, InterruptInfo, Lock, OverrideIndex, RegDef, RegDefOrIncl, RegInst, RegPulseKind, ResetDef, Rif, RifPage, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility
+    Access, ClockingInfo, Context, DataWidth, EnumDef, EnumKind, ExternalKind, Field, FieldHwKind, FieldSwKind, Interface, InterruptInfo, Lock, LogicExpr, OverrideIndex, RegDef, RegDefOrIncl, RegInst, RegPulseKind, ResetDef, Rif, RifPage, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility
 };
 
 use super::{
@@ -23,7 +22,7 @@ use super::{
     field_properties, identifier, identifier_last, indentation, is_auto, key_val,
     opt_signal_or_expr, page_properties, pulse_kind, reg_decl, reg_inst,
     reg_inst_field_properties, reg_interrupt, reg_properties_or_item, reset_def, reset_val,
-    rif_inst, rif_inst_properties, rif_properties_or_item, rifmux_properties, signal_name_last,
+    rif_inst, rif_inst_properties, rif_properties_or_item, rifmux_properties,
     val_intf, val_u64, val_u8, vec_id
 };
 
@@ -410,14 +409,16 @@ impl RifGenSrc {
                             }
                             context_stack.push((info_desc, ilvl + 1));
                         }
-                        Context::HwClock => {
-                            self.last_reg_mut().clk = Some(identifier_last(l)?.to_owned())
-                        }
-                        Context::HwClkEn => {
-                            self.last_reg_mut().clk_en = clk_en(l)?
-                        }
+                        Context::HwClock => self.last_reg_mut().clk = Some(identifier_last(l)?.to_owned()),
+                        Context::HwClkEn => self.last_reg_mut().clk_en = clk_en(l)?,
                         Context::HwClear => {
-                            self.last_reg_mut().clear = Some(signal_name_last(l)?.to_owned())
+                            let expr = opt_signal_or_expr(l)?;
+                            let clear = if expr.is_none() {
+                                Some(LogicExpr::Id(format!("{}_clr",self.last_reg().name).into()))
+                            } else {
+                                expr
+                            };
+                            self.last_reg_mut().clear = clear;
                         }
                         Context::HwReset => {
                             self.last_reg_mut().rst = Some(identifier_last(l)?.to_owned())
@@ -500,14 +501,16 @@ impl RifGenSrc {
                             }
                             context_stack.push((info, ilvl + 1));
                         }
-                        Context::HwClock => {
-                            self.last_field_mut().clk = Some(identifier_last(l)?.to_owned())
-                        }
-                        Context::HwClkEn => {
-                            self.last_field_mut().clk_en = clk_en(l)?
-                        }
+                        Context::HwClock => self.last_field_mut().clk = Some(identifier_last(l)?.to_owned()),
+                        Context::HwClkEn => self.last_field_mut().clk_en = clk_en(l)?,
                         Context::HwClear => {
-                            self.last_field_mut().clear = Some(signal_name_last(l)?.to_owned())
+                            let expr = opt_signal_or_expr(l)?;
+                            let clear = if expr.is_none() {
+                                Some(LogicExpr::Id(format!("{}_clr",self.last_field().name).into()))
+                            } else {
+                                expr
+                            };
+                            self.last_field_mut().clear = clear;
                         }
                         Context::HwAccess => self.last_field_mut().set_hw_acc(field_acc(&mut l)?),
                         Context::HwSet => {
@@ -906,6 +909,10 @@ impl RifGenSrc {
             .instances
             .last_mut()
             .expect("No Registers instance")
+    }
+
+    fn last_field(&mut self) -> &Field {
+        self.last_reg().fields.last().expect("No Fields")
     }
 
     fn last_field_mut(&mut self) -> &mut Field {

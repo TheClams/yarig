@@ -171,9 +171,8 @@ pub trait GeneratorHw : GeneratorBase {
                     }
                 }
                 // Clear
-                if let Some(clr_sig) = &f.clear {
-                    let clr_name = if clr_sig.is_empty() {format!("this.{name}_clr")} else {clr_sig.to_owned()};
-                    let kind = FieldHwKind::Clear(Some(clr_name));
+                if let Some(clr_expr) = &f.clear {
+                    let kind = FieldHwKind::Clear(Some(clr_expr.to_owned()));
                     if let Some(d) = SignalDecl::from_hw_kind(&kind, &hw_reg.name, &name) {
                         if names.iter().rev().any(|n| n==d.name()) {
                             names.push(d.name().to_owned());
@@ -182,7 +181,7 @@ pub trait GeneratorHw : GeneratorBase {
                     }
                 }
                 // Lock signal from hardware
-                if let Some(lock) = f.lock.local_name() {
+                if let Some(lock) = f.lock.local_field(&hw_reg.name) {
                     if !lock.is_empty() && !names.iter().rev().any(|n| n==lock) {
                         names.push(lock.to_owned());
                         hw_fields.push(SignalDecl::new_bit(
@@ -951,19 +950,19 @@ pub trait GeneratorHw : GeneratorBase {
                             let suffix_idx = field.partial_suffix();
                             let field_sig : LogicExpr = group_id.with_path(field_name.clone(), field_range.clone()).into();
                             for kind in field.hw_kind.iter() {
-                                let path = kind.get_signal().as_ref().map(|n| n.as_str()).unwrap_or("");
+                                let path = kind.get_signal();
                                 let ext = kind.get_suffix();
                                 let ctrl_id = path_to_signal(path, ext, (&reg.group_type, &group_name), reg_idx, &field_name, &suffix_idx);
                                 match kind {
-                                    FieldHwKind::WriteEn(_)  => if_then.push((ctrl_id.into(), field_sig.clone())),
-                                    FieldHwKind::WriteEnL(_) => if_then.push((LogicExpr::not(ctrl_id.into()), field_sig.clone())),
+                                    FieldHwKind::WriteEn(_)  => if_then.push((ctrl_id, field_sig.clone())),
+                                    FieldHwKind::WriteEnL(_) => if_then.push((LogicExpr::not(ctrl_id), field_sig.clone())),
                                     FieldHwKind::Set(_) => {
                                         let val = if field.width == 1 {
                                             LogicExpr::ValueU(1, 1)
                                         } else {
                                             LogicExpr::or_b(field_id.clone().into(), field_sig.clone())
                                         };
-                                        if_then.push((ctrl_id.into(), val));
+                                        if_then.push((ctrl_id, val));
                                     },
                                     FieldHwKind::Clear(info) => {
                                         let val = if field.width == 1 {
@@ -971,7 +970,7 @@ pub trait GeneratorHw : GeneratorBase {
                                         } else {
                                             LogicExpr::and_b(field_id.clone().into(), LogicExpr::not_b(field_sig.clone()))
                                         };
-                                        if_then.push((ctrl_id.into(), val));
+                                        if_then.push((ctrl_id, val));
                                     },
                                     FieldHwKind::Toggle(info) => {
                                         let val = if field.width == 1 {
@@ -979,7 +978,7 @@ pub trait GeneratorHw : GeneratorBase {
                                         } else {
                                             LogicExpr::or_b(field_id.clone().into(), field_sig.clone())
                                         };
-                                        if_then.push((ctrl_id.into(), val));
+                                        if_then.push((ctrl_id, val));
                                     },
                                     // Nothing todo for other HwKind (already handled for interrup, counter has less prevalence than software access)
                                     FieldHwKind::Counter(_) |
@@ -1252,9 +1251,9 @@ pub trait GeneratorHw : GeneratorBase {
                         }
                         // Prevent modification when lock signal is high
                         if field_impl.lock.is_some() {
-                            let path = field_impl.lock.name().as_ref().map(|n| n.as_str()).unwrap_or("");
+                            let path = field_impl.lock.expr();
                             let lock_id = path_to_signal(path, "_lock", (&reg.group_type, &group_name), reg_idx, &field_name, &suffix_idx);
-                            let not_lock = LogicExpr::not(lock_id.into());
+                            let not_lock = LogicExpr::not(lock_id);
                             if let Some(e) = &mut enable_expr {
                                 *e = LogicExpr::and((*e).clone(), not_lock);
                             } else {
@@ -1262,12 +1261,12 @@ pub trait GeneratorHw : GeneratorBase {
                             }
                         }
                         // Clear
-                        let clear : Option<LogicExpr> = if let Some(clr_path) = &reg_impl.clear {
-                            Some(path_to_signal(clr_path, "reg_clr", (&reg.group_type,  &group_name), reg_idx, "", "").into())
+                        let clear : Option<LogicExpr> = if field_impl.clear.is_some() {
+                            Some(path_to_signal(&field_impl.clear, "_clr", (&reg.group_type,  &group_name), reg_idx, &field.name, &suffix_idx))
+                        } else if reg_impl.clear.is_some() {
+                            Some(path_to_signal(&reg_impl.clear, "reg_clr", (&reg.group_type,  &group_name), reg_idx, "", ""))
                         } else {
-                            field_impl.clear.as_ref().map(|clr_path|
-                                path_to_signal(clr_path, "_clr", (&reg.group_type,  &group_name), reg_idx, &field.name, &suffix_idx).into()
-                            )
+                            None
                         };
                         // TBD: handle case where a clear is defined for the clock of this field ?
                         // Reset
@@ -1962,26 +1961,23 @@ pub trait GeneratorHw : GeneratorBase {
 
 }
 
-fn path_to_signal(path: &str, ext: &str, group_info: (&str, &str), idx: Option<u16>, field_name: &str, field_idx: &str) -> ExprId {
-
-    if path.starts_with('(') {
-        return path.into();
-    }
-    let mut parts = path.split('.');
-    match (parts.next(),parts.next()) {
-        // No register name, or the register name match the type: local field
-        (Some(f),None) if !f.is_empty() => (group_info.1, f).into(),
-        (Some(r),Some(f)) if r == group_info.0 || r == "this" || r == "self" => (group_info.1, f).into(),
-        // Format ".name" : input port
-        (Some(""),Some(n)) => n.into(),
-        // Esternal field
-        (Some(r),Some(f)) => (r,f).into(),
-        // No name provided: use default naming
-        _ => ExprId {
+fn path_to_signal(expr: &Option<LogicExpr>, ext: &str, group_info: (&str, &str), idx: Option<u16>, field_name: &str, field_idx: &str) -> LogicExpr {
+    match expr {
+        None => LogicExpr::Id(ExprId {
             name: group_info.1.to_owned(),
             idx,
             field: Some(format!("{field_name}{ext}{field_idx}")),
             range: None,
+        }),
+        Some(e) => {
+            // println!("{e:?} -> local_field={:?}, port={:?}",  e.local_field(group_info.0), e.port_name());
+            if let Some(f) = e.local_field(group_info.0) {
+                LogicExpr::Id((group_info.1, f).into())
+            } else if let Some(n) = e.port_name() {
+                LogicExpr::Id(n.into())
+            } else {
+                e.to_owned()
+            }
         }
     }
 }

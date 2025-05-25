@@ -144,7 +144,7 @@ fn comma<'a>(input: &mut &'a str) -> Res<'a, Token> {
 }
 
 fn number<'a>(input: &mut &'a str) -> Res<'a, Token> {
-    ws(val_isize).map(|v| Token::Number(v)).parse_next(input)
+    ws(val_isize).map(Token::Number).parse_next(input)
 }
 
 fn name<'a>(input: &mut &'a str) -> Res<'a, Token> {
@@ -300,6 +300,22 @@ pub fn parse_logic_expr(input: &str) -> Result<LogicExpr,RifError> {
                 let e = expr.pop().ok_or(RifError::generic("Malformed expression: unexpected '~'"))?;
                 expr.push(LogicExpr::NotB(e.into()));
             }
+            Token::Operator(OpKind::Dot) => {
+                let Some(LogicExpr::Id(mut id_r)) = expr.pop() else {return Err(RifError::generic("Malformed path !"));};
+                match expr.pop() {
+                    Some(LogicExpr::Id(mut id_l)) => {
+                        if id_l.field.is_some() || id_r.field.is_some() {return Err(RifError::generic("Malformed path !"));}
+                        id_l.field = Some(id_r.name);
+                        expr.push(LogicExpr::Id(id_l));
+                    }
+                    // Path in the form .name => input path
+                    _ => {
+                        id_r.field = Some(id_r.name.clone());
+                        id_r.name = "".to_owned();
+                        expr.push(LogicExpr::Id(id_r));
+                    }
+                }
+            }
             Token::Operator(op_kind) => {
                 let err = RifError::generic(&format!("Malformed expression for operator {op_kind:?}"));
                 let rhs = expr.pop().ok_or(err.clone())?;
@@ -395,6 +411,10 @@ mod tests_parsing {
         assert_eq!(
             parse_logic_expr("if_rif.address"),
             Ok(LogicExpr::Id(("if_rif","address").into()))
+        );
+        assert_eq!(
+            parse_logic_expr(".ext_port"),
+            Ok(LogicExpr::Id(("","ext_port").into()))
         );
         assert_eq!(
             parse_logic_expr("if_rif.address[2:0]==5"),

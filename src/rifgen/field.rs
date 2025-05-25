@@ -3,7 +3,7 @@ use std::{collections::HashMap, fmt::Display, ops::{Add, Sub}};
 use crate::{error::RifError, parser::parser_expr::{ExprTokens, ParamValues}};
 
 use super::{
-    Context, Description, InterruptClr, InterruptDesc, InterruptInfoField, InterruptTrigger,
+    Context, Description, InterruptClr, InterruptDesc, InterruptInfoField, InterruptTrigger, LogicExpr,
 };
 
 #[allow(dead_code)]
@@ -234,11 +234,11 @@ impl Visibility {
 #[derive(Clone, Debug, PartialEq, Default)]
 pub enum FieldHwKind {#[default]
     ReadOnly,
-    Set(Option<String>),
-    Toggle(Option<String>),
-    Clear(Option<String>),
-    WriteEn(Option<String>),
-    WriteEnL(Option<String>),
+    Set(Option<LogicExpr>),
+    Toggle(Option<LogicExpr>),
+    Clear(Option<LogicExpr>),
+    WriteEn(Option<LogicExpr>),
+    WriteEnL(Option<LogicExpr>),
     Counter(CounterInfo),
     Interrupt(InterruptTrigger),
 }
@@ -263,7 +263,7 @@ impl FieldHwKind {
     }
 
     /// Return the signal name associated with hardware write kind (set/toggle/clear/write)
-    pub fn get_signal(&self) -> &Option<String> {
+    pub fn get_signal(&self) -> &Option<LogicExpr> {
         match self {
             FieldHwKind::Set(signal) => signal,
             FieldHwKind::Toggle(signal) => signal,
@@ -788,15 +788,15 @@ impl ClkEn {
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]
-pub struct Lock(Option<String>);
+pub struct Lock(Option<LogicExpr>);
 impl Lock {
 
-    pub fn new(name: String) -> Self {
-        Lock(Some(name))
+    pub fn new(e: LogicExpr) -> Self {
+        Lock(Some(e))
     }
 
-    /// Return the lock name if it is part of the structure (i.e. not a path to a different structure)
-    pub fn name(&self) -> &Option<String> {
+    /// Return the lock logical expression
+    pub fn expr(&self) -> &Option<LogicExpr> {
         &self.0
     }
 
@@ -806,18 +806,18 @@ impl Lock {
     }
 
     /// Return the lock name if it is part of the structure (i.e. not a path to a different structure)
-    pub fn local_name(&self) -> Option<&String> {
-        self.0.as_ref().filter(|lock| !lock.contains('.'))
+    pub fn local_field(&self, regname: &str) -> Option<&str> {
+        if let Some(e) = &self.0 {
+            e.local_field(regname)
+        } else {
+            None
+        }
     }
 
     /// Return the lock name if it defines an input port (i.e. starts with a .)
     pub fn port_name(&self) -> Option<&str> {
-        if let Some(lock) = &self.0 {
-            if let Some(lock) = lock.strip_prefix('.') {
-                Some(lock)
-            } else {
-                None
-            }
+        if let Some(e) = &self.0 {
+            e.port_name()
         } else {
             None
         }
@@ -856,7 +856,7 @@ pub struct Field {
     /// Optional clock enable signal
     pub clk_en: ClkEn,
     /// Optional clear signal
-    pub clear: Option<String>,
+    pub clear: Option<LogicExpr>,
     /// Optional lock signal to prevent write access
     pub lock: Lock,
     /// Field visibility
@@ -1093,8 +1093,8 @@ impl Field {
     }
 
     /// Return the lock name if it is part of the structure (i.e. not a path to a different structure)
-    pub fn get_local_lock(&self) -> Option<&String> {
-        self.lock.local_name()
+    pub fn get_local_lock(&self, regname: &str) -> Option<&str> {
+        self.lock.local_field(regname)
     }
 
 }

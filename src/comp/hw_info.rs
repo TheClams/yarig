@@ -127,13 +127,9 @@ impl SignalDecl {
     }
 
     pub fn from_hw_kind(kind: &FieldHwKind, regname: &str, fieldname: &str) -> Option<Self> {
-        let name = if let Some(path) = kind.get_signal() {
-            let mut parts = path.split('.');
-            match (parts.next(),parts.next()) {
-                (Some(f),None) => f.to_owned(),
-                (Some(r),Some(f)) if r == regname || r == "this" || r == "self" => f.to_owned(),
-                _ => return None
-            }
+        let name = if let Some(e) = kind.get_signal() {
+            let n = e.local_field(regname)?;
+            n.to_owned()
         } else {
             format!("{}{}", fieldname, kind.get_suffix())
         };
@@ -378,7 +374,7 @@ impl PortList {
                 }
                 for k in f.hw_kind.iter() {
                     if let Some(sig) = k.get_signal() {
-                        if let Some(sig) = sig.strip_prefix('.') {
+                        if let Some(sig) = sig.port_name() {
                             if !ctrls.iter().any(|p| p.name()==sig) {
                                 ctrls.push(PortInfo::new_in(sig.to_owned(), "Control signal".to_owned()));
                             }

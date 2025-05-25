@@ -1,4 +1,4 @@
-use crate::rifgen::{Context, Width};
+use crate::{error::RifError, rifgen::{Context, LogicExpr, Width}};
 
 use winnow::{
     ascii::{alpha1, alphanumeric1, digit0, digit1, hex_digit1, multispace0, space0, Caseless},
@@ -7,6 +7,8 @@ use winnow::{
     stream::{AsChar, Stream, StreamIsPartial},
     token::{any, take_until}, ModalParser, ModalResult, Parser
 };
+
+use super::parser_logic_expr::parse_logic_expr;
 
 //--------------------------------
 // General parsing rules
@@ -111,13 +113,19 @@ pub fn take_until_unbalanced<'a>(
     }
 }
 
-pub fn signal_or_expr(input: &str) -> ResF<&str> {
-    alt((ws(signal_name), ws(logic_expr))).parse(input)
+pub fn signal_or_expr(input: &str) -> Result<LogicExpr,RifError> {
+    let s = alt((ws(signal_name), ws(logic_expr))).parse(input)?;
+    parse_logic_expr(s)
 }
 
-pub fn opt_signal_or_expr(input: &str) -> ResF<Option<&str>> {
-    opt(alt((ws(signal_name), ws(logic_expr))))
-        .parse(input)
+pub fn opt_signal_or_expr(input: &str) -> Result<Option<LogicExpr>,RifError> {
+    let s = alt((ws(signal_name), ws(logic_expr), multispace0)).parse(input)?;
+    if s.trim().is_empty() {
+        Ok(None)
+    } else {
+        let e = parse_logic_expr(s)?;
+        Ok(Some(e))
+    }
 }
 
 // Return the number of space or tabs

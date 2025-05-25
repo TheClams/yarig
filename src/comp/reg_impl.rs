@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use crate::{
     parser::{get_rif, parser_expr::ParamValues},
     rifgen::{
-        order_dict::{OrderDict, OrderedDictIterV}, Access, CastInfo, ClkEn, Description, EnumKind, ExternalKind, Field, FieldHwKind, FieldSwKind, InterruptDesc, InterruptInfo, Limit, Lock, RegDef, RegDefOrIncl, RegIncludePath, RegPulseKind, ResetVal, Rif
+        order_dict::{OrderDict, OrderedDictIterV}, Access, CastInfo, ClkEn, Description, EnumKind, ExternalKind, Field, FieldHwKind, FieldSwKind, InterruptDesc, InterruptInfo, Limit, Lock, LogicExpr, RegDef, RegDefOrIncl, RegIncludePath, RegPulseKind, ResetVal, Rif
     }
 };
 
@@ -41,7 +41,7 @@ pub struct FieldImpl {
     /// Field Clock enable
     pub clk_en: ClkEn,
     /// Field optional clear signal (when high reset field)
-    pub clear: Option<String>,
+    pub clear: Option<LogicExpr>,
     /// Field optional lock signal (when high field cannot be modified)
     pub lock: Lock,
     /// Optional Interrupt Description
@@ -55,6 +55,8 @@ pub struct FieldImpl {
 }
 
 impl FieldImpl {
+
+    /// Create a FieldImplementation base on a field definition
     fn new(field: &Field, reg_array: u16, ctrl_idx: usize, params: &ParamValues, partials: Option<&PartialFieldInfos>) -> Result<Self, String> {
         // Handle case of partial array
         let mut array = reg_array.max(1) * field.array.value(params) as u16;
@@ -178,6 +180,7 @@ impl FieldImpl {
         else {self.width}
     }
 
+    /// Generate an explicit casting for current field type
     pub fn hdl_cast(&self, base_scope: &str, reg_type: &str) -> CastInfo {
         if let Some((scope,name)) = self.enum_kind.get_type(base_scope, reg_type, &self.name) {
             CastInfo::Custom(scope, name)
@@ -189,32 +192,6 @@ impl FieldImpl {
 
     }
 
-}
-
-#[allow(dead_code)]
-pub fn get_attr_name<'a>(hw_kind: &'a FieldHwKind, regname: &str) -> (Option<&'a str>,Option<&'a str>) {
-    let (info, suffix) = match hw_kind {
-        FieldHwKind::Set(info)      => (info,"_hwset"),
-        FieldHwKind::Toggle(info)   => (info,"_hwtgl"),
-        FieldHwKind::Clear(info)    => (info,"_hwclr"),
-        FieldHwKind::WriteEn(info)  => (info,"_we"),
-        FieldHwKind::WriteEnL(info) => (info,"_wel"),
-        _ => (&None,"")
-    };
-    if suffix.is_empty() {
-        (None,None)
-    } else if let Some(path) = &info {
-        let mut parts = path.split('.');
-        match parts.next() {
-            Some(s) if s==regname || s=="this" => {
-                (parts.next(),None)
-            },
-            Some("") => (None, Some(suffix)),
-            _ => (None,None),
-        }
-    } else {
-        (Some(suffix),None)
-    }
 }
 
 /// Register port direction
@@ -240,13 +217,13 @@ impl RegPortKind {
         }
     }
 
-    pub fn from_field(field: &Field) -> Self {
+    pub fn from_field(field: &Field, regname: &str) -> Self {
         match field.hw_acc {
             Access::NA => RegPortKind::None,
             Access::WO => RegPortKind::In,
             Access::RW => RegPortKind::InOut,
             Access::RO => {
-                if field.hw_kind.is_empty() && field.get_local_lock().is_none() {
+                if field.hw_kind.is_empty() && field.get_local_lock(regname).is_none() {
                     RegPortKind::Out
                 } else {
                     RegPortKind::InOut
@@ -403,7 +380,7 @@ pub struct RegImpl {
     /// Register clock enable name: if none select clock enable automatically
     pub clk_en: ClkEn,
     /// Register clear name: if none, register has no clear
-    pub clear: Option<String>,
+    pub clear: Option<LogicExpr>,
     /// Indicates the port direction for the register
     pub port: RegPortKind,
     /// Optional package name where the struct is already defined
@@ -421,7 +398,7 @@ impl RegImpl {
         let mut sw_access = Access::NA;
         // Copy all fields
         for f in reg.fields.iter() {
-            port.updt(RegPortKind::from_field(f));
+            port.updt(RegPortKind::from_field(f, &reg.name));
             sw_access.updt((&f.sw_kind).into());
             fields.push(FieldImpl::new(f, array, 0, params, partials.get(reg.get_group_name()))?);
         }
@@ -449,7 +426,7 @@ impl RegImpl {
         // println!("Merging {} in {} : clk_en = {:?} | group clock_enable = {:?}", reg.name, reg.group.name, reg.clk_en, self.clk_en);
         self.port.updt(RegPortKind::from_reg(reg));
         for f in reg.fields.iter() {
-            self.port.updt(RegPortKind::from_field(f));
+            self.port.updt(RegPortKind::from_field(f, &reg.name));
             let clk_en = if !f.clk_en.is_default() {&f.clk_en} else {&reg.clk_en};
             // Search field vec in reverse since it is most likely to be the most recent one
             if let Some(ref mut field_impl) = self.fields.iter_mut().rev().find(|e| e.name==f.name) {
