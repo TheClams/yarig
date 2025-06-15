@@ -54,6 +54,26 @@ impl std::fmt::Display for LinkKind {
     }
 }
 
+/// Convert latex equation enclosed in backtick (`) into MathML
+pub fn desc_ml(txt: &str) -> String {
+    let mut desc = String::with_capacity(txt.len());
+    let mut is_eq = false;
+    for t in txt.split('`') {
+        // println!("Desc part = {t} ({is_eq})");
+        if is_eq {
+            if let Ok(t_ml) = latex2mathml::latex_to_mathml(t, latex2mathml::DisplayStyle::Inline) {
+                desc.push_str(&t_ml);
+            } else {
+                desc.push_str(t);
+            }
+        } else {
+            desc.push_str(t);
+        }
+        is_eq = !is_eq;
+    }
+    desc
+}
+
 
 /// Trait to implement generator for documentation
 /// A RIFMux starts with a table containing all the RIFs instance, followed by one paragraph per RIF type

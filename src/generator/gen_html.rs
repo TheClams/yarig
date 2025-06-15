@@ -3,7 +3,7 @@ use crate::{cfg::CfgHtml, comp::comp_inst::RifInst, rifgen::EnumDef};
 use super::{
     casing::{Casing, ToCasing},
     gen_common::{GeneratorBase, GeneratorBaseSetting, GeneratorCore},
-    trait_doc::{CellKind, GeneratorDoc, LinkKind, TableKind}
+    trait_doc::{desc_ml, CellKind, GeneratorDoc, LinkKind, TableKind}
 };
 use yarig_macro::add_gen_core;
 
@@ -196,7 +196,9 @@ impl GeneratorDoc for GeneratorHtml {
                 let ext_link = self.setting().split && kind.0==TableKind::Rifmux;
                 let root = if ext_link {format!("./{}.html", self.comp_fname)} else {"".to_owned()};
                 self.write(&format!("<a href=\"{root}#{id}\">{txt}</a>"));
-
+        } else if kind.1 == CellKind::Desc {
+            let txt_ml = desc_ml(txt);
+            self.write(&txt_ml);
         } else {
             self.write(txt);
         }
@@ -242,7 +244,8 @@ impl GeneratorDoc for GeneratorHtml {
 
     fn write_info(&mut self, info: &str) {
         self.write("<span><p>");
-        self.write(info);
+        let info_ml = desc_ml(info);
+        self.write(&info_ml);
         self.write("</p></span>\n");
     }
 

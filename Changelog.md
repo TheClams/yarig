@@ -1,5 +1,10 @@
 # Change Log
 
+## [0.12.0] - 2025-06-15
+
+### Added
+  - Latex equation in description converted to MathML for HTML output
+
 ## [0.11.0] - 2025-05-25
 
 ### Added
