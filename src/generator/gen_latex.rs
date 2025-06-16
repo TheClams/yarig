@@ -19,6 +19,7 @@ impl GeneratorLatex {
             first_col: true,
         }
     }
+
 }
 
 impl GeneratorDoc for GeneratorLatex {
@@ -169,53 +170,67 @@ impl GeneratorDoc for GeneratorLatex {
 
     fn sanitize(&self, raw: &str) -> String {
         let mut txt = String::with_capacity(raw.len());
-        let mut chars = raw.chars().peekable();
-        while let Some(c) = chars.next() {
-            let cn = chars.peek();
-            match c {
-                // Latex equation is enclosed between backtick
-                '`' => {
-                    while let Some(c) = chars.next_if(|c| c!=&'`') {
-                        txt.push(c);
-                    }
-                }
-                // Characters to escape
-                '_' | '&' | '%' | '#' | '{' | '}' => {
-                    txt.push('\\');
-                    txt.push(c);
-                }
-                // SuperScript sequence
-                '^'  => {
-                    if let Some(cn) = cn {
-                        if cn.is_alphanumeric() || cn==&'-' || cn==&'+' {
-                            chars.next();
-                            txt.push_str("\\textsuperscript{");
-                            while let Some(c) = chars.next_if(|c| c.is_alphanumeric()) {
+        // Latex equation are enclosed between backtick:
+        // Only handle special character outside of equations
+        let mut is_eq = false;
+        for raw_part in raw.split('`') {
+            // println!("Desc part = {raw_part} ({is_eq})");
+            if is_eq {
+                txt.push('$');
+                txt.push_str(raw_part);
+                txt.push('$');
+            } else {
+                let mut chars = raw_part.chars().peekable();
+                while let Some(c) = chars.next() {
+                    let cn = chars.peek();
+                    match c {
+                        // Latex equation is enclosed between backtick
+                        '`' => {
+                            while let Some(c) = chars.next_if(|c| c!=&'`') {
                                 txt.push(c);
                             }
-                            txt.push('}');
-                        } else {
-                            txt.push_str("\\^{}");
                         }
-                    } else {
-                        txt.push_str("\\^{}");
+                        // Characters to escape
+                        '_' | '&' | '%' | '#' | '{' | '}' => {
+                            txt.push('\\');
+                            txt.push(c);
+                        }
+                        // SuperScript sequence
+                        '^'  => {
+                            if let Some(cn) = cn {
+                                if cn.is_alphanumeric() || cn==&'-' || cn==&'+' {
+                                    txt.push_str("\\textsuperscript{");
+                                    txt.push(*cn);
+                                    chars.next();
+                                    while let Some(c) = chars.next_if(|c| c.is_alphanumeric()) {
+                                        txt.push(c);
+                                    }
+                                    txt.push('}');
+                                } else {
+                                    txt.push_str("\\^{}");
+                                }
+                            } else {
+                                txt.push_str("\\^{}");
+                            }
+                        }
+                        // Line return
+                        '\n' => txt.push_str("\\\\"),
+                        // Special character/sequences
+                        '~' => txt.push_str("$\\sim$"),
+                        '<' if cn==Some(&'<') => {
+                            txt.push_str("$<<$");
+                            chars.next();
+                        }
+                        '>' if cn==Some(&'>') => {
+                            txt.push_str("$>>$");
+                            chars.next();
+                        }
+                        // Others => copy the character
+                        _ => txt.push(c),
                     }
                 }
-                // Line return
-                '\n' => txt.push_str("\\\\"),
-                // Special character/sequences
-                '~' => txt.push_str("$\\sim$"),
-                '<' if cn==Some(&'<') => {
-                    txt.push_str("$<<$");
-                    chars.next();
-                }
-                '>' if cn==Some(&'>') => {
-                    txt.push_str("$>>$");
-                    chars.next();
-                }
-                // Others => copy the character
-                _ => txt.push(c),
             }
+            is_eq = !is_eq;
         }
         txt
     }
