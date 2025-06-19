@@ -731,6 +731,10 @@ impl RifRegInst {
                 r.fields.push(fi);
             }
         }
+        // Check overlapping fields
+        if let Some((f0,f1)) = r.find_overlapping_fields().next() {
+            return Err(format!("Fields {} and {} overlaps without exclusive access !", f0.name(), f1.name()));
+        }
         // Force Description & Reset value in case of derived interrupt register
         if let RegInstArgs::Intr(kind,idx,_) = args {
             let info = if kind.is_derived() {def.interrupt[idx].get_rst_desc(kind)} else {None};
@@ -833,6 +837,16 @@ impl RifRegInst {
         // Sort vector in ascending order of position
         r.fields.sort_unstable_by_key(|f| f.lsb);
         Ok(Some(r))
+    }
+
+    ///
+    pub fn find_overlapping_fields(&self) -> impl Iterator<Item = (&RifFieldInst,&RifFieldInst)> {
+        self.fields.iter().enumerate()
+            .flat_map(|(i, f0)| {
+                self.fields.iter().skip(i + 1)
+                    .filter(move |f1| f0.overlaps_with(f1))
+                    .map(move |f1| (f0, f1))
+            })
     }
 
     /// Flag when a register uses an external implementation
@@ -1044,6 +1058,18 @@ impl RifFieldInst {
             width,
             array: idx,
         }
+    }
+
+    /// Check if field position overlap with another field
+    /// And their access are not exclusive
+    pub fn overlaps_with(&self, other: &RifFieldInst) -> bool {
+        self.lsb.max(other.lsb) <= self.msb().min(other.msb()) && !self.exclusive_with(other)
+    }
+
+    /// Check if field has exclusive software access with an other
+    pub fn exclusive_with(&self, other: &RifFieldInst) -> bool {
+        (self.sw_kind==FieldSwKind::ReadOnly && other.sw_kind==FieldSwKind::WriteOnly) ||
+        (other.sw_kind==FieldSwKind::ReadOnly && self.sw_kind==FieldSwKind::WriteOnly)
     }
 
     /// Generate an unused field (used as padding inside a register)

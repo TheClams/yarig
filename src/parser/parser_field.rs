@@ -1,6 +1,6 @@
-use crate::rifgen::{
+use crate::{parser::comment, rifgen::{
     Access, ClkEn, Context, CounterInfo, CounterKind, EnumEntry, Field, FieldPos, FieldSwKind, InterruptInfoField, LimitP, LimitValueP, PasswordInfo, ResetValP
-};
+}};
 
 use winnow::{
     ascii::{multispace0, space0, Caseless},
@@ -56,14 +56,14 @@ pub fn field_decl<'a>(input: &mut &'a str) -> Res<'a, Field> {
             reset_val_arr,
         )),
     ))
-    .context(StrContext::Label("field position"))
+    .context(StrContext::Label("reset value"))
     .parse_next(input)?;
     let pos = field_pos(input)?;
     let kind = opt(field_sw_kind).parse_next(input)?;
     let desc = opt(ws(quoted_string)).parse_next(input)?;
-    // if !input.is_empty() {
-    //     println!("[Field] Unable to parse end of declaration for field {name}: '{input}'");
-    // }
+    if !input.is_empty() {
+        comment(input).map_err(|_| winnow::error::ErrMode::Incomplete(winnow::error::Needed::Unknown))?;
+    }
     Ok(
         Field::new(
             name,

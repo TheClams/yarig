@@ -1,5 +1,16 @@
 # Change Log
 
+## [unrelease]
+
+### Changed
+  - Add check on overlapping register
+  - Check field declaration syntax is correct
+
+### Bug Fixes
+  - Latex: fix handling of equations in descriptions
+    * First character after a ^ or _ was deleted ...
+    * Equation is now properly enclosed between $$ without any character escape
+
 ## [0.12.0] - 2025-06-15
 
 ### Added
