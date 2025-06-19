@@ -96,17 +96,20 @@ The exact behavior of each traits can be tweaked with some associated constant.
  - [ ] Improve nb_frac support:
    - [ ] Support reset value in floating-point
    - [x] Use floating-point value in documentation when nb_frac is non-zero (and use a tool-tip in html to display corresponding integer value)
+ - [ ] Support reset value as enum name
  - [ ] Support pipe option RTL
  - [ ] Support option to repeat field description for interrupt derived register
- - [ ] Support latex equation in description
- - [ ] Implement a TUI ? (ratatui)
- - [ ] Support overlapping register in hardware: need to check exclusive access (RO/WO)
+ - [x] Support latex equation in description
+ - [ ] Support overlapping register in hardware. Exclusive access (RO/WO) is already check at compile time: might be a good place to add some overlap flag to ease the generator job ...
  - [ ] Check enum size matches the field size
  - [ ] Option to add representation value for enum. Syntax could be 'NAME = VAL (repr) "description"'. Could be usefull when enum is representing a limited set of integer or real values.
+   - [ ] Update parser to support new syntax
+   - [ ] Add python function in the enum class for conversion to/from float
+   - [ ] Add C function for conversion to/from float/int. Need to add option to the generator allowing to disable the feature, use int, float or double as the representation type
  - [ ] Option to control if clear works without clock enable or not
 
 ## Documentation
- - [ ] Config file: full description
+ - [x] Config file: full description
  - [ ] Base generator trait
  - [ ] Why Yarig vs other existing solution (mostly SystemRDL)
  - [ ] List of syntax example for typical use-cases
@@ -114,5 +117,5 @@ The exact behavior of each traits can be tweaked with some associated constant.
 ## Known Bugs / Edge cases
  - [ ] Support partial fields arrays
  - [ ] Handle counter larger than register size (TBD if this should simply be forbidden or properly handled ...)
- - [ ] Add parsing of LogicExpr (currently logic expression works only for SystemVerilog)
+ - [x] Add parsing of LogicExpr (currently logic expression works only for SystemVerilog)
  - [ ] Add check on password not being partial fields

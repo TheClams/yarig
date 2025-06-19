@@ -122,7 +122,7 @@ pub struct YarigCfg {
     pub parameters: HashMap<String,isize>,
     /// dictionary of path associated to each targets
     pub outputs: HashMap<String,String>,
-    /// Use prefixes only for RTL generation
+    /// Use suffix only for RTL generation
     pub suffix_rtl_only: bool,
     /// optional suffix definition
     pub suffixes: HashMap<String, SuffixInfo>,

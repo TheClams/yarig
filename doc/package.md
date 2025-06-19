@@ -18,8 +18,8 @@ The description property of each field is used as a comment near each field.
 
 #### Register group
 Multiple register can be grouped to be create only one pair of structure sw/hw.
-This is done at the register declaration, by adding `(regGroupName)` just before the shorst description
-to group all registers under the same name regGroupName.
+This is done at the register declaration, by adding `(reg_group_name)` just before the shorst description
+to group all registers under the same name _reg_group_name_.
 
 #### Field Type
 By default all field have the type *logic* / *std_logic* with the width defined in the RIF.
@@ -74,9 +74,9 @@ By default the reset signal is asynchronous and active low but this can be chang
 All registers (or group of registers) with field driven by the RIF generate an output named *rif_reg_instance_name* and the type *regType_sw_t*.
 All registers (or group of registers) with field driven by the hardware generate an input named *reg_instance_name* and the type *regType_hw_t*.
 
-By default the *reg_instance_name* of a group of register is the *groupName* of the register type.
-This can be changed by adding `(instanceGroupName)` just before the address information (if any).
-If there are multiple instances of group of registers it is mandatory to provide a *groupName* for each of the register instance
+By default the *reg_instance_name* of a group of register is the *group_name* of the register type.
+This can be changed by adding `(instance_group_name)` just before the address information (if any).
+If there are multiple instances of group of registers it is mandatory to provide a *group_name* for each of the register instance
 
 ### RIF interface
 The default interface to access the register is using a simple interface similar to the one used by memories.
