@@ -141,12 +141,12 @@ impl GeneratorSw for GeneratorPy {
 
     fn write_rif_header(&mut self, rif: &RifInst, _base_addr: Option<u64>) {
         let rif_name = remove_rif(self.comp_name()).to_casing(Casing::Pascal);
-        self.write("from typing import final\n");
+        self.write("import typing\n");
         if self.has_enum {
             self.write("from enum import IntEnum\n");
         }
         self.write(&format!("from {} import Field, Register, Peripheral\n\n", self.base_module));
-        self.write("@final\n");
+        self.write("@typing.final\n");
         self.write(&format!("class {rif_name}(Peripheral):\n"));
         if let Some(desc) = self.desc_to_string(&rif.description,1) {
             self.write(&desc);
@@ -157,9 +157,9 @@ impl GeneratorSw for GeneratorPy {
     }
 
     /// Write enum start of declaration statement
-    fn write_enum_header(&mut self, type_name: &str, desc: &str) {
+    fn write_enum_header(&mut self, type_name: &str, def: &EnumDef) {
         self.write(&format!("   class e_{type_name}(IntEnum):\n"));
-        self.write(&format!("      '''{desc}'''\n"));
+        self.write(&format!("      '''{}'''\n", def.description));
     }
 
     /// Write enum entry
@@ -173,9 +173,32 @@ impl GeneratorSw for GeneratorPy {
         }
     }
 
+    /// Add conversion function to/from float
+    fn write_enum_footer(&mut self, type_name: &str, def: &EnumDef) {
+        let pairs : Vec<(&str,f64)>= def.values.iter().filter(|d| d.repr.is_some()).map(|d| (d.name.as_str(), d.repr.unwrap())).collect();
+        if let Some(default_val) = pairs.first() {
+            let rif_name = remove_rif(self.comp_name()).to_casing(Casing::Pascal);
+            self.write("      def to_float(self) -> float:\n");
+            for (k,v) in pairs.iter() {
+                self.write(&format!("         if self == self.{k}: return {v};\n"));
+            }
+            self.write(&format!("         return {}\n\n", default_val.1));
+            self.write(         "      @classmethod\n");
+            self.write(&format!("      def from_float(cls, val: float) -> '{rif_name}.e_{type_name}' :\n"));
+            self.write(         "         min_diff = float('inf')\n");
+            self.write(&format!("         closest = cls.{}\n", default_val.0));
+            self.write(&format!("         for n in cls:\n"));
+            self.write(         "            diff = abs(val - n.to_float())\n");
+            self.write(         "            if diff < min_diff:\n");
+            self.write(         "               min_diff = diff\n");
+            self.write(         "               closest = n\n");
+            self.write(         "         return closest\n\n");
+        }
+    }
+
     fn write_reg_header(&mut self, _basename: &str, reg: &RifRegInst) {
         let typename = reg.reg_type.to_casing(Casing::Pascal);
-        self.write("   @final\n");
+        self.write("   @typing.final\n");
         self.write(&format!("   class {typename}(Register):\n"));
         if let Some(desc) = self.desc_to_string(&reg.base_description,2) {
             self.write(&desc);
@@ -304,7 +327,7 @@ impl GeneratorSw for GeneratorPy {
         }
         let class_name = remove_rif(&rifmux.type_name).to_casing(Casing::Pascal);
 
-        self.write("\n@final\n");
+        self.write("\n@typing.final\n");
         self.write(&format!("class {class_name}(Peripheral):\n\n"));
         if let Some(desc) = self.desc_to_string(&rifmux.description, 1) {
             self.write(&desc);

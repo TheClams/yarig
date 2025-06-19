@@ -10,8 +10,7 @@ use winnow::{
 };
 
 use super::{
-    identifier, param, quoted_string, reg_interrupt_clr, reg_interrupt_trigger, signal_name,
-    val_i128, val_u128, val_u8, val_u8_or_param, ws, Res, ResF,
+    identifier, param, quoted_string, reg_interrupt_clr, reg_interrupt_trigger, signal_name, val_f64, val_i128, val_u128, val_u8, val_u8_or_param, ws, Res, ResF
 };
 
 pub fn reset_val<'a>(input: &mut &'a str) -> Res<'a, ResetValP> {
@@ -177,13 +176,15 @@ pub fn enum_entry(input: &str) -> ResF<EnumEntry> {
     let info = (
         preceded(ws("-"), identifier),
         preceded(ws("="), val_u8),
+        opt(delimited(ws("("),val_f64,ws(")"))),
         quoted_string,
     ).context(StrContext::Label("enum entry"))
     .parse(input)?;
     Ok(EnumEntry {
         name: info.0.to_owned(),
         value: info.1,
-        description: info.2.into(),
+        repr: info.2,
+        description: info.3.into(),
     })
 }
 
@@ -443,7 +444,26 @@ mod tests_parsing {
             Ok(EnumEntry {
                 name: "VAL0".to_owned(),
                 value: 5,
+                repr: None,
                 description: "F0 Value 0".into()
+            })
+        );
+        assert_eq!(
+            enum_entry(&mut "- VAL1 = 5 (5000) \"F1 Value 1\""),
+            Ok(EnumEntry {
+                name: "VAL1".to_owned(),
+                value: 5,
+                repr: Some(5000.0),
+                description: "F1 Value 1".into()
+            })
+        );
+        assert_eq!(
+            enum_entry(&mut "- VAL2 = 1 (4e3) \"F2 Value 2\""),
+            Ok(EnumEntry {
+                name: "VAL2".to_owned(),
+                value: 1,
+                repr: Some(4e3),
+                description: "F2 Value 2".into()
             })
         );
     }

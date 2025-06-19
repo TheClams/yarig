@@ -1,6 +1,15 @@
 # Change Log
 
-## [0.12.2]
+## [0.13.0] - Unreleased
+### Added
+  - Enum can now have an optional floating point representation (e.g. `- <name> = <val_int> (<repr_f64>) "desc"`)
+    Python class use it to provide conversion to/from float.
+  - Python : field representation has three format: `enum (int)` for enum kind, or `float (int)` for field with fractional bits or simply `int`
+
+### Changed
+  - Comp enum now box the instances (RifInst/RifMuxInst)
+
+## [0.12.2] - 2025-06-20
 
 ### Changed
   - Add check on overlapping register

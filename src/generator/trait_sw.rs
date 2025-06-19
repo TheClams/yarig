@@ -95,12 +95,12 @@ pub trait GeneratorSw : GeneratorBase {
                     None => &def.name,
                 };
                 let etn = etn.strip_prefix("e_").unwrap_or(etn);
-                self.write_enum_header(etn, &def.description);
+                self.write_enum_header(etn, def);
                 let mut enum_entries = def.iter().peekable();
                 while let Some(enum_entry) = enum_entries.next() {
                     self.write_enum_entry(enum_entry, enum_entries.peek().is_none());
                 }
-                self.write_enum_footer(etn);
+                self.write_enum_footer(etn, def);
             }
         }
         // Collect instances to easily get the one used in declaration
@@ -212,13 +212,13 @@ pub trait GeneratorSw : GeneratorBase {
     fn write_rif_footer(&mut self) {}
 
     /// Write enum start of declaration statement
-    fn write_enum_header(&mut self, type_name: &str, desc: &str) {}
+    fn write_enum_header(&mut self, type_name: &str, def: &EnumDef) {}
 
     /// Write enum entry
     fn write_enum_entry(&mut self, entry: &EnumEntry , is_last: bool) {}
 
     /// Write enum end of declaration
-    fn write_enum_footer(&mut self, type_name: &str) {}
+    fn write_enum_footer(&mut self, type_name: &str, def: &EnumDef) {}
 
     /// Write register start of declaration statement
     fn write_reg_header(&mut self, basename: &str, reg: &RifRegInst) {}

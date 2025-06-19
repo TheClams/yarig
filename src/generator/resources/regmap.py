@@ -2,6 +2,8 @@ from collections.abc import Generator
 from enum import IntEnum
 import typing
 
+# pyright: reportAny = false
+
 class Peripheral(object):
     '''address and collection of registers'''
 
@@ -66,7 +68,7 @@ class Register(object):
     def __repr__(self) -> str:
         s = f'{self.__reg_info__.name} = 0x{self.get_value():08x}'
         for f in self.fields():
-            s += f'\n\t{f.name} = {f.get_value()}'
+            s += f'\n\t{f.name} = {f}'
         return s
 
     def fields(self):
@@ -136,6 +138,19 @@ class Field(object):
         if init is not None:
             self.value = init
 
+    @typing.override
+    def __repr__(self) -> str:
+        kind = self.enum_kind()
+        v = self.get_value()
+        if kind is not None:
+            s = f'{kind(v).name} ({v})'
+        else:
+            if self.nb_frac != 0:
+                s = f'{self.get_float()} ({v})'
+            else :
+                s = f'{v}'
+        return s
+
     def parent(self) -> Register:
         '''Return register owning the field'''
         return self.__parent__
@@ -149,7 +164,10 @@ class Field(object):
         if isinstance(value, int):
             self.value = value
         else :
-            if self.nb_frac < 0:
+            conv = getattr(self.enum_kind(), 'from_float', None)
+            if conv is not None:
+                self.value = conv(value)
+            elif self.nb_frac < 0:
                 self.value = int(value / (1 << (-self.nb_frac)))
             else :
                 self.value = int(value * (1 << self.nb_frac))

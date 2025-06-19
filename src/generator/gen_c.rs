@@ -86,9 +86,9 @@ impl GeneratorSw for GeneratorC {
     }
 
     /// Write enum start of declaration statement
-    fn write_enum_header(&mut self, type_name: &str, desc: &str) {
+    fn write_enum_header(&mut self, type_name: &str, def: &EnumDef) {
         let etn = format!("{}_{type_name}_t", remove_rif(self.comp_name()));
-        self.write(&format!("/// {}\n", desc));
+        self.write(&format!("/// {}\n", def.description));
         self.write(&format!("typedef enum {etn} {{\n"));
     }
 
@@ -104,7 +104,7 @@ impl GeneratorSw for GeneratorC {
     }
 
     /// Write enum end of declaration
-    fn write_enum_footer(&mut self, type_name: &str) {
+    fn write_enum_footer(&mut self, type_name: &str, _def: &EnumDef) {
         self.write(&format!("}} {}_{type_name}_t;\n\n", remove_rif(self.comp_name())));
     }
 

@@ -96,25 +96,18 @@ impl Display for Access {
 
 
 #[derive(Clone, Debug, PartialEq)]
+/// Enumerated value entry : name, value, floating representation and description
 pub struct EnumEntry {
+    /// Name
     pub name: String,
+    /// Integer value
     pub value: u8,
+    /// Optional flaoting representation
+    pub repr: Option<f64>,
+    /// Description
     pub description: Description,
 }
-impl EnumEntry {
-    #[allow(dead_code)]
-    pub fn new<S1, S2>(name: S1, value: u8, description: S2) -> Self
-    where
-        S1: Into<String>,
-        S2: Into<Description>,
-    {
-        EnumEntry {
-            name: name.into(),
-            description: description.into(),
-            value,
-        }
-    }
-}
+
 // pub type EnumDef = Vec<EnumEntry>;
 #[derive(Clone, Debug)]
 pub struct EnumDef {

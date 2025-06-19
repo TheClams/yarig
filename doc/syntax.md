@@ -3,8 +3,7 @@
 The syntax for the RIF is loosely inspired by YAML: a human readable text file with structure based on indentation.
 
 It is composed of different levels:
-
- - [Top](#Top) : Top level structure, only one per file, contains all parameters and signals
+ - [Top](#Top) : Top level structure, only one per file, contains settings, parameters and pages
  - [Page](#Page): group of register and register instance, with a base address
  - [Registers](#Register): Register declaration, regrouping field
  - [Field](#Field) : N bits inside a register
@@ -73,7 +72,7 @@ The possible properties, indented by one level compare to the RIF declaration, a
  - `swClear : <clear_name>` : Declare a global clear _clear_name_ active high to clear all software register (no clear by default)
  - `hwClear : <clear_name0> <clear_name1> ...` : Declare global hardware clears _clear_name_ active high to clear all hardware register (no clear by default). There should be as many signal declared as there are hwClock: same name can be repeated and the minus character `-` can be used indicate that there is no clear for the corresponding hwClock.
  - `parameters : `: Start a parameter list. See [paragraph Parameters](#Parameters).
- - `generics : `: Start a genric list. See [paragraph Generics](#Generics).
+ - `generics : `: Start a generic list. See [paragraph Generics](#Generics).
  - `- pageName : [description]` : Start a page named pageName. See [below](#Page). The name is used only inside the documentation.
 
 The only mandatory property is at least one page.
@@ -100,6 +99,8 @@ A generic is defined as `- <name> = [<min>:]<default>:<max>`.
 This generate an RTL with input parameter.
 The generic value can only be used for register instances array size.
 If no minimum value is provided, it is set to 1.
+
+Note: not supported yet !
 
 
 ## Page

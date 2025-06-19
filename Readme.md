@@ -96,6 +96,7 @@ The exact behavior of each traits can be tweaked with some associated constant.
  - [ ] Improve nb_frac support:
    - [ ] Support reset value in floating-point
    - [x] Use floating-point value in documentation when nb_frac is non-zero (and use a tool-tip in html to display corresponding integer value)
+ - [ ] Support for generics
  - [ ] Support reset value as enum name
  - [ ] Support pipe option RTL
  - [ ] Support option to repeat field description for interrupt derived register
