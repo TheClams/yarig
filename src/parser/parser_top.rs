@@ -136,20 +136,20 @@ mod tests_parsing {
     assert_eq!(val_intf(&mut "apb"), Ok(Interface::Apb));
     assert_eq!(val_intf(&mut "Apb "), Ok(Interface::Apb));
     assert_eq!(val_intf(&mut "my_intf5"), Ok(Interface::Custom("my_intf5".to_owned())));
-    assert_eq!(val_intf(&mut "543 ").is_err(), true);
+    assert!(val_intf(&mut "543 ").is_err());
     // assert_eq!(val_intf(&mut "543 "), Err(ErrMode::Backtrack(winnow::error::InputError{input:"543 ", kind:ErrorKind::Tag})) );
-    assert_eq!(val_intf(&mut "// bad ").is_err(), true);
+    assert!(val_intf(&mut "// bad ").is_err());
   }
 
   #[test]
   fn test_reset_def() {
-    assert_eq!(reset_def(&mut "default"), Ok(ResetDef {name:"default".to_owned(),sync:false,active_high:false}) );
-    assert_eq!(reset_def(&mut "low_async low async"), Ok(ResetDef {name:"low_async".to_owned(),sync:false,active_high:false}) );
-    assert_eq!(reset_def(&mut "high_async high"), Ok(ResetDef {name:"high_async".to_owned(),sync:false,active_high:true}) );
-    assert_eq!(reset_def(&mut "high_sync sync"), Ok(ResetDef {name:"high_sync".to_owned(),sync:true,active_high:false}) );
-    assert_eq!(reset_def(&mut "activeH activeHigh"), Ok(ResetDef {name:"activeH".to_owned(),sync:false,active_high:true}) );
-    assert_eq!(reset_def(&mut "activeL activeLow"), Ok(ResetDef {name:"activeL".to_owned(),sync:false,active_high:false}) );
-    assert_eq!(reset_def(&mut "error invalid option").is_err(), true);
+    assert_eq!(reset_def("default"), Ok(ResetDef {name:"default".to_owned(),sync:false,active_high:false}) );
+    assert_eq!(reset_def("low_async low async"), Ok(ResetDef {name:"low_async".to_owned(),sync:false,active_high:false}) );
+    assert_eq!(reset_def("high_async high"), Ok(ResetDef {name:"high_async".to_owned(),sync:false,active_high:true}) );
+    assert_eq!(reset_def("high_sync sync"), Ok(ResetDef {name:"high_sync".to_owned(),sync:true,active_high:false}) );
+    assert_eq!(reset_def("activeH activeHigh"), Ok(ResetDef {name:"activeH".to_owned(),sync:false,active_high:true}) );
+    assert_eq!(reset_def("activeL activeLow"), Ok(ResetDef {name:"activeL".to_owned(),sync:false,active_high:false}) );
+    assert!(reset_def("error invalid option").is_err());
   }
 
   #[test]

@@ -138,23 +138,23 @@ mod tests_parsing {
     #[test]
     fn test_suffix_info() {
         assert_eq!(
-          suffix_info(&mut "name_only"),
+          suffix_info("name_only"),
           Ok(SuffixInfo { name: "name_only".to_owned(), alt_pos: false, pkg: false })
         );
         assert_eq!(
-          suffix_info(&mut "ctrl(pkg)"),
+          suffix_info("ctrl(pkg)"),
           Ok(SuffixInfo { name: "ctrl".to_owned(), alt_pos: false, pkg: true })
         );
         assert_eq!(
-          suffix_info(&mut "name(alt)"),
+          suffix_info("name(alt)"),
           Ok(SuffixInfo { name: "name".to_owned(), alt_pos: true, pkg: false })
         );
         assert_eq!(
-          suffix_info(&mut "n1(alt,pkg)"),
+          suffix_info("n1(alt,pkg)"),
           Ok(SuffixInfo { name: "n1".to_owned(), alt_pos: true, pkg: true })
         );
         assert_eq!(
-          suffix_info(&mut "n2(pkg,alt)"),
+          suffix_info("n2(pkg,alt)"),
           Ok(SuffixInfo { name: "n2".to_owned(), alt_pos: true, pkg: true })
         );
     }

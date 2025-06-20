@@ -39,7 +39,7 @@ impl GeneratorRal {
             core,
             ral_class: extra.class.unwrap_or("uvm_reg_block".to_owned()),
             ral_macro: extra.macro_name,
-            imports: extra.imports.unwrap_or_else(HashMap::new),
+            imports: extra.imports.unwrap_or_default(),
             reg_is_incl: false,
         }
     }

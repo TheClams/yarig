@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, ops::Deref};
 
 use crate::{
     comp::{
@@ -34,7 +34,8 @@ pub trait GeneratorHw : GeneratorBase {
         // Call relevant generator (Rif or Rifmux)
         match obj {
             Comp::Rif(rif) => {
-                self.set_comp(rif.into(), false);
+                self.set_comp(rif.deref().into(), false);
+                // self.set_comp(rif.deref().into(), false);
                 self.gen_rif_pkg(rif)?;
                 self.gen_rif(rif)?;
             }

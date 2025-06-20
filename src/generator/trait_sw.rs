@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use crate::{
     comp::comp_inst::{Comp, RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxGroupInst, RifmuxInst},
     parser::remove_rif, rifgen::{Access, Description, EnumDef, EnumEntry}
@@ -65,7 +67,7 @@ pub trait GeneratorSw : GeneratorBase {
                 self.gen_rifmux(rifmux, &riflist)
             }
             Comp::Rif(rif) => {
-                self.set_comp(rif.into(), false);
+                self.set_comp(rif.deref().into(), false);
                 self.gen_rif(rif, None)
             }
             // Nothing todo for external RIF
@@ -293,7 +295,7 @@ pub trait GeneratorSw : GeneratorBase {
     fn gen_rifmux(&mut self, rifmux: &RifmuxInst, rif_list: &RifList) -> Result<(), Box<dyn std::error::Error>> {
         self.set_comp(rifmux.into(), true);
         let rifmux_list : Vec<&RifmuxInst> = rifmux.components.iter()
-            .filter_map(|c| if let Comp::Rifmux(m) = &c.inst {Some(m)} else {None})
+            .filter_map(|c| if let Comp::Rifmux(m) = &c.inst {Some(m.deref())} else {None})
             .collect();
         self.write_rifmux_header(rifmux, rif_list, &rifmux_list);
         let mut groups = rifmux.groups.iter().peekable();
@@ -330,7 +332,7 @@ pub trait GeneratorSw : GeneratorBase {
                     }
                 }
                 Comp::Rif(r) => {
-                    self.set_comp(r.into(), true);
+                    self.set_comp(r.deref().into(), true);
                     self.set_rif_info(r);
                     let mut pages = r.pages.iter().peekable();
                     while let Some(page) = pages.next() {

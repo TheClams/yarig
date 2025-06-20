@@ -164,7 +164,7 @@ mod tests_parsing {
         assert_eq!(is_auto("auto"), Ok(InstMode::Automatic));
         assert_eq!(is_auto("auto-legacy"), Ok(InstMode::AutoLegacy));
         assert_eq!(is_auto("  "), Ok(InstMode::Manual));
-        assert_eq!(is_auto("anything else").is_err(),true);
+        assert!(is_auto("anything else").is_err());
     }
 
     // - reg_name[[array_size]] [= regType] [(groupName)] [@ regAddr]

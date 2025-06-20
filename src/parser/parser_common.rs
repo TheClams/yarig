@@ -341,9 +341,9 @@ mod tests_parsing {
 
     #[test]
     fn test_comment() {
-        assert_eq!(comment(&mut "# comment #"), Ok(()));
-        assert_eq!(comment(&mut "  // comment //"), Ok(()));
-        assert_eq!(comment(&mut "  / not a comment").is_err(), true);
+        assert_eq!(comment("# comment #"), Ok(()));
+        assert_eq!(comment("  // comment //"), Ok(()));
+        assert!(comment("  / not a comment").is_err());
     }
 
     #[test]
@@ -351,8 +351,8 @@ mod tests_parsing {
         assert_eq!(identifier(&mut "signal123"), Ok("signal123"));
         assert_eq!(identifier(&mut "_signal123"), Ok("_signal123"));
         assert_eq!(identifier(&mut "sig.field"), Ok("sig"));
-        assert_eq!(identifier(&mut "0sig").is_err(), true);
-        assert_eq!(identifier(&mut "+").is_err(), true);
+        assert!(identifier(&mut "0sig").is_err());
+        assert!(identifier(&mut "+").is_err());
     }
 
     #[test]
@@ -367,15 +367,15 @@ mod tests_parsing {
     fn test_bool_or_default() {
         assert_eq!(parse_bool(&mut "true ??"), Ok(true));
         assert_eq!(parse_bool(&mut "True!"), Ok(true));
-        assert_eq!(bool_or_default(&mut "  ", false), Ok(false));
-        assert_eq!(bool_or_default(&mut "", true), Ok(true));
-        assert_eq!(bool_or_default(&mut "0", true), Ok(false));
-        assert_eq!(bool_or_default(&mut "1", false), Ok(true));
-        assert_eq!(bool_or_default(&mut "true", false), Ok(true));
-        assert_eq!(bool_or_default(&mut "True", false), Ok(true));
-        assert_eq!(bool_or_default(&mut "True ? no !", false).is_err(), true);
-        assert_eq!(bool_or_default(&mut "False", true), Ok(false));
-        assert_eq!(bool_or_default(&mut "error", false).is_err(), true);
+        assert_eq!(bool_or_default("  ", false), Ok(false));
+        assert_eq!(bool_or_default("", true), Ok(true));
+        assert_eq!(bool_or_default("0", true), Ok(false));
+        assert_eq!(bool_or_default("1", false), Ok(true));
+        assert_eq!(bool_or_default("true", false), Ok(true));
+        assert_eq!(bool_or_default("True", false), Ok(true));
+        assert!(bool_or_default("True ? no !", false).is_err());
+        assert_eq!(bool_or_default("False", true), Ok(false));
+        assert!(bool_or_default("error", false).is_err());
     }
 
     #[test]
@@ -384,8 +384,8 @@ mod tests_parsing {
             quoted_string(&mut r#""Simple quoted string" with following text"#),
             Ok("Simple quoted string")
         );
-        assert_eq!(quoted_string(&mut "No quotes").is_err(), true);
-        assert_eq!(quoted_string(&mut "\"No end quote").is_err(), true);
+        assert!(quoted_string(&mut "No quotes").is_err());
+        assert!(quoted_string(&mut "\"No end quote").is_err());
     }
 
     #[test]
@@ -393,7 +393,7 @@ mod tests_parsing {
         assert_eq!(indentation(&mut "No indent"), Ok(0));
         assert_eq!(indentation(&mut "  spaces: "), Ok(2));
         assert_eq!(indentation(&mut "	tab: "), Ok(1));
-        assert_eq!(indentation(&mut "  	Tab & space").is_err(), true);
+        assert!(indentation(&mut "  	Tab & space").is_err());
     }
 
     #[test]
@@ -429,6 +429,6 @@ mod tests_parsing {
             logic_expr(&mut "(s0 & (s1 | ~s2) & s3)"),
             Ok("(s0 & (s1 | ~s2) & s3)")
         );
-        assert_eq!(logic_expr(&mut "(s1 & (s2)").is_err(), true);
+        assert!(logic_expr(&mut "(s1 & (s2)").is_err());
     }
 }

@@ -1,10 +1,11 @@
 # Change Log
 
-## [unrelease]
+## [0.12.2]
 
 ### Changed
   - Add check on overlapping register
   - Check field declaration syntax is correct
+  - Check rifinstance address is in range of the rifmux address width
 
 ### Bug Fixes
   - Latex: fix handling of equations in descriptions

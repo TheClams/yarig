@@ -226,7 +226,7 @@ impl GeneratorDoc for GeneratorHtml {
             // Insert a line return after each line
             if !txt.is_empty() {
                 let first_char = l.chars().next().unwrap_or('a');
-                let need_br = ['.', ':', '"'].iter().any(|c| last_char==*c)
+                let need_br = ['.', ':', '"'].contains(&last_char)
                     || first_char.is_uppercase()
                     || first_char.is_ascii_digit()
                     || first_char=='-';

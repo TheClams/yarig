@@ -46,9 +46,9 @@ pub struct RifExt {
 #[derive(Clone, Debug)]
 /// Component: Rifmux, Rif or External Rif
 pub enum Comp {
-    Rifmux(RifmuxInst),
-    Rif(RifInst),
-    External(RifExt),
+    Rifmux(Box<RifmuxInst>),
+    Rif(Box<RifInst>),
+    External(Box<RifExt>),
 }
 
 impl Comp {
@@ -103,17 +103,17 @@ pub struct CompInst {
 impl CompInst {
     /// Create a RifMux component
     pub fn new_mux(inst: RifmuxInst, addr: u64, group: String) -> Self {
-        CompInst { inst: Comp::Rifmux(inst), addr, group}
+        CompInst { inst: Comp::Rifmux(inst.into()), addr, group}
     }
 
     /// Create a Rif component
     pub fn new_rif(inst: RifInst, addr: u64, group: String) -> Self {
-        CompInst { inst: Comp::Rif(inst), addr, group}
+        CompInst { inst: Comp::Rif(inst.into()), addr, group}
     }
 
     /// Create an external component
     pub fn new_ext(inst: RifExt, addr: u64, group: String) -> Self {
-        CompInst { inst: Comp::External(inst), addr, group}
+        CompInst { inst: Comp::External(inst.into()), addr, group}
     }
 
     pub fn get_name(&self) -> &str {
@@ -1409,11 +1409,11 @@ impl Comp {
         match &src.top {
             RifGenTop::Rifmux(s) => {
                 let Some(def) = src.get_rifmux(s) else {return Err(format!("Rifmux {s} not defined !"));} ;
-                r = Comp::Rifmux(RifmuxInst::build(src, s, def, params, suffixes)?);
+                r = Comp::Rifmux(Box::new(RifmuxInst::build(src, s, def, params, suffixes)?));
             }
             RifGenTop::Rif(s) => {
                 if let Some(rifdef) = src.rifs.get(s) {
-                    r = Comp::Rif(RifInst::new(s, rifdef, params, &src.rifs, rifdef.description.clone(), suffixes.get("").cloned())?);
+                    r = Comp::Rif(Box::new(RifInst::new(s, rifdef, params, &src.rifs, rifdef.description.clone(), suffixes.get("").cloned())?));
                 } else {
                     return Err(format!("Rif {s} not defined !"));
                 }

@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use crate::{
     comp::comp_inst::{val_str, Comp, CompInst, RifInst, RifmuxGroupInst},
     parser::remove_rif,
@@ -105,7 +107,7 @@ pub trait GeneratorDoc : GeneratorBase {
         let filename;
         match obj {
             Comp::Rifmux(rifmux) => {
-                self.set_comp(rifmux.into(), true);
+                self.set_comp(rifmux.deref().into(), true);
                 filename = self.filename_rifmux(rifmux);
                 let name = remove_rif(&rifmux.inst_name);
                 let desc = rifmux.description.get_split(self.is_public());
@@ -127,7 +129,7 @@ pub trait GeneratorDoc : GeneratorBase {
                     self.add_rifmux_entry(c, w,  0, None, &rifmux.groups);
                 }
                 self.write_table_footer(TableKind::Rifmux);
-                self.set_comp(rifmux.into(), true);
+                self.set_comp(rifmux.deref().into(), true);
                 // Split output -> save current file
                 if self.setting().split {
                     self.write_footer(obj.get_name());
@@ -151,7 +153,7 @@ pub trait GeneratorDoc : GeneratorBase {
             }
             Comp::Rif(rif) => {
                 filename = self.filename_rif(rif);
-                self.set_comp(rif.into(), false);
+                self.set_comp(rif.deref().into(), false);
                 self.add_rif(rif, 1, &[])?;
             },
             // Nothing todo for external RIF
@@ -188,7 +190,7 @@ pub trait GeneratorDoc : GeneratorBase {
             inst => {
                 let tn = remove_rif(inst.get_type());
                 if let Comp::Rif(rif) = inst {
-                    self.set_comp(rif.into(), true);
+                    self.set_comp(rif.deref().into(), true);
                     self.set_rif_info(rif);
                 }
                 self.write_rifmux_entry(&instname, tn, (addr,w), &inst.get_desc_short(self.is_public()), Self::SHOW_TYPE);

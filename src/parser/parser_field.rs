@@ -439,7 +439,7 @@ mod tests_parsing {
     #[test]
     fn test_enum_entry() {
         assert_eq!(
-            enum_entry(&mut "- VAL0 = 5 \"F0 Value 0\""),
+            enum_entry("- VAL0 = 5 \"F0 Value 0\""),
             Ok(EnumEntry {
                 name: "VAL0".to_owned(),
                 value: 5,
@@ -453,7 +453,7 @@ mod tests_parsing {
         assert_eq!(pulse_kind("reg"), Ok(true));
         assert_eq!(pulse_kind("  "), Ok(true));
         assert_eq!(pulse_kind("comb"), Ok(false));
-        assert_eq!(pulse_kind("anything else").is_err(), true);
+        assert!(pulse_kind("anything else").is_err());
     }
 
     // up|down|updown [incrVal[=width]] [decrVal[=width]] [sat] [event] [clr]
@@ -463,7 +463,7 @@ mod tests_parsing {
         assert_eq!(counter_dir(&mut "updown"), Ok(CounterKind::UpDown));
         assert_eq!(counter_dir(&mut "up"), Ok(CounterKind::Up));
         assert_eq!(
-            counter_def(&mut "up decrVal incrVal=3"),
+            counter_def("up decrVal incrVal=3"),
             Ok(CounterInfo {
                 kind: CounterKind::Up,
                 incr_val: 3,
@@ -474,7 +474,7 @@ mod tests_parsing {
             })
         );
         assert_eq!(
-            counter_def(&mut "up decrVal 2 sat"),
+            counter_def("up decrVal 2 sat"),
             Ok(CounterInfo {
                 kind: CounterKind::Up,
                 incr_val: 0,
@@ -485,7 +485,7 @@ mod tests_parsing {
             })
         );
         assert_eq!(
-            counter_def(&mut "down clr event sat"),
+            counter_def("down clr event sat"),
             Ok(CounterInfo {
                 kind: CounterKind::Down,
                 incr_val: 0,
@@ -496,7 +496,7 @@ mod tests_parsing {
             })
         );
         assert_eq!(
-            counter_def(&mut "updown clr"),
+            counter_def("updown clr"),
             Ok(CounterInfo {
                 kind: CounterKind::UpDown,
                 incr_val: 0,

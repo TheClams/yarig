@@ -517,22 +517,22 @@ mod tests_parsing {
     #[test]
     fn test_parse_expr() {
         assert_eq!(
-            parse_expr(&mut "256 "),
+            parse_expr("256 "),
             Ok(ExprTokens(vec![Number(256.0)]))
         );
 
         assert_eq!(
-            parse_expr(&mut "$v1 +3"),
+            parse_expr("$v1 +3"),
             Ok(ExprTokens(vec![Var("v1".to_owned()), Number(3.0), Operator(Plus)]))
         );
 
         assert_eq!(
-            parse_expr(&mut "ceil(log2($v3-5))"),
+            parse_expr("ceil(log2($v3-5))"),
             Ok(ExprTokens(vec![Var("v3".to_owned()), Number(5.0), Operator(Minus), FuncCall(Log2), FuncCall(Ceil)]))
         );
 
         assert_eq!(
-            parse_expr(&mut "pow(3,$x )-1"),
+            parse_expr("pow(3,$x )-1"),
             Ok(ExprTokens(vec![Number(3.0), Var("x".to_owned()), FuncCall(Power), Number(1.0), Operator(Minus)]))
         );
     }
@@ -542,9 +542,9 @@ mod tests_parsing {
         let mut variables = ParamValues(OrderDict::new());
         variables.0.insert("v1".to_owned(), 1);
         variables.0.insert("x".to_owned(), 17);
-        let expr = parse_expr(&mut "16*(not $v1) + 256*$v1").unwrap();
+        let expr = parse_expr("16*(not $v1) + 256*$v1").unwrap();
         assert_eq!(expr.eval(&variables),Ok(256));
-        let expr = parse_expr(&mut "pow(2, $x) - 1").unwrap();
+        let expr = parse_expr("pow(2, $x) - 1").unwrap();
         assert_eq!(expr.eval(&variables),Ok((1<<17)-1));
     }
 
