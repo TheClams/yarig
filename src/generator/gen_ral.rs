@@ -1,7 +1,9 @@
+use std::collections::HashMap;
+
 use crate::{
     cfg::CfgRal,
     comp::comp_inst::{RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxInst},
-    parser::remove_rif,
+    parser::{get_rif, remove_rif},
     rifgen::{Description, EnumDef, FieldSwKind}
 };
 
@@ -20,6 +22,8 @@ pub struct GeneratorRal {
     ral_macro : Option<String>,
     /// Flag when current register is defined in another rif
     reg_is_incl : bool,
+    /// Name of macro to instantiate register block
+    imports : HashMap<String,String>,
 }
 
 
@@ -35,6 +39,7 @@ impl GeneratorRal {
             core,
             ral_class: extra.class.unwrap_or("uvm_reg_block".to_owned()),
             ral_macro: extra.macro_name,
+            imports: extra.imports.unwrap_or_else(HashMap::new),
             reg_is_incl: false,
         }
     }
@@ -233,11 +238,26 @@ impl GeneratorSw for GeneratorRal {
             self.write("   this.default_map.add_submap(this.m_``PREFIX````BLOCK``.default_map, OFFSET);");
             self.write("`endif\n\n");
         }
+        // println!("Rifs = {:?}, imports = {:?}", rif_list.iter().map(|l| l.0.name(true)).collect::<Vec<_>>(), self.imports);
         for (rif,_) in rif_list.iter() {
-            self.write(&format!("`include \"ral_{}.sv\"\n", rif.name(false).to_lowercase()));
+            let name = rif.name(true).to_lowercase();
+            let n = remove_rif(&name);
+            let inc = if let Some(pkg) = get_rif(&self.imports, n) {
+                format!("import {pkg}::ral_block_{n};\n")
+            } else {
+                format!("`include \"ral_{name}.sv\"\n")
+            };
+            self.write(&inc);
         }
         for rifmux in rifmux_list.iter() {
-            self.write(&format!("`include \"ral_{}.sv\"\n", rifmux.type_name.to_lowercase()));
+            let name = rifmux.type_name.to_lowercase();
+            let n = remove_rif(&name);
+            let inc = if let Some(pkg) = get_rif(&self.imports, n) {
+                format!("import {pkg}::ral_block_{n};\n")
+            } else {
+                format!("`include \"ral_{name}.sv\"\n")
+            };
+            self.write(&inc);
         }
         self.write(&format!("\nclass {blkname} extends {};\n", self.ral_class));
     }

@@ -196,7 +196,7 @@ nb_pipe = 2
 gen_inc = ["*"]
 
 # Optional: Override global local for this target
-local = ["core_module"]
+local = ["module1"]
 ```
 
 ### Register Abstraction Layer (RAL)
@@ -213,7 +213,11 @@ macro_name = "MY_RAL_MACRO"
 gen_inc = ["*"]
 
 # Optional: Override global local for this target
-local = ["verification_module"]
+local = ["module1"]
+
+# Optional: List of package import per register block
+imports.blk0 = blk0_sim_pkg
+imports.blk1 = blk1_sim_pkg
 ```
 
 ### Python Generation
@@ -231,7 +235,7 @@ version = "3.10"
 gen_inc = ["*"]
 
 # Optional: Override global local for this target
-local = ["driver_module"]
+local = ["module1"]
 ```
 
 ### SVD (System View Description)
@@ -288,7 +292,7 @@ width_5col = [1.0, 1.5, 1.0, 1.0, 3.0]  # For 5-column tables (fields)
 gen_inc = ["*"]
 
 # Optional: Override global local for this target
-local = ["doc_module"]
+local = ["module1"]
 ```
 
 ## Complete Example
@@ -298,7 +302,7 @@ local = ["doc_module"]
 filename = "my_soc.rif"
 include = ["./common", "../ip_library"]
 gen_inc = ["*"]
-local = ["core_ip"]
+local = ["spi", "uart"]
 targets = ["sv", "c", "html", "py", "ral", "svd"]
 public = false
 suffix_rtl_only = true

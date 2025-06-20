@@ -188,6 +188,9 @@ pub struct CfgRal {
     pub gen_inc: Option<Vec<String>>,
     /// List of included reference which must be generated locally (use ["*"] to match all component in the gen_inc definition)
     pub local: Option<Vec<String>>,
+    /// List of optional imports for regsiter block
+    pub imports: Option<HashMap<String,String>>,
+
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]

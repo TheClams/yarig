@@ -839,7 +839,8 @@ impl RifRegInst {
         Ok(Some(r))
     }
 
-    ///
+    /// Find all field overlapping with another without exclusive access
+    /// Return an iterator on pair of fields
     pub fn find_overlapping_fields(&self) -> impl Iterator<Item = (&RifFieldInst,&RifFieldInst)> {
         self.fields.iter().enumerate()
             .flat_map(|(i, f0)| {
@@ -1361,6 +1362,9 @@ impl RifmuxInst {
         let mut inst_addr = InstAddr::new(0);
         for i in &rifmux.items {
             let addr = inst_addr.updt(i.addr.value(&params) /*+ group_offset*/, i.addr_kind);
+            if addr >= (1 << rifmux.addr_width) {
+                return Err(format!("Address of {inst_name} = 0x{:0x} out of range ({}b)", addr, rifmux.addr_width));
+            }
             let mut i_params = ParamValues::new();
             for (k,v) in top_params.items() {
                 let mut ks = k.split('.');
