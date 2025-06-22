@@ -835,6 +835,11 @@ impl RifRegInst {
         for f in r.fields.iter() {
             let reset = f.reset.to_u128(f.width);
             if f.is_partial() {
+                if f.is_password() {
+                    return Err(format!("Field {} is defined as counter and partial: this is not supported !", f.name()));
+                } else if f.is_counter() {
+                    return Err(format!("Field {} is defined as password and partial: this is not supported !", f.name()));
+                }
                 r.group_idx = rifs.partials.push(&r.group_type, &r.group_name, PartialFieldInfo::new(f));
             }
             r.reset |= reset << f.lsb;

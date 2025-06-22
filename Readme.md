@@ -52,9 +52,39 @@ rif: test_rif
 
 Highlighting for SublimeText is available on [github](https://github.com/TheClams/rif).
 
+### Why another language ?
+
+Of all existing approach, I think that only SystemRDL comes close to covering all the features I need.
+The idea of separating register definition and instance is key to allow re-use amongst different project.
+But the main weakness of SystemRDL (in my opinion) is that the syntax is neither easy to read nor easy to write.
+
+How simpler is the RIF syntax compare to the SystemRDL is quite subjective, but like can be seen in the syntax example
+it is quite compact when defining simple register, with default behavior that should intuitive.
+For example, if there is no reset value an no hardware/software defined, then it is assumed this is a read-only register driven by hardware.
+
+In term of features missing from SystemRDL, the main one I have identified are:
+  - Overriding default precedence hw/sw, paritycheck field
+  - Automatic control of endianness
+  - Definition of HDL path, constraint
+
+But I think RIF has a few improved featured (in no particular order) :
+  - RIF mapping: it is possible to defines the whole register map of a SoC by instantiating multiple RIFs.
+  - Fine control over both the hardware register structure and its software mapping: instead of defining a whole register structure
+    which is then mapped automatically on address aligned with the software bus, the definition of register must be aligned on the software bus,
+    but each register can have a group name so that they appear in the same structure in hardware.
+  - fine control of clock/reset used per register/field: there is still the hypothesis that all clock are synchronous but it is easy to have fields driven by different clock/reset.
+  - pulse field can be defined as combinatorial or register
+  - password field: allows to set high an internal signal only when a given value is written.
+    This allows to protect some register against write access until the password is written, useful for critical register related to power or clock tree for example.
+  - limit property: allows to ensure only a subset of value can be written in a register
+  - enum can have a representation value on top of their encoded integer value. (for example `CR_1_2 = 1 (0.5) "Coderate 1/2" `)
+  - Defining number of fractional bits associated with a field: allows to define reset value in a more intuitive way when the register represent fixed-point values
+  - Control visibility of description: when generating documentation for public purposes, sometimes is is useful to hide some register,
+    some part of the description, or automatically rename fields as `reserved_xx` to allow access without exposing the full meaning behind the register
+
 
 ## Configuration
- A configuration file allows to specify many options of the generators like the rif file, a list of target, the output path for each targets, ...
+ A configuration file allows to specify many options of the generators like the RIF file, a list of target, the output path for each targets, ...
 
 Here is an example:
 ```
@@ -112,11 +142,11 @@ The exact behavior of each traits can be tweaked with some associated constant.
 ## Documentation
  - [x] Config file: full description
  - [ ] Base generator trait
- - [ ] Why Yarig vs other existing solution (mostly SystemRDL)
+ - [x] Why Yarig vs other existing solution (mostly SystemRDL)
  - [ ] List of syntax example for typical use-cases
 
 ## Known Bugs / Edge cases
  - [ ] Support partial fields arrays
- - [ ] Handle counter larger than register size (TBD if this should simply be forbidden or properly handled ...)
+ - [ ] Support partial counter (for counter larger than register size)
  - [x] Add parsing of LogicExpr (currently logic expression works only for SystemVerilog)
- - [ ] Add check on password not being partial fields
+ - [x] Add check on password not being partial fields
