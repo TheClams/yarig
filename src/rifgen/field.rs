@@ -486,6 +486,8 @@ impl EnumKind {
 pub enum ResetValP {
     Unsigned(u128),
     Signed(i128),
+    FloatS(f64),
+    FloatU(f64),
     Param(String),
     Enum(String),
 }
@@ -504,11 +506,11 @@ impl Default for &ResetValP {
 impl ResetValP {
     //
     pub fn is_signed(&self) -> bool {
-        matches!(self,ResetValP::Signed(_))
+        matches!(self,ResetValP::Signed(_) | ResetValP::FloatS(_))
     }
 
     //
-    pub fn compile(&self, signed: bool, params: &ParamValues, enum_def: Option<&EnumDef>) -> Result<ResetVal,String> {
+    pub fn compile(&self, signed: bool, nb_frac: isize, params: &ParamValues, enum_def: Option<&EnumDef>) -> Result<ResetVal,String> {
         match self {
             ResetValP::Param(p) => {
                 let Some(v) = params.get(p) else {
@@ -530,8 +532,16 @@ impl ResetValP {
                 Ok(ResetVal::Unsigned(v.value.into()))
             }
             ResetValP::Signed(v)   => Ok(ResetVal::Signed(*v)),
-            ResetValP::Unsigned(v) if signed => Ok(ResetVal::Signed(*v as i128)),
-            ResetValP::Unsigned(v) => Ok(ResetVal::Unsigned(*v)),
+            ResetValP::Unsigned(v) => {
+                if signed {Ok(ResetVal::Signed(*v as i128))}
+                else {Ok(ResetVal::Unsigned(*v))}
+            }
+            ResetValP::FloatS(f) |
+            ResetValP::FloatU(f) => {
+                let v = (*f * (2.0_f64.powi(nb_frac as i32))).round();
+                if signed {Ok(ResetVal::Signed(v as i128))}
+                else {Ok(ResetVal::Unsigned(v as u128))}
+            }
         }
     }
 }
@@ -751,8 +761,8 @@ impl Default for LimitP {
 }
 
 impl LimitP {
-    pub fn compile(&self, signed: bool, params: &ParamValues, enum_def: Option<&EnumDef>) -> Result<Limit,String> {
-        let value = self.value.compile(signed, params, enum_def)?;
+    pub fn compile(&self, signed: bool, nb_frac: isize, params: &ParamValues, enum_def: Option<&EnumDef>) -> Result<Limit,String> {
+        let value = self.value.compile(signed, nb_frac, params, enum_def)?;
         Ok(Limit{value, bypass:self.bypass.to_owned()})
     }
 }
@@ -780,17 +790,17 @@ impl Limit {
 impl LimitValueP {
 
     /// Create a new limit by setting value to all ResetVal from
-    pub fn compile(&self, signed: bool, params: &ParamValues, enum_def: Option<&EnumDef>) -> Result<LimitValue,String> {
+    pub fn compile(&self, signed: bool, nb_frac: isize, params: &ParamValues, enum_def: Option<&EnumDef>) -> Result<LimitValue,String> {
         match self {
-            LimitValueP::Min(v) => Ok(LimitValue::Min(v.compile(signed, params, enum_def)?)),
-            LimitValueP::Max(v) => Ok(LimitValue::Max(v.compile(signed, params, enum_def)?)),
+            LimitValueP::Min(v) => Ok(LimitValue::Min(v.compile(signed, nb_frac, params, enum_def)?)),
+            LimitValueP::Max(v) => Ok(LimitValue::Max(v.compile(signed, nb_frac, params, enum_def)?)),
             LimitValueP::MinMax(v0, v1) => Ok(LimitValue::MinMax(
-                v0.compile(signed, params, enum_def)?,
-                v1.compile(signed, params, enum_def)?)),
+                v0.compile(signed, nb_frac, params, enum_def)?,
+                v1.compile(signed, nb_frac, params, enum_def)?)),
             LimitValueP::List(vec) => {
                 let mut nv = Vec::with_capacity(vec.len());
                 for v in vec {
-                    nv.push(v.compile(signed, params, enum_def)?);
+                    nv.push(v.compile(signed, nb_frac, params, enum_def)?);
                 }
                 Ok(LimitValue::List(nv))
             }

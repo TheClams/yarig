@@ -752,7 +752,7 @@ impl RifRegInst {
                     r.sw_access = Access::RO;
                 }
                 r.hw_access = Access::NA;
-                r.reset = info.0.compile(false, &rifs.params, None)?.to_u128(128);
+                r.reset = info.0.compile(false, 0, &rifs.params, None)?.to_u128(128);
                 for f in r.fields.iter_mut() {
                     let val : u128 = (r.reset >> f.lsb) & ((1<<f.width)-1);
                     f.reset = if f.is_signed() {
@@ -816,16 +816,16 @@ impl RifRegInst {
                     }
                     let enum_def : Option<&EnumDef> = reg_field.enum_kind.get_def(&rifs.enums);
                     match &ovr_f.reset {
-                        ResetValOverride::Reset(reset_val) => reg_field.reset = reset_val.compile(reg_field.is_signed(), &rifs.params, enum_def)?,
+                        ResetValOverride::Reset(reset_val) => reg_field.reset = reset_val.compile(reg_field.is_signed(), reg_field.nb_frac, &rifs.params, enum_def)?,
                         ResetValOverride::Disable(reset_val) => {
-                            reg_field.reset = reset_val.compile(reg_field.is_signed(), &rifs.params, enum_def)?;
+                            reg_field.reset = reset_val.compile(reg_field.is_signed(), reg_field.nb_frac, &rifs.params, enum_def)?;
                             reg_field.visibility = Visibility::Disabled;
                         },
                         // Nothing
                         ResetValOverride::None => {},
                     }
                     if let Some(limit) = &ovr_f.limit {
-                        reg_field.limit = limit.compile(reg_field.is_signed(), &rifs.params, enum_def)?;
+                        reg_field.limit = limit.compile(reg_field.is_signed(), reg_field.nb_frac, &rifs.params, enum_def)?;
                     }
                 }
             }
@@ -992,7 +992,7 @@ impl RifFieldInst {
         let enum_def = field.enum_kind.get_def(&rifs.enums);
         let mut reset = field.reset.first()
             .unwrap_or_default()
-            .compile(field.signed, params, enum_def)
+            .compile(field.signed, field.nb_frac, params, enum_def)
             .unwrap_or_default(); // TODO: handle error
         let idx : ArrayIdx;
         // Create format string for description
@@ -1015,7 +1015,7 @@ impl RifFieldInst {
             if field.reset.len() > rst_idx {
                 reset = field.reset.get(rst_idx)
                     .unwrap_or_default()
-                    .compile(field.signed, params, enum_def)
+                    .compile(field.signed, field.nb_frac, params, enum_def)
                     .unwrap_or_default();
             }
             let i = array.dim() + array.idx();
@@ -1042,11 +1042,11 @@ impl RifFieldInst {
             hw_kind.push(kind);
         }
         // Compile value containing resetVal in case they use parameters
-        let limit = field.limit.compile(field.signed, params, enum_def).expect("Unknown parameter in limit !");
+        let limit = field.limit.compile(field.signed, field.nb_frac, params, enum_def).expect("Unknown parameter in limit !");
         let mut sw_kind = field.sw_kind.to_owned();
         if let FieldSwKind::Password(info) = &mut sw_kind {
-            info.once = info.once.as_ref().map(|r| (&r.compile(field.signed, params, enum_def).expect("Unknown parameter in limit !")).into());
-            info.hold = info.hold.as_ref().map(|r| (&r.compile(field.signed, params, enum_def).expect("Unknown parameter in limit !")).into());
+            info.once = info.once.as_ref().map(|r| (&r.compile(field.signed, field.nb_frac, params, enum_def).expect("Unknown parameter in limit !")).into());
+            info.hold = info.hold.as_ref().map(|r| (&r.compile(field.signed, field.nb_frac, params, enum_def).expect("Unknown parameter in limit !")).into());
         }
 
         *next_lsb += width;

@@ -72,11 +72,11 @@ impl FieldImpl {
         } else {
             let mut resets = Vec::with_capacity(field.reset.len());
             for reset in field.reset.iter() {
-                resets.push(reset.compile(field.signed, params, enum_def)?);
+                resets.push(reset.compile(field.signed, field.nb_frac, params, enum_def)?);
             }
             (field.width(params) as u16, resets)
         };
-        let limit = field.limit.compile(field.signed, params, enum_def)?;
+        let limit = field.limit.compile(field.signed, field.nb_frac, params, enum_def)?;
         // Get description
         let s = if field.signed {'s'} else {'u'};
         let format_str = format!("{s}{}.{}", width, field.nb_frac);
@@ -457,7 +457,7 @@ impl RegImpl {
                     let enum_def = f.enum_kind.get_def(&rifs.enums);
                     // TODO: might need to check dimensions (or maybe shjould be done at parsing level)
                     for r in f.reset.iter() {
-                        field_impl.reset.push(r.compile(f.signed, params, enum_def)?);
+                        field_impl.reset.push(r.compile(f.signed, f.nb_frac, params, enum_def)?);
                     }
                 } else if f.is_partial() {
                     for kind in f.hw_kind.iter() {

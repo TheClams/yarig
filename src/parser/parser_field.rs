@@ -13,18 +13,27 @@ use super::{
     identifier, param, quoted_string, reg_interrupt_clr, reg_interrupt_trigger, signal_name, val_f64, val_i128, val_u128, val_u8, val_u8_or_param, ws, Res, ResF
 };
 
+/// Parse a reset value: this can be an integer, a float, the name of an enum or a parameter (string starting with $)
 pub fn reset_val<'a>(input: &mut &'a str) -> Res<'a, ResetValP> {
     if input.starts_with('$') {
         param.map(|v| ResetValP::Param(v.to_owned())).parse_next(input)
     } else if input.starts_with(char::is_alphabetic) {
         identifier.map(|v| ResetValP::Enum(v.to_owned())).parse_next(input)
-    } else if input.starts_with('-') || input.starts_with('+') {
-        val_i128.map(ResetValP::Signed).parse_next(input)
     } else {
-        val_u128.map(ResetValP::Unsigned).parse_next(input)
+        let is_float = input.split_whitespace().next().map(|r|
+                r.contains(['e','E', '.']) && !r.contains(['\'', 'x', 'X'])
+            ).unwrap_or(false);
+        let is_signed = input.starts_with('-') || input.starts_with('+');
+        match (is_float, is_signed) {
+            (true, true)  => val_f64.map(ResetValP::FloatS).parse_next(input),
+            (true, false) => val_f64.map(ResetValP::FloatU).parse_next(input),
+            (false, true) => val_i128.map(ResetValP::Signed).parse_next(input),
+            (false, false) => val_u128.map(ResetValP::Unsigned).parse_next(input),
+        }
     }
 }
 
+/// Parse list of reset value contained between curly bracket and comma separated
 pub fn reset_val_arr<'a>(input: &mut &'a str) -> Res<'a, Vec<ResetValP>> {
     delimited("{", separated(1..,reset_val, ws(",")), "}")
         .context(StrContext::Label("reset array values"))
@@ -355,8 +364,13 @@ mod tests_parsing {
         assert_eq!(val_u8(&mut "8'h1A "), Ok(26));
         assert_eq!(reset_val(&mut "34 "), Ok(ResetValP::Unsigned(34)));
         assert_eq!(reset_val(&mut "+34"), Ok(ResetValP::Signed(34)));
+        assert_eq!(reset_val(&mut "34.0 "), Ok(ResetValP::FloatU(34.0)));
+        assert_eq!(reset_val(&mut "+34.0"), Ok(ResetValP::FloatS(34.0)));
+        assert_eq!(reset_val(&mut "10e3 "), Ok(ResetValP::FloatU(10e3)));
+        assert_eq!(reset_val(&mut "+5E-4"), Ok(ResetValP::FloatS(5e-4)));
         assert_eq!(reset_val(&mut "-17 "), Ok(ResetValP::Signed(-17)));
         assert_eq!(reset_val(&mut "0x2A"), Ok(ResetValP::Unsigned(42)));
+        assert_eq!(reset_val(&mut "32'ha9fe7032"), Ok(ResetValP::Unsigned(0xa9fe7032)));
         assert_eq!(reset_val(&mut "$param"), Ok(ResetValP::Param("param".to_owned())));
         assert_eq!(reset_val(&mut "enum_label"), Ok(ResetValP::Enum("enum_label".to_owned())));
         assert_eq!(

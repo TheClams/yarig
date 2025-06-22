@@ -1,6 +1,6 @@
 # YARIG: Yet Another Register Interface Generator
 
-YARIG is code generation tools to describe register interface of an IP or ASIC/FPGA design.
+YARIG is a code generation tool to describe register interface of an IP or ASIC/FPGA design.
 
 This allows to have one common source to describes registers for all the different views:
  - Hardware: for the actual hardware implementation (SystemVerilog and VHDL)
@@ -75,7 +75,7 @@ sim = "../yarig/sim"
 vhdl = "../yarig/vhdl"
 ```
 
-All settings from the configuration file can be overriden by command-line arguments. Run `yarig -h` to list all available options.
+Most settings from the configuration file can be overriden by command-line arguments. Run `yarig -h` to list all available options.
 
 ## Generator Traits
 
@@ -93,20 +93,20 @@ The exact behavior of each traits can be tweaked with some associated constant.
 # TODO
 
 ## Feature
- - [ ] Improve nb_frac support:
-   - [ ] Support reset value in floating-point
+ - [x] Improve nb_frac support:
+   - [x] Support reset value in floating-point
    - [x] Use floating-point value in documentation when nb_frac is non-zero (and use a tool-tip in html to display corresponding integer value)
  - [ ] Support for generics
- - [ ] Support reset value as enum name
+ - [x] Support reset value as enum name
  - [ ] Support pipe option RTL
  - [ ] Support option to repeat field description for interrupt derived register
  - [x] Support latex equation in description
  - [ ] Support overlapping register in hardware. Exclusive access (RO/WO) is already check at compile time: might be a good place to add some overlap flag to ease the generator job ...
  - [ ] Check enum size matches the field size
  - [ ] Option to add representation value for enum. Syntax could be 'NAME = VAL (repr) "description"'. Could be usefull when enum is representing a limited set of integer or real values.
-   - [ ] Update parser to support new syntax
-   - [ ] Add python function in the enum class for conversion to/from float
-   - [ ] Add C function for conversion to/from float/int. Need to add option to the generator allowing to disable the feature, use int, float or double as the representation type
+   - [x] Update parser to support new syntax
+   - [x] Add python function in the enum class for conversion to/from float
+   - [ ] Add C function for conversion to/from float/int ? Would need to add option to the generator allowing to disable the feature, use int, float or double as the representation type
  - [ ] Option to control if clear works without clock enable or not
 
 ## Documentation
