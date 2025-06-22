@@ -1,14 +1,14 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    parser::{get_rif, parser_expr::ParamValues},
+    parser::get_rif,
     rifgen::{
         order_dict::{OrderDict, OrderedDictIterV}, Access, CastInfo, ClkEn, Description, EnumKind, ExternalKind, Field, FieldHwKind, FieldSwKind, InterruptDesc, InterruptInfo, Limit, Lock, LogicExpr, RegDef, RegDefOrIncl, RegIncludePath, RegPulseKind, ResetVal, Rif
     }
 };
 
 use super::{
-    comp_inst::{val_str, PartialFieldDict, PartialFieldInfos, RifPageInst, RifRegInst, RifsInfo},
+    comp_inst::{val_str, PartialFieldInfos, RifPageInst, RifRegInst, RifsInfo},
 };
 
 /// Field Implementation
@@ -57,7 +57,9 @@ pub struct FieldImpl {
 impl FieldImpl {
 
     /// Create a FieldImplementation base on a field definition
-    fn new(field: &Field, reg_array: u16, ctrl_idx: usize, params: &ParamValues, partials: Option<&PartialFieldInfos>) -> Result<Self, String> {
+    fn new(field: &Field, reg_array: u16, ctrl_idx: usize, rifs: &RifsInfo, partials: Option<&PartialFieldInfos>) -> Result<Self, String> {
+        let params = &rifs.params;
+        let enum_def = field.enum_kind.get_def(&rifs.enums);
         // Handle case of partial array
         let mut array = reg_array.max(1) * field.array.value(params) as u16;
         if reg_array > 0 {
@@ -70,11 +72,11 @@ impl FieldImpl {
         } else {
             let mut resets = Vec::with_capacity(field.reset.len());
             for reset in field.reset.iter() {
-                resets.push(reset.compile(field.signed, params)?);
+                resets.push(reset.compile(field.signed, params, enum_def)?);
             }
             (field.width(params) as u16, resets)
         };
-        let limit = field.limit.compile(field.signed, params)?;
+        let limit = field.limit.compile(field.signed, params, enum_def)?;
         // Get description
         let s = if field.signed {'s'} else {'u'};
         let format_str = format!("{s}{}.{}", width, field.nb_frac);
@@ -343,10 +345,10 @@ impl RegImplDict {
                 }
                 // If register group was already seen, merge fields
                 if let Some(reg_impl) = self.get_mut(&reg.group.name) {
-                    reg_impl.merge_with(reg, &rifs.params, &rifs.partials)?;
+                    reg_impl.merge_with(reg, &rifs)?;
                 }
                 else {
-                    let mut reg_impl = RegImpl::new(reg, &rifs.params, &rifs.partials)?;
+                    let mut reg_impl = RegImpl::new(reg, &rifs)?;
                     // Inherit clock from page if default
                     if reg_impl.clk_en.is_default() {
                         reg_impl.clk_en = clk_en.to_owned();
@@ -391,16 +393,17 @@ pub struct RegImpl {
 impl RegImpl {
 
     /// Create a register hardware implementation based on a register definition
-    fn new(reg: &RegDef, params: &ParamValues, partials: &PartialFieldDict) -> Result<Self, String> {
+    fn new(reg: &RegDef, rifs: &RifsInfo) -> Result<Self, String> {
         let mut fields = Vec::with_capacity(reg.fields.len());
         let mut port = RegPortKind::from_reg(reg);
-        let array = reg.array.value(params) as u16;
+        let array = reg.array.value(&rifs.params) as u16;
         let mut sw_access = Access::NA;
+        let partials = rifs.partials.get(reg.get_group_name());
         // Copy all fields
         for f in reg.fields.iter() {
             port.updt(RegPortKind::from_field(f, &reg.name));
             sw_access.updt((&f.sw_kind).into());
-            fields.push(FieldImpl::new(f, array, 0, params, partials.get(reg.get_group_name()))?);
+            fields.push(FieldImpl::new(f, array, 0, rifs, partials)?);
         }
         Ok(RegImpl {
             name: reg.get_group_name().to_owned(),
@@ -421,7 +424,9 @@ impl RegImpl {
     // - Clock, reset, clock enable, clear, external must be the same ?
     // - Interrupt setting must the same
     // - Save partial info to check no overlap or missing
-    pub fn merge_with(&mut self, reg: &RegDef, params: &ParamValues, partials: &PartialFieldDict) -> Result<(),String>{
+    pub fn merge_with(&mut self, reg: &RegDef, rifs: &RifsInfo) -> Result<(),String>{
+        let params = &rifs.params;
+        let partials = rifs.partials.get(reg.get_group_name());
         let array = reg.array.value(params) as u16;
         // println!("Merging {} in {} : clk_en = {:?} | group clock_enable = {:?}", reg.name, reg.group.name, reg.clk_en, self.clk_en);
         self.port.updt(RegPortKind::from_reg(reg));
@@ -449,9 +454,10 @@ impl RegImpl {
                         return Err(format!("Field {}.{} : Non contiguous partial field array. Expecting {} found {}", reg.name, f.name, field_impl.array, f.partial.1));
                     }
                     field_impl.array += f.array.value(params) as u16;
+                    let enum_def = f.enum_kind.get_def(&rifs.enums);
                     // TODO: might need to check dimensions (or maybe shjould be done at parsing level)
                     for r in f.reset.iter() {
-                        field_impl.reset.push(r.compile(f.signed, params)?);
+                        field_impl.reset.push(r.compile(f.signed, params, enum_def)?);
                     }
                 } else if f.is_partial() {
                     for kind in f.hw_kind.iter() {
@@ -464,7 +470,7 @@ impl RegImpl {
                     return Err(format!("Field {}.{} already defined in this register group. Missing partial definition ?", reg.name, f.name));
                 }
             } else {
-                let mut field = FieldImpl::new(f, array, self.regs_ctrl.len(), params, partials.get(reg.get_group_name()))?;
+                let mut field = FieldImpl::new(f, array, self.regs_ctrl.len(), rifs, partials)?;
                 if !clk_en.is_default() {
                     field.clk_en = clk_en.to_owned()
                 }
@@ -497,9 +503,9 @@ impl RegImpl {
                     }
                     RegDefOrIncl::Def(d) => if d.group.name == group_name {
                         if let Some(ref mut reg) = reg_impl {
-                            reg.merge_with(d, &rifs.params, &rifs.partials)?;
+                            reg.merge_with(d, &rifs)?;
                         } else {
-                            reg_impl = Some(RegImpl::new(d, &rifs.params, &rifs.partials)?);
+                            reg_impl = Some(RegImpl::new(d, &rifs)?);
                         }
                     }
                 }

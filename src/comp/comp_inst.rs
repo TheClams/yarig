@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use crate::{
     parser::{get_rif, parser_expr::ParamValues, RifGenSrc, RifGenTop},
     rifgen::{
-        order_dict::{OrderDict, OrderedDictIterV}, Access, AddressKind, ClockingInfo, CounterInfo, Description, EnumDef, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, Interface, InterruptRegKind, InterruptTrigger, Limit, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegPulseKind, ResetVal, ResetValOverride, Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SignalRange, SuffixInfo, Visibility
+        order_dict::{OrderDict, OrderedDictIterV}, Access, AddressKind, ClockingInfo, CounterInfo, Description, EnumDef, EnumDefs, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, Interface, InterruptRegKind, InterruptTrigger, Limit, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegPulseKind, ResetVal, ResetValOverride, Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SignalRange, SuffixInfo, Visibility
     },
 };
 
@@ -237,15 +237,18 @@ pub struct RifsInfo<'a> {
     pub rifs: &'a HashMap<String, Rif>,
     /// Parameter values
     pub params: ParamValues,
-    /// Partial field dictionnary
+    /// Enum definition
+    pub enums: EnumDefs,
+    /// Partial field dictionnary: allows checking all part of a field are present at the end
     pub partials: PartialFieldDict,
 }
 
 impl<'a> RifsInfo<'a>  {
-    pub fn new(rifs: &'a HashMap<String, Rif>, params: ParamValues) -> Self {
+    pub fn new(rifs: &'a HashMap<String, Rif>, params: ParamValues, enums: EnumDefs) -> Self {
         RifsInfo {
             rifs,
             params,
+            enums,
             partials: PartialFieldDict::new()
         }
     }
@@ -267,7 +270,7 @@ pub struct RifInst {
     /// Type description
     pub base_description: Description,
     /// Enum definition
-    pub enum_defs: Vec<EnumDef>,
+    pub enum_defs: EnumDefs,
     /// Register pages
     pub pages: Vec<RifPageInst>,
     /// Register structure definition (hardware implementation)
@@ -296,10 +299,8 @@ impl RifInst {
         let mut params = top_params.clone();
         params.compile(rif.parameters.items())?;
         // if !params.is_empty() {println!("{} : {}", rif.name, params);}
-        let mut rifs_info = RifsInfo::new(rifs, params);
-        let mut enum_defs = rif.enum_defs.clone();
-        // Collect all register instantiated in a page
-        let mut pages : Vec<RifPageInst> = Vec::with_capacity(rif.pages.len());
+        // Build a list of all enum definition, checking potential included file
+        let mut enum_defs : EnumDefs = rif.enum_defs.clone().into();
         for page in rif.pages.iter() {
             // Check for included rif and update the enum defs
             for inc in page.registers.iter().filter_map(RegDefOrIncl::get_inc) {
@@ -322,6 +323,11 @@ impl RifInst {
                     }
                 }
             }
+        }
+        // Collect all register instantiated in a page
+        let mut pages : Vec<RifPageInst> = Vec::with_capacity(rif.pages.len());
+        let mut rifs_info = RifsInfo::new(rifs, params, enum_defs);
+        for page in rif.pages.iter() {
             // Create page instance
             let inst = RifPageInst::new(&mut rifs_info, page, addr_incr)?;
             pages.push(inst);
@@ -337,7 +343,7 @@ impl RifInst {
             type_name: rif.name.to_owned(),
             addr_width: rif.addr_width,
             data_width: rif.data_width.value(),
-            enum_defs,
+            enum_defs: rifs_info.enums,
             description: if description.is_empty(false) {rif.description.clone()} else {description},
             base_description: rif.description.no_dollar(),
             pages,
@@ -361,11 +367,10 @@ impl RifInst {
 
     /// Retrieve an enum definition
     pub fn get_enum_def(&self, name: &str) -> Result<&EnumDef, String>{
-        if let Some(ed) = self.enum_defs.iter().find(|e| e.name == name) {
+        if let Some(ed) = self.enum_defs.find(name) {
             Ok(ed)
         } else {
-            Err(format!("Unable to find enum {name}! Known enums are {:?}",
-                self.enum_defs.iter().map(|e| &e.name).collect::<Vec<&String>>()))
+            Err(format!("Unable to find enum {name}! Known enums are {:?}", self.enum_defs.list()))
         }
     }
 
@@ -727,7 +732,7 @@ impl RifRegInst {
                         if r.array.dim()>0 && r.array.is_def() {Some(ArrayIdx::Def(i,offset))}
                         else {Some(ArrayIdx::Inst(i,offset))}
                     } else { None };
-                let fi = RifFieldInst::new(f, intr_kind, &mut next_lsb, &rifs.params, arr_idx);
+                let fi = RifFieldInst::new(f, intr_kind, &mut next_lsb, &rifs, arr_idx);
                 r.fields.push(fi);
             }
         }
@@ -747,7 +752,7 @@ impl RifRegInst {
                     r.sw_access = Access::RO;
                 }
                 r.hw_access = Access::NA;
-                r.reset = info.0.compile(false, &rifs.params)?.to_u128(128);
+                r.reset = info.0.compile(false, &rifs.params, None)?.to_u128(128);
                 for f in r.fields.iter_mut() {
                     let val : u128 = (r.reset >> f.lsb) & ((1<<f.width)-1);
                     f.reset = if f.is_signed() {
@@ -809,17 +814,18 @@ impl RifRegInst {
                             reg_field.visibility = Visibility::Disabled;
                         }
                     }
+                    let enum_def : Option<&EnumDef> = reg_field.enum_kind.get_def(&rifs.enums);
                     match &ovr_f.reset {
-                        ResetValOverride::Reset(reset_val) => reg_field.reset = reset_val.compile(reg_field.is_signed(), &rifs.params)?,
+                        ResetValOverride::Reset(reset_val) => reg_field.reset = reset_val.compile(reg_field.is_signed(), &rifs.params, enum_def)?,
                         ResetValOverride::Disable(reset_val) => {
-                            reg_field.reset = reset_val.compile(reg_field.is_signed(), &rifs.params)?;
+                            reg_field.reset = reset_val.compile(reg_field.is_signed(), &rifs.params, enum_def)?;
                             reg_field.visibility = Visibility::Disabled;
                         },
                         // Nothing
                         ResetValOverride::None => {},
                     }
                     if let Some(limit) = &ovr_f.limit {
-                        reg_field.limit = limit.compile(reg_field.is_signed(), &rifs.params)?;
+                        reg_field.limit = limit.compile(reg_field.is_signed(), &rifs.params, enum_def)?;
                     }
                 }
             }
@@ -974,17 +980,19 @@ impl RifFieldInst {
         field: &Field,
         intr_kind: InterruptRegKind,
         next_lsb: &mut u8,
-        params: &ParamValues,
+        rifs: &RifsInfo,
         array: Option<ArrayIdx>,
     ) -> Self {
+        let params = &rifs.params;
         let (mut lsb, width) = match &field.pos {
             FieldPos::MsbLsb((m, l)) => (l.value(params), m.value(params) - l.value(params) + 1),
             FieldPos::LsbSize((l, w)) => (l.value(params), w.value(params)),
             FieldPos::Size(w) => (*next_lsb, w.value(params)),
         };
+        let enum_def = field.enum_kind.get_def(&rifs.enums);
         let mut reset = field.reset.first()
             .unwrap_or_default()
-            .compile(field.signed,params)
+            .compile(field.signed, params, enum_def)
             .unwrap_or_default(); // TODO: handle error
         let idx : ArrayIdx;
         // Create format string for description
@@ -1007,7 +1015,7 @@ impl RifFieldInst {
             if field.reset.len() > rst_idx {
                 reset = field.reset.get(rst_idx)
                     .unwrap_or_default()
-                    .compile(field.signed,params)
+                    .compile(field.signed, params, enum_def)
                     .unwrap_or_default();
             }
             let i = array.dim() + array.idx();
@@ -1034,11 +1042,11 @@ impl RifFieldInst {
             hw_kind.push(kind);
         }
         // Compile value containing resetVal in case they use parameters
-        let limit = field.limit.compile(field.signed, params).expect("Unknown parameter in limit !");
+        let limit = field.limit.compile(field.signed, params, enum_def).expect("Unknown parameter in limit !");
         let mut sw_kind = field.sw_kind.to_owned();
         if let FieldSwKind::Password(info) = &mut sw_kind {
-            info.once = info.once.as_ref().map(|r| (&r.compile(field.signed, params).expect("Unknown parameter in limit !")).into());
-            info.hold = info.hold.as_ref().map(|r| (&r.compile(field.signed, params).expect("Unknown parameter in limit !")).into());
+            info.once = info.once.as_ref().map(|r| (&r.compile(field.signed, params, enum_def).expect("Unknown parameter in limit !")).into());
+            info.hold = info.hold.as_ref().map(|r| (&r.compile(field.signed, params, enum_def).expect("Unknown parameter in limit !")).into());
         }
 
         *next_lsb += width;

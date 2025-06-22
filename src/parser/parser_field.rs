@@ -16,6 +16,8 @@ use super::{
 pub fn reset_val<'a>(input: &mut &'a str) -> Res<'a, ResetValP> {
     if input.starts_with('$') {
         param.map(|v| ResetValP::Param(v.to_owned())).parse_next(input)
+    } else if input.starts_with(char::is_alphabetic) {
+        identifier.map(|v| ResetValP::Enum(v.to_owned())).parse_next(input)
     } else if input.starts_with('-') || input.starts_with('+') {
         val_i128.map(ResetValP::Signed).parse_next(input)
     } else {
@@ -355,6 +357,8 @@ mod tests_parsing {
         assert_eq!(reset_val(&mut "+34"), Ok(ResetValP::Signed(34)));
         assert_eq!(reset_val(&mut "-17 "), Ok(ResetValP::Signed(-17)));
         assert_eq!(reset_val(&mut "0x2A"), Ok(ResetValP::Unsigned(42)));
+        assert_eq!(reset_val(&mut "$param"), Ok(ResetValP::Param("param".to_owned())));
+        assert_eq!(reset_val(&mut "enum_label"), Ok(ResetValP::Enum("enum_label".to_owned())));
         assert_eq!(
             reset_val_arr(&mut "{0, 1 , 0x2,0x3} rest of text"),
             Ok(vec![

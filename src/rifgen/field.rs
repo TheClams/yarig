@@ -136,6 +136,49 @@ impl EnumDef {
     pub fn is_local_type(&self) -> bool {
         !self.name.contains(':')
     }
+
+    pub fn get(&self, name: &str) -> Option<&EnumEntry> {
+        self.values.iter().find(|e| e.name==name)
+    }
+
+    pub fn list(&self) -> Vec<&String> {
+        self.values.iter().map(|e| &e.name).collect()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct EnumDefs(Vec<EnumDef>);
+
+impl From<Vec<EnumDef>> for EnumDefs {
+    fn from(value: Vec<EnumDef>) -> Self {
+        EnumDefs(value)
+    }
+}
+
+impl EnumDefs {
+    /// Add enum definition
+    pub fn push(&mut self, def: EnumDef) {
+        self.0.push(def)
+    }
+
+    /// Add enum definition
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Add enum definition
+    pub fn iter(&self) -> std::slice::Iter<'_, EnumDef> {
+        self.0.iter()
+    }
+
+    /// Retrieve an enum definition
+    pub fn find(&self, name: &str) -> Option<&EnumDef> {
+        self.0.iter().find(|e| e.name == name)
+    }
+
+    pub fn list(&self) -> Vec<&String> {
+        self.0.iter().map(|def| &def.name).collect()
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -429,7 +472,12 @@ impl EnumKind {
         } else {
             None
         }
+    }
 
+    pub fn get_def<'a>(&self, defs: &'a EnumDefs) -> Option<&'a EnumDef> {
+        self.name()
+            .map(|n| defs.find(n))
+            .unwrap_or_default()
     }
 }
 
@@ -439,6 +487,7 @@ pub enum ResetValP {
     Unsigned(u128),
     Signed(i128),
     Param(String),
+    Enum(String),
 }
 impl Default for ResetValP {
     fn default() -> Self {
@@ -459,18 +508,26 @@ impl ResetValP {
     }
 
     //
-    pub fn compile(&self, signed: bool, params: &ParamValues) -> Result<ResetVal,String> {
+    pub fn compile(&self, signed: bool, params: &ParamValues, enum_def: Option<&EnumDef>) -> Result<ResetVal,String> {
         match self {
             ResetValP::Param(p) => {
-                if let Some(v) = params.get(p) {
-                    if signed {
-                        Ok(ResetVal::Signed(*v as i128))
-                    } else {
-                        Ok(ResetVal::Unsigned(*v as u128))
-                    }
+                let Some(v) = params.get(p) else {
+                    return Err(format!("Unknown parameter {p}"));
+                };
+                if signed {
+                    Ok(ResetVal::Signed(*v as i128))
                 } else {
-                    Err(format!("Unknown parameter {p}"))
+                    Ok(ResetVal::Unsigned(*v as u128))
                 }
+            }
+            ResetValP::Enum(e) => {
+                let Some(def) = enum_def else {
+                    return Err(format!("Invalid use of enum reset {e} on non-enum field !"));
+                };
+                let Some(v) = def.get(e) else {
+                    return Err(format!("Unknown enum value {e} : expecting {:?}", def.list()));
+                };
+                Ok(ResetVal::Unsigned(v.value.into()))
             }
             ResetValP::Signed(v)   => Ok(ResetVal::Signed(*v)),
             ResetValP::Unsigned(v) if signed => Ok(ResetVal::Signed(*v as i128)),
@@ -496,7 +553,7 @@ impl From<ResetValP> for ResetVal {
         match value {
             ResetValP::Unsigned(v) => ResetVal::Unsigned(v),
             ResetValP::Signed(v) => ResetVal::Signed(v),
-            ResetValP::Param(p) => unreachable!("Reset value with parameter {p} should have been compiled !"),
+            v => unreachable!("Uncompiled reset value {v:?} !"),
         }
     }
 }
@@ -506,7 +563,7 @@ impl From<&ResetValP> for ResetVal {
         match value {
             ResetValP::Unsigned(v) => ResetVal::Unsigned(*v),
             ResetValP::Signed(v) => ResetVal::Signed(*v),
-            ResetValP::Param(p) => unreachable!("Reset value with parameter {p} should have been compiled !"),
+            v => unreachable!("Uncompiled reset value {v:?} !"),
         }
     }
 }
@@ -694,8 +751,8 @@ impl Default for LimitP {
 }
 
 impl LimitP {
-    pub fn compile(&self, signed: bool, params: &ParamValues) -> Result<Limit,String> {
-        let value = self.value.compile(signed, params)?;
+    pub fn compile(&self, signed: bool, params: &ParamValues, enum_def: Option<&EnumDef>) -> Result<Limit,String> {
+        let value = self.value.compile(signed, params, enum_def)?;
         Ok(Limit{value, bypass:self.bypass.to_owned()})
     }
 }
@@ -723,17 +780,17 @@ impl Limit {
 impl LimitValueP {
 
     /// Create a new limit by setting value to all ResetVal from
-    pub fn compile(&self, signed: bool, params: &ParamValues) -> Result<LimitValue,String> {
+    pub fn compile(&self, signed: bool, params: &ParamValues, enum_def: Option<&EnumDef>) -> Result<LimitValue,String> {
         match self {
-            LimitValueP::Min(v) => Ok(LimitValue::Min(v.compile(signed, params)?)),
-            LimitValueP::Max(v) => Ok(LimitValue::Max(v.compile(signed, params)?)),
+            LimitValueP::Min(v) => Ok(LimitValue::Min(v.compile(signed, params, enum_def)?)),
+            LimitValueP::Max(v) => Ok(LimitValue::Max(v.compile(signed, params, enum_def)?)),
             LimitValueP::MinMax(v0, v1) => Ok(LimitValue::MinMax(
-                v0.compile(signed, params)?,
-                v1.compile(signed, params)?)),
+                v0.compile(signed, params, enum_def)?,
+                v1.compile(signed, params, enum_def)?)),
             LimitValueP::List(vec) => {
                 let mut nv = Vec::with_capacity(vec.len());
                 for v in vec {
-                    nv.push(v.compile(signed, params)?);
+                    nv.push(v.compile(signed, params, enum_def)?);
                 }
                 Ok(LimitValue::List(nv))
             }
