@@ -732,7 +732,7 @@ impl RifRegInst {
                         if r.array.dim()>0 && r.array.is_def() {Some(ArrayIdx::Def(i,offset))}
                         else {Some(ArrayIdx::Inst(i,offset))}
                     } else { None };
-                let fi = RifFieldInst::new(f, intr_kind, &mut next_lsb, &rifs, arr_idx);
+                let fi = RifFieldInst::new(f, intr_kind, &mut next_lsb, &rifs, arr_idx)?;
                 r.fields.push(fi);
             }
         }
@@ -987,7 +987,7 @@ impl RifFieldInst {
         next_lsb: &mut u8,
         rifs: &RifsInfo,
         array: Option<ArrayIdx>,
-    ) -> Self {
+    ) -> Result<Self,String> {
         let params = &rifs.params;
         let (mut lsb, width) = match &field.pos {
             FieldPos::MsbLsb((m, l)) => (l.value(params), m.value(params) - l.value(params) + 1),
@@ -995,6 +995,13 @@ impl RifFieldInst {
             FieldPos::Size(w) => (*next_lsb, w.value(params)),
         };
         let enum_def = field.enum_kind.get_def(&rifs.enums);
+        // Check enum fit on the field size
+        if let Some(def) = enum_def {
+            let max_value = def.values.iter().map(|v| v.value).max().unwrap_or(0);
+            if (u8::BITS - max_value.leading_zeros()) > width as u32 {
+                return Err(format!("Field {} has a width of {width} bits but enum {} has a max value of {max_value}", field.name, def.name));
+            }
+        }
         let mut reset = field.reset.first()
             .unwrap_or_default()
             .compile(field.signed, field.nb_frac, params, enum_def)
@@ -1055,7 +1062,7 @@ impl RifFieldInst {
         }
 
         *next_lsb += width;
-        RifFieldInst {
+        Ok(RifFieldInst {
             name: field.name.to_owned(),
             base_description: desc.no_dollar(),
             description: desc,
@@ -1071,7 +1078,7 @@ impl RifFieldInst {
             lsb,
             width,
             array: idx,
-        }
+        })
     }
 
     /// Check if field position overlap with another field

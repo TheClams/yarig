@@ -172,6 +172,14 @@ The field is group of bits inside a registers.
 
 Its declaration is indented by one level compare to the register declaration and follow the syntax:
 `- <field_name> [= <reset_value>]  <msb>:<lsb> [ro|rw|rclr|w1clr|w0clr|w1set|pulse|pulsecomb] ["Field short description"]`
+
+The `reset_value` supports multiple format:
+  - decimal value: if it starts by + or -, the field will be automatically flagged as `signed`
+  - hexadecimal value using C or SystemVerilog notation (`0xABCD` or `11'h4CD`)
+  - parameter value using `$<PARAM_NAME>`
+  - enum value if the field has an enum property defined
+  - floating value if the field has a number of fractional bit defined (e.g. for a field with 3 fractional bit a reset value of `4.125` will be translated as a reset value of 33).
+
 The field position can also use the systemVerilog range syntax `<lsb>+:<width>` instead of `<msb>:<lsb>`
 or even just `<width>` in which case the field is position on the next available bit (starting from 0).
 The `lsb`, `msb` and `width` must be integer or a parameter (but not an arithmetic expression).
@@ -214,7 +222,6 @@ The optional properties of a field, indented by one level compare to the field d
  - `lock [<lock_signal>]` : Signal to prevent a register to be written. _lock_signal_ follow the same rule as _set_signal_ just above.
  - `pulse [comb]` : The field stays high only one cycle after being set. If pulse is followed by `comb`, then the pulse is generated on the write signal without extra flop in the block.
  - `toggle` : When a 1 is written by software on this field, the field inverts its value.
- - `swset`  : Software can only set bits of the field to 1.
  - `signed` : Indicates that the value stored is a signed value.
  - `we [<weSignal>]` : The copy from hardware to the RIF field value is done only when a write enable signal is high. Valid only for field with write access from hardware.
  - `wel [<welSignal>]` : Same as 'we' but write enable signal is active low.
@@ -351,7 +358,9 @@ Every RIF definition should be either in the same directory as the rifmux or in 
 For each RIF instance it is possible to override :
  - the description using `description : ...`.
  - parameters value with a `parameters:` section using the same syntax as the RIF (cf. [Parameters](#Parameters)).
- - suffix name using `suffix : <suffix_name>` to add a suffix to the file generated (useful when using parameters different from default)
+ - suffix name using `suffix : <suffix_info>` to add a suffix to the file generated (useful when using parameters different from default)
+
+
 
 You can also use external RIF (to access memory-like block) with the syntax:
 `- <rif_name> external <addr_width> @ <rifAddr>` where _addr_width_ is the range of address that can be addressed in number of bits.
@@ -359,3 +368,35 @@ You can also use external RIF (to access memory-like block) with the syntax:
 The address can be made relative:
  - Using `@+` instead of `@` uses the rifAddr as an offset to the previous absolute address
  - Using `@+=` is the same, except it also update the previous absolute address
+
+### Example
+```yaml
+rifmux: soc_rifmux
+  addrWidth:  20
+  dataWidth:  32
+  parameters :
+    - AON_ADDR_BASE = 0xC0000
+    - MDM_ADDR_BASE = 0xD0000
+  interface : default
+  map:
+    group: AON @ $AON_ADDR_BASE  "Always-On Power domain"
+      - pmu_aon    = pmu_aon      @ 0x0000
+      - ccu_aon    = ccu_aon      @ 0x1000
+        parameters:
+          - HAS_LF_XOSC = True
+    group: MDM @ $MDM_ADDR_BASE  "Modem Power domain"
+      - mdm0          = modem       @ 0x0000
+        description : Modem 0 with high speed support
+        parameters:
+          - tx.HIGH_SPEED = True
+          - rx.HIGH_SPEED = True
+      - mdm1          = modem       @+= 0x200
+        description : Modem 1
+        suffix: ctrl=dmi(alt)
+      - mdm2          = modem       @+= 0x200
+        description : Modem 2 (low power)
+        parameters:
+          - rx.LOW_POWER = True
+    // Analog control, not part of any group
+    - ana_fe = ana_fe @ 0xF0000
+```

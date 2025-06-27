@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 
+use crate::error::RifError;
 use crate::parser::parser_expr::ExprTokens;
 
-use super::DataWidth;
+use super::{DataWidth, EnumEntry};
 use super::{order_dict::OrderDict, Description, EnumDef, RifPage};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -176,6 +177,18 @@ impl Rif {
 
     pub fn add_info(&mut self, key_val:(&str, &str)) {
         self.info.insert(key_val.0.to_owned(), key_val.1.to_owned());
+    }
+
+    pub fn add_enum_entry(&mut self, name: &str, entry: EnumEntry) -> Result<(), RifError> {
+        let Some(def) = self.enum_defs.iter_mut().find(|e| &e.name==name) else {
+            return Err(RifError::generic(&format!("Unable to find enum {name}")));
+        };
+        // Check if enum value already exist
+        if let Some(e) = def.values.iter().find(|e| e.value==entry.value) {
+            return Err(RifError::generic(&format!("Duplicated enum value for {} and {}", e.name, entry.name)));
+        }
+        def.values.push(entry);
+        Ok(())
     }
 
     pub fn set_hw_clk(&mut self, names:Vec<&str>) {

@@ -642,13 +642,8 @@ impl RifGenSrc {
                 // Enum definition
                 Context::Enum => {
                     if let Some(name) = &last_enum {
-                        self.last_rif()
-                            .enum_defs
-                            .iter_mut()
-                            .find(|e| &e.name==name)
-                            .unwrap()
-                            .values
-                            .push(enum_entry(l)?);
+                        let entry = enum_entry(l)?;
+                        self.last_rif().add_enum_entry(name, entry)?;
                     }
                 }
                 // Instances

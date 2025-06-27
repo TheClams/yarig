@@ -1,6 +1,6 @@
 [package]
 name = "yarig"
-version = "0.13.0"
+version = "0.13.1"
 edition = "2024"
 license = "MIT"
 description = "A register interface generator"
@@ -8,8 +8,6 @@ repository = "https://github.com/TheClams/yarig"
 readme = "Readme.md"
 categories = ["command-line-utilities", "hardware-support", "parser-implementations"]
 keywords = ["register", "verilog", "rif"]
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 clap = { version = "4.5.4", features = ["derive"] }

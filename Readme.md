@@ -128,11 +128,13 @@ The exact behavior of each traits can be tweaked with some associated constant.
    - [x] Use floating-point value in documentation when nb_frac is non-zero (and use a tool-tip in html to display corresponding integer value)
  - [ ] Support for generics
  - [x] Support reset value as enum name
+ - [ ] Support for AXI4 bus
  - [ ] Support pipe option RTL
  - [ ] Support option to repeat field description for interrupt derived register
  - [x] Support latex equation in description
  - [ ] Support overlapping register in hardware. Exclusive access (RO/WO) is already check at compile time: might be a good place to add some overlap flag to ease the generator job ...
- - [ ] Check enum size matches the field size
+ - [x] Check enum size matches the field size
+ - [x] Check enum values are unique
  - [ ] Option to add representation value for enum. Syntax could be 'NAME = VAL (repr) "description"'. Could be usefull when enum is representing a limited set of integer or real values.
    - [x] Update parser to support new syntax
    - [x] Add python function in the enum class for conversion to/from float

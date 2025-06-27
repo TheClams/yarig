@@ -1,6 +1,11 @@
 # Change Log
 
-## [0.13.0] - Unreleased
+## WIP
+
+### Added
+  - Check enum value are unique
+
+## [0.13.0] - 2025-06-24
 
 ### Added
   - Enum can now have an optional floating point representation (e.g. `- <name> = <val_int> (<repr_f64>) "desc"`)
