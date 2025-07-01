@@ -99,7 +99,7 @@ impl GeneratorDoc for GeneratorLatex {
             TableKind::Field => format!("Register {title}"),
             _ => title
         };
-        let id_short = id.strip_prefix("fields.").unwrap_or(id);
+        let id_short = id.strip_prefix("fields.").unwrap_or(id).replace(['[',']'], "");
         self.write(&format!("\t\\begin{{longtblr}}[caption={{{caption}}},label={{rif:{id_short}}}]"));
         self.write("{rowhead=1,row{1}={bg=colorTableHeading,c,font=\\bfseries},hlines,vlines" );
         match kind {
@@ -124,7 +124,8 @@ impl GeneratorDoc for GeneratorLatex {
         self.first_col = true;
         self.write("\t\t");
         if let Some(id) = id {
-            self.write(&format!("\\refstepcounter{{rif}}\\label{{rif:{id}}} "));
+            let id_ = id.replace(['[',']'], "");
+            self.write(&format!("\\refstepcounter{{rif}}\\label{{rif:{id_}}} "));
         }
     }
 

@@ -330,7 +330,7 @@ pub trait GeneratorDoc : GeneratorBase {
                 if instances.first() != Some(&(idx_ri as u16)) {
                     continue;
                 }
-                let id_reg = &format!("{rif_name}.{}", reg.reg_type);
+                let id_reg = &format!("{rif_name}.{reg_type}");
                 let reg_impl = rif.get_hw_reg(&reg.group_type);
                 // Title
                 idx_r += 1;

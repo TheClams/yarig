@@ -2,8 +2,14 @@
 
 ## WIP
 
+## [0.13.1] - 2025-07-01
+
 ### Added
-  - Check enum value are unique
+  - Check enum value are unique and fit inside the field
+
+### Fixed
+  - Latex: changed reference name of field array to avoid handling of special character []
+  - Doc Trait: fix missing suffix of interrupt register reference label
 
 ## [0.13.0] - 2025-06-24
 
