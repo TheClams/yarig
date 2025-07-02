@@ -1,7 +1,7 @@
 use std::{borrow::Borrow, collections::HashMap, hash::Hash};
 
-#[derive(Clone, Debug)]
-pub struct OrderDict<K,V> {
+#[derive(Clone, Debug, PartialEq)]
+pub struct OrderDict<K,V> where K: Eq+Hash {
     keys: HashMap<K,usize>,
     values: Vec<V>
 }
@@ -119,12 +119,12 @@ impl<'a,V> Iterator for OrderedDictIterV<'a,V> {
 
 //-----------------------------------------------------------------------------
 // Implement iterator on Key/Value
-pub struct OrderedDictIterKv<'a,K,V> {
+pub struct OrderedDictIterKv<'a,K,V> where K: Eq+Hash {
     dict: &'a OrderDict<K,V>,
     index: usize
 }
 
-impl<'a,K,V> Iterator for OrderedDictIterKv<'a,K,V> {
+impl<'a,K,V> Iterator for OrderedDictIterKv<'a,K,V> where K: Eq+Hash  {
     type Item = (&'a K,&'a V);
 
     fn next(&mut self) -> Option<Self::Item> {

@@ -345,10 +345,10 @@ impl RegImplDict {
                 }
                 // If register group was already seen, merge fields
                 if let Some(reg_impl) = self.get_mut(&reg.group.name) {
-                    reg_impl.merge_with(reg, &rifs)?;
+                    reg_impl.merge_with(reg, rifs)?;
                 }
                 else {
-                    let mut reg_impl = RegImpl::new(reg, &rifs)?;
+                    let mut reg_impl = RegImpl::new(reg, rifs)?;
                     // Inherit clock from page if default
                     if reg_impl.clk_en.is_default() {
                         reg_impl.clk_en = clk_en.to_owned();
@@ -503,15 +503,15 @@ impl RegImpl {
                     }
                     RegDefOrIncl::Def(d) => if d.group.name == group_name {
                         if let Some(ref mut reg) = reg_impl {
-                            reg.merge_with(d, &rifs)?;
+                            reg.merge_with(d, rifs)?;
                         } else {
-                            reg_impl = Some(RegImpl::new(d, &rifs)?);
+                            reg_impl = Some(RegImpl::new(d, rifs)?);
                         }
                     }
                 }
             }
         }
-        reg_impl.ok_or(format!("Register group {} not found !", group_name))
+        reg_impl.ok_or(format!("Register group {group_name} not found !"))
     }
 
     /// Get a reference to the field implementation definition by name
@@ -641,7 +641,7 @@ impl HwRegs {
                 else {
                     // Register implementation should always exists (except if it was badly constructed)
                     let Some(reg_impl) = defs.get(&reg.group_type) else {
-                        return Err(format!("Register group {} should be defined in the hardware registers !", group_name))
+                        return Err(format!("Register group {group_name} should be defined in the hardware registers !"))
                     };
                     // println!("[HwRegs] reg {} : port = {:?} | {:?}", group_name, reg_impl.port, reg_impl.fields.iter().map(|f| (&f.name,&f.hw_acc)).collect::<Vec<(&String,&Access)>>());
                     let ext_reg_impl;

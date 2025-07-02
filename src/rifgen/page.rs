@@ -106,15 +106,15 @@ impl RifPage {
                         for (idx,info) in d.interrupt.iter().enumerate() {
                             let intr_name = if info.name.is_empty() {"".to_owned()} else {format!("_{}",info.name)};
                             // Check if enable interrupt is enabled
-                            if info.enable.is_some() && name_suffix == format!("{}_en",intr_name) {
+                            if info.enable.is_some() && name_suffix == format!("{intr_name}_en") {
                                 return Some(RegDefMatch::new_intr(d,InterruptRegKind::Enable,idx));
                             }
                             // Check if mask interrupt is enabled
-                            if info.mask.is_some() && name_suffix == format!("{}_mask",intr_name) {
+                            if info.mask.is_some() && name_suffix == format!("{intr_name}_mask") {
                                 return Some(RegDefMatch::new_intr(d,InterruptRegKind::Mask,idx));
                             }
                             // Check if mask interrupt is enabled
-                            if info.pending && name_suffix == format!("{}_pending",intr_name) {
+                            if info.pending && name_suffix == format!("{intr_name}_pending") {
                                 return Some(RegDefMatch::new_intr(d,InterruptRegKind::Pending,idx));
                             }
                         }

@@ -732,7 +732,7 @@ impl RifRegInst {
                         if r.array.dim()>0 && r.array.is_def() {Some(ArrayIdx::Def(i,offset))}
                         else {Some(ArrayIdx::Inst(i,offset))}
                     } else { None };
-                let fi = RifFieldInst::new(f, intr_kind, &mut next_lsb, &rifs, arr_idx)?;
+                let fi = RifFieldInst::new(f, intr_kind, &mut next_lsb, rifs, arr_idx)?;
                 r.fields.push(fi);
             }
         }
@@ -1199,7 +1199,7 @@ impl RifFieldInst {
     /// Return a suffix _lsb if partial else an empty string
     pub fn partial_suffix(&self) -> String {
         if let Some(partial_pos) = self.partial.0 {
-            format!("_{}",partial_pos)
+            format!("_{partial_pos}")
         } else {
             "".to_owned()
         }
@@ -1393,7 +1393,7 @@ impl RifmuxInst {
                     i_params.insert(param_name.to_owned(), *v);
                 }
             }
-            i_params.compile(i.parameters.iter())?;
+            i_params.compile(i.parameters.items())?;
             match &i.rif_type {
                 RifType::Rif(typename) => {
                     if let Some(rif_def) = src.get_rif(typename) {

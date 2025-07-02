@@ -316,7 +316,7 @@ pub trait GeneratorSw : GeneratorBase {
         let prefix = if top_name.is_empty() {
             "".to_owned()
         } else {
-            format!("{}_",top_name)
+            format!("{top_name}_")
         };
         let mut comps = rifmux.components.iter().filter(|c| !c.is_external()).peekable();
         while let Some(comp) = comps.next()  {

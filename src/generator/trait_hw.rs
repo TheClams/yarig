@@ -1329,12 +1329,12 @@ pub trait GeneratorHw : GeneratorBase {
                         let mut proc_name = format!("proc_{reg_name}");
                         // Append clk/rst_name to process if different from the register default
                         if clk!=reg_clk && signals.len() > 1 {
-                            proc_name.push_str(&format!("_{}",clk));
+                            proc_name.push_str(&format!("_{clk}"));
                         }
                         let mut rst = if clk==&rif.sw_clocking.clk || rif.hw_clocking.is_empty() {&rif.sw_clocking.rst} else {&rif.hw_clocking.first().unwrap().rst};
                         // Find the full reset definition in the sw_clock or hw_clocking
                         if rst_name!=&rst.name {
-                            proc_name.push_str(&format!("_{}",rst_name));
+                            proc_name.push_str(&format!("_{rst_name}"));
                             if rst_name == &rif.sw_clocking.rst.name {
                                 rst = &rif.sw_clocking.rst;
                             } else {

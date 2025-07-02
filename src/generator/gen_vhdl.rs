@@ -47,7 +47,7 @@ impl GeneratorVhdl {
             if let Some(base_name) = name.strip_prefix("rif_") {
                 self.core.write(&format!("rif_{prefix}_{base_name}"));
             } else {
-                self.core.write(&format!("{prefix}_{}",name));
+                self.core.write(&format!("{prefix}_{name}"));
             }
         } else {
             self.core.write(&name);
@@ -75,7 +75,7 @@ impl GeneratorVhdl {
             SignalKind::Custom((_,n)) => {
                 self.core.write(n);
                 if dim > 0 {
-                    self.core.write(&format!("_a(0 to {})", dim));
+                    self.core.write(&format!("_a(0 to {dim})"));
                 }
             }
             SignalKind::Integer     => self.core.write("integer "),

@@ -265,7 +265,7 @@ impl YarigCfg {
     pub fn from_file<T : Into<PathBuf>>(path: T) -> Result<YarigCfg,String> {
         let path: PathBuf = path.into();
         let s = fs::read_to_string(&path)
-            .map_err(|e| format!("Error opening {:?} : {e:?}", path))?;
+            .map_err(|e| format!("Error opening {path:?} : {e:?}"))?;
         let mut cfg = Self::from_str(&s)?;
         if let Some(d) = path.parent() {
             if let Ok(d) = fs::canonicalize(d) {

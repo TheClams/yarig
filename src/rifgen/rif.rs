@@ -180,7 +180,7 @@ impl Rif {
     }
 
     pub fn add_enum_entry(&mut self, name: &str, entry: EnumEntry) -> Result<(), RifError> {
-        let Some(def) = self.enum_defs.iter_mut().find(|e| &e.name==name) else {
+        let Some(def) = self.enum_defs.iter_mut().find(|e| e.name==name) else {
             return Err(RifError::generic(&format!("Unable to find enum {name}")));
         };
         // Check if enum value already exist

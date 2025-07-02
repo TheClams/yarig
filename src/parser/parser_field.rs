@@ -467,7 +467,7 @@ mod tests_parsing {
             })
         );
         assert_eq!(
-            enum_entry(&mut "- VAL1 = 5 (5000) \"F1 Value 1\""),
+            enum_entry("- VAL1 = 5 (5000) \"F1 Value 1\""),
             Ok(EnumEntry {
                 name: "VAL1".to_owned(),
                 value: 5,
@@ -476,7 +476,7 @@ mod tests_parsing {
             })
         );
         assert_eq!(
-            enum_entry(&mut "- VAL2 = 1 (4e3) \"F2 Value 2\""),
+            enum_entry("- VAL2 = 1 (4e3) \"F2 Value 2\""),
             Ok(EnumEntry {
                 name: "VAL2".to_owned(),
                 value: 1,

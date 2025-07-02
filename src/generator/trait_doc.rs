@@ -179,7 +179,7 @@ pub trait GeneratorDoc : GeneratorBase {
         groups: &[RifmuxGroupInst],
     ) {
         let rif_name = self.casing(remove_rif(comp.inst.get_name()));
-        let instname = if let Some(top) = top_name {format!("{}.{}", top, rif_name)} else {rif_name.to_owned()};
+        let instname = if let Some(top) = top_name {format!("{top}.{rif_name}")} else {rif_name.to_owned()};
         let addr = comp.full_addr(groups) + offset;
         match &comp.inst {
             Comp::Rifmux(c) => {

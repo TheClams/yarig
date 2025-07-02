@@ -186,7 +186,7 @@ impl RifError {
             kind: RifErrorKind::FieldKind,
             name: ERROR_CONTEXT.with(|c| c.borrow().name.to_owned()),
             line_num: ERROR_CONTEXT.with(|c| c.borrow().line_num),
-            txt:  format!("{:?} and {:?}", kind, hw_kind)
+            txt:  format!("{kind:?} and {hw_kind:?}")
         }
     }
 

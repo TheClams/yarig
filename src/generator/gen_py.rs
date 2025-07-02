@@ -187,7 +187,7 @@ impl GeneratorSw for GeneratorPy {
             self.write(&format!("      def from_float(cls, val: float) -> '{rif_name}.e_{type_name}' :\n"));
             self.write(         "         min_diff = float('inf')\n");
             self.write(&format!("         closest = cls.{}\n", default_val.0));
-            self.write(&format!("         for n in cls:\n"));
+            self.write(         "         for n in cls:\n");
             self.write(         "            diff = abs(val - n.to_float())\n");
             self.write(         "            if diff < min_diff:\n");
             self.write(         "               min_diff = diff\n");

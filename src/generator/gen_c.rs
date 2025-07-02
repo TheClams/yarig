@@ -241,7 +241,7 @@ impl GeneratorSw for GeneratorC {
         }).collect();
         if has_multi_reset {
             for (k,v) in resets.iter() {
-                self.push_stash(2, &format!("#define {basename_uc}_{k}_RESET {:#08X}\n", v));
+                self.push_stash(2, &format!("#define {basename_uc}_{k}_RESET {v:#08X}\n"));
             }
         } else {
             self.push_stash(2, &format!("#define {basename_uc}_{reg_name_uc}_RESET {:#08X}\n", reg.reset));

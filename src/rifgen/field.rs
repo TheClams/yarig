@@ -425,21 +425,9 @@ impl EnumKind {
     pub fn new(kind: &str, reg_name: &str, field_name: &str) -> Self {
         match kind {
             // Empty kind -> document only enum
-            "" => {
-                EnumKind::Doc(format!(
-                    "doc:{}_{}",
-                    reg_name,
-                    field_name
-                ))
-            }
+            "" => EnumKind::Doc(format!("doc:{reg_name}_{field_name}")),
             // type -> auto name based on register/field
-            "type" => {
-                EnumKind::Type(format!(
-                    "e_{}_{}",
-                    reg_name,
-                    field_name
-                ))
-            }
+            "type" => EnumKind::Type(format!("e_{reg_name}_{field_name}")),
             // Any other name -> used as the type name
             name => EnumKind::Type(name.to_owned())
         }
@@ -653,8 +641,8 @@ impl From<&str> for Width {
 impl Display for Width {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
-            Width::Value(v) => write!(f, "{}",v),
-            Width::Param(s) => write!(f, "{}",s),
+            Width::Value(v) => write!(f, "{v}"),
+            Width::Param(s) => write!(f, "{s}"),
         }
     }
 }
@@ -667,7 +655,7 @@ impl Add<Width> for Width {
     fn add(self, rhs: Width) -> Self::Output {
         match (self,rhs) {
             (Width::Value(a), Width::Value(b)) => Width::Value(a+b),
-            (a, b) => Width::Param(format!("{}+{}",a,b)),
+            (a, b) => Width::Param(format!("{a}+{b}")),
         }
     }
 }
@@ -678,7 +666,7 @@ impl Add<&Width> for Width {
     fn add(self, rhs: &Width) -> Self::Output {
         match (self,rhs) {
             (Width::Value(a), Width::Value(b)) => Width::Value(a+b),
-            (a, b) => Width::Param(format!("{}+{}",a,b)),
+            (a, b) => Width::Param(format!("{a}+{b}")),
         }
     }
 }
@@ -691,7 +679,7 @@ impl Sub<Width> for Width {
     fn sub(self, rhs: Width) -> Self::Output {
         match (self,rhs) {
             (Width::Value(a), Width::Value(b)) => Width::Value(a-b),
-            (a, b) => Width::Param(format!("{}-{}",a,b)),
+            (a, b) => Width::Param(format!("{a}-{b}")),
         }
     }
 }
@@ -702,7 +690,7 @@ impl Sub<&Width> for Width {
     fn sub(self, rhs: &Width) -> Self::Output {
         match (self,rhs) {
             (Width::Value(a), Width::Value(b)) => Width::Value(a-b),
-            (a, b) => Width::Param(format!("{}-{}",a,b)),
+            (a, b) => Width::Param(format!("{a}-{b}")),
         }
     }
 }

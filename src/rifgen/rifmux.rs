@@ -111,7 +111,7 @@ pub struct RifmuxItem {
     /// Description
     pub description: Description,
     /// Parameters override for this instance
-    pub parameters: HashMap<String,ExprTokens>,
+    pub parameters: OrderDict<String,ExprTokens>,
     /// Suffix to add to the name of the generated files
     pub suffixes: HashMap<String,SuffixInfo>,
 
@@ -127,7 +127,7 @@ impl RifmuxItem {
             addr_kind: addr_info.0,
             addr: addr_info.1,
             description: info.3.unwrap_or("").into(),
-            parameters: HashMap::new(),
+            parameters: OrderDict::new(),
             suffixes: HashMap::new(),
         }
     }
