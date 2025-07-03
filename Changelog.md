@@ -2,6 +2,12 @@
 
 ## WIP
 
+## [0.13.2] - 2025-07-04
+
+### Fixed
+  - VHDL: fix definition of arrays (need to be at the end, after struct definitions) and type of local register array
+
+
 ## [0.13.1] - 2025-07-01
 
 ### Added
