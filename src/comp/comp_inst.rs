@@ -972,7 +972,9 @@ pub struct RifFieldInst {
     pub hw_kind: Vec<FieldHwKind>,
     pub hw_access: Access,
     pub visibility: Visibility,
+    /// Enumerate type
     pub enum_kind: EnumKind,
+    /// Partial definition (bus/array)
     pub partial: (Option<u16>, u16),
     pub array: ArrayIdx,
     pub nb_frac: isize,

@@ -146,7 +146,7 @@ impl FieldImpl {
 
     /// Flag field which can be set by hardware by value
     pub fn has_hw_value(&self) -> bool {
-        if self.hw_kind.is_empty() && self.hw_acc==Access::WO {
+        if self.hw_kind.is_empty() && self.hw_acc.is_writable() {
             true
         } else if self.width > 1 {
             self.hw_kind.iter().any(|k| !matches!(k,FieldHwKind::ReadOnly | FieldHwKind::Counter(_)))

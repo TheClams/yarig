@@ -931,6 +931,9 @@ pub trait GeneratorHw : GeneratorBase {
                         continue;
                     }
 
+                    // Path to hardware field
+                    let field_sig : LogicExpr = group_id.with_path(field_name.clone(), field_range.clone()).into();
+
                     // Generate next value
                     if field.is_hw_write() || field.is_sw_write() {
                         let field_clken = if let ClkEn::Signal(clk_en) = &field_impl.clk_en {
@@ -952,7 +955,6 @@ pub trait GeneratorHw : GeneratorBase {
                         // Handle hardware access
                         if field.is_hw_write() {
                             let suffix_idx = field.partial_suffix();
-                            let field_sig : LogicExpr = group_id.with_path(field_name.clone(), field_range.clone()).into();
                             for kind in field.hw_kind.iter() {
                                 let path = kind.get_signal();
                                 let ext = kind.get_suffix();
@@ -1136,6 +1138,10 @@ pub trait GeneratorHw : GeneratorBase {
                     // Handle case of partial field where one part is read-only
                     else if field_impl.has_write_mod() {
                         self.write_assign(field_next_id, LogicExpr::ValueU(0, field.width.into()));
+                    }
+                    // Handle case of direct feedback of Hardware written field to hardware read value
+                    else if field.hw_access==Access::RW && !reg.is_intr_derived() {
+                        self.write_assign(field_id, field_sig);
                     }
                 }
 

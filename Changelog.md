@@ -2,6 +2,9 @@
 
 ## WIP
 
+### Fixed
+  - Hardware: Handle case of field ro, with hardware rw without any write modifier (i.e. direct feedback of hardware of hardware)
+
 ## [0.13.2] - 2025-07-04
 
 ### Fixed
