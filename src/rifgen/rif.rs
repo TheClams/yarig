@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use crate::error::RifError;
 use crate::parser::parser_expr::ExprTokens;
 
@@ -144,9 +142,9 @@ pub struct Rif {
     /// Parameters definition
     pub parameters: OrderDict<String,ExprTokens>,
     /// Generics definition
-    pub generics: BTreeMap<String,GenericRange>,
+    pub generics: OrderDict<String,GenericRange>,
     /// Extra Custom information
-    pub info: BTreeMap<String,String>,
+    pub info: OrderDict<String,String>,
 }
 impl Rif {
     pub fn new<S>(name: S) -> Self where S: Into<String> {
@@ -162,8 +160,8 @@ impl Rif {
             pages: Vec::new(),
             enum_defs: Vec::new(),
             parameters: OrderDict::new(),
-            generics: BTreeMap::new(),
-            info: BTreeMap::new(),
+            generics: OrderDict::new(),
+            info: OrderDict::new(),
         }
     }
 

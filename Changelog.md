@@ -1,9 +1,10 @@
 # Change Log
 
-## WIP
+## [0.14.0] - Unreleased
 
 ### Fixed
   - Hardware: Handle case of field ro, with hardware rw without any write modifier (i.e. direct feedback of hardware of hardware)
+  - Override: for register array, indexed and default override are now merged (previously default was fully ignored even without indexed override)
 
 ## [0.13.2] - 2025-07-04
 

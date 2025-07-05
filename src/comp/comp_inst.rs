@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use crate::{
     parser::{get_rif, parser_expr::ParamValues, RifGenSrc, RifGenTop},
     rifgen::{
-        order_dict::{OrderDict, OrderedDictIterV}, Access, AddressKind, ClockingInfo, CounterInfo, Description, EnumDef, EnumDefs, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, Interface, InterruptRegKind, InterruptTrigger, Limit, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegPulseKind, ResetVal, ResetValOverride, Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SignalRange, SuffixInfo, Visibility
+        order_dict::{OrderDict, OrderedDictIterV}, Access, AddressKind, ClockingInfo, CounterInfo, Description, EnumDef, EnumDefs, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, GenericRange, Interface, InterruptRegKind, InterruptTrigger, Limit, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegPulseKind, ResetVal, ResetValOverride, Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SignalRange, SuffixInfo, Visibility
     },
 };
 
@@ -287,8 +287,10 @@ pub struct RifInst {
     pub sw_clocking: ClockingInfo,
     /// Hardware interface clock definition
     pub hw_clocking: Vec<ClockingInfo>,
+    /// Generic definition
+    pub generics: OrderDict<String,GenericRange>,
     /// Extra Custom information
-    pub info: BTreeMap<String,String>,
+    pub info: OrderDict<String,String>,
     /// Parameter values
     pub params: ParamValues,
 }
@@ -354,6 +356,7 @@ impl RifInst {
             sw_clocking: rif.sw_clocking.clone(),
             hw_clocking: rif.hw_clocking.clone(),
             info: rif.info.clone(),
+            generics: rif.generics.clone(),
             params: rifs_info.params
         })
     }
@@ -440,7 +443,6 @@ impl RifPageInst {
                     // For array create one instance per element with the array information
                     if nb > 1 {
                         inst_addr.decr(); // Pre-decrement because address will be incremented for each array element
-                        // println!("Array of size {nb} found for {} (Manual)", reg.inst_name);
                         for i in 0..nb {
                             let args = RegInstArgs::Arr(ArrayIdx::Inst(i, nb));
                             p.add_reg(RifRegInst::new(regdef.def, inst_addr.incr(), Some(reg), args, regdef.incl.to_owned(), rifs)?);
@@ -775,7 +777,10 @@ impl RifRegInst {
         // Handle override settings
         if let Some(inst) = inst {
             let idx = if r.array.dim() > 1 {Some(r.array.idx())} else {None};
-            if let Some(ovr) = inst.reg_override.get(&idx) {
+            if let Some(ovr_base) = inst.reg_override.get(&idx).or_else(|| inst.reg_override.get(&None)) {
+                let ovr_def = inst.reg_override.get(&None); // Get the default override
+                let ovr = ovr_base.merge(ovr_def);
+                // let ovr_desc = ovr.description.as_ref().or(ovr_def.map(|o| o.description.as_ref()).unwrap_or(None));
                 // Register override: Description
                 if let Some(desc) = &ovr.description {
                     r.description = if let Some(i) = idx {

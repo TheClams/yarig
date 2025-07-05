@@ -199,6 +199,32 @@ impl Default for FieldOverride {
     }
 }
 
+impl FieldOverride {
+    /// Merge two override
+    /// Every None/Empty override of self take value defined in the def override
+    pub fn merge(&mut self, def: &Self) {
+        if self.description.is_none() {
+            self.description = def.description.clone();
+        }
+        if self.optional.is_empty() {
+            self.optional = def.optional.clone();
+        }
+        if self.visibility.is_none() {
+            self.visibility = def.visibility.clone();
+        }
+        if self.limit.is_none() {
+            self.limit = def.limit.clone();
+        }
+        if self.reset == ResetValOverride::None {
+            self.reset = def.reset.clone();
+        }
+        for (k,v) in def.info.iter() {
+            self.info.entry(k.clone()).or_insert(v.clone());
+        }
+    }
+}
+
+
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct RegOverride {
     /// Register description override
@@ -211,6 +237,38 @@ pub struct RegOverride {
     pub hw_acc: Option<Access>,
     /// Field settings override
     pub fields : HashMap<String,FieldOverride>,
+}
+
+impl RegOverride {
+    /// Merge two override
+    /// Every None/Empty override of self take value defined in the def override
+    pub fn merge(&self, def: Option<&Self>) -> Self {
+        let mut merged = self.clone();
+        if let Some(d) = def {
+            if self.description.is_none() {
+                merged.description = d.description.clone();
+            }
+            if self.optional.is_empty() {
+                merged.optional = d.optional.clone();
+            }
+            if self.visibility.is_none() {
+                merged.visibility = d.visibility.clone();
+            }
+            if self.hw_acc.is_none() {
+                merged.hw_acc = d.hw_acc.clone();
+            }
+            // Field override: merge
+            for (k,v) in merged.fields.iter_mut() {
+                if let Some(def_v) = d.fields.get(k) {
+                    v.merge(&def_v);
+                }
+            }
+            d.fields.iter()
+                .filter(|(k,_)| !self.fields.contains_key(*k))
+                .for_each(|(k,v)| { merged.fields.insert(k.clone(), v.clone());});
+        }
+        merged
+    }
 }
 
 /// Index of the register to override. None if register is not an array or to override all registers
