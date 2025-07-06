@@ -621,7 +621,7 @@ pub trait GeneratorHw : GeneratorBase {
         for page in rif.pages.iter().filter(|p| p.external.is_none()) {
             for reg in page.regs.iter() {
                 let name_flat = self.casing(&reg.name());
-                let group_name = self.casing(&reg.group_name);
+                let group_name = self.casing(&reg.group_name());
                 let addr = (reg.addr + page.addr) as u128 >> addr_shift;
                 self.write_match_case_header(LogicExpr::ValueU(addr, addr_l_w));
                 // Set the decode signal high when matching address
@@ -635,8 +635,9 @@ pub trait GeneratorHw : GeneratorBase {
                 if reg.has_decode() {
                     let name = self.casing(&format!("{}__decode", reg.name()));
                     let value = if field_limit.is_empty() {LogicExpr::ValueU(1, 1)} else {
-                        let checks : Vec<LogicExpr> = field_limit.iter().map(|(name,bypass)| {
-                            let check : LogicExpr = format!("{group_name}_{name}__check").into();
+                        let checks : Vec<LogicExpr> = field_limit.iter().map(|(n,bypass)| {
+                            let idx = reg.array.idx_str(false);
+                            let check : LogicExpr = format!("{group_name}{idx}_{n}__check").into();
                             if bypass.is_empty() {check}
                             else {LogicExpr::or(check, bypass.as_str().into())}
                         }).collect();
@@ -665,7 +666,7 @@ pub trait GeneratorHw : GeneratorBase {
                 // Override done_next for external registers
                 if reg.external!=ExternalKind::None {
                     let hw_reg_def = rif.get_hw_reg(&reg.group_type);
-                    let idx = if let ArrayIdx::Inst(idx,_)= reg.array {format!("[{idx}]")} else {"".to_owned()};
+                    let idx = reg.array.idx_str(true);
                     let qual = if hw_reg_def.is_multi_pulse() {format!("_{name_flat}")} else {"".to_owned()};
                     let next : ExprId = (format!("{group_name}{idx}"), format!("ext{qual}_done")).into();
                     self.write_assign_comb(4, "rif_done_next".into(), next.into());

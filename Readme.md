@@ -55,7 +55,7 @@ Highlighting for SublimeText is available on [github](https://github.com/TheClam
 ### Why another language ?
 
 Of all existing approach, I think that only SystemRDL comes close to covering all the features I need.
-The idea of separating register definition and instance is key to allow re-use amongst different project.
+The idea of separating register definition and instance is key to allow re-use among different project.
 But the main weakness of SystemRDL (in my opinion) is that the syntax is neither easy to read nor easy to write.
 
 How simpler is the RIF syntax compare to the SystemRDL is quite subjective, but like can be seen in the syntax example
@@ -63,8 +63,8 @@ it is quite compact when defining simple register, with default behavior that sh
 For example, if there is no reset value an no hardware/software defined, then it is assumed this is a read-only register driven by hardware.
 
 In term of features missing from SystemRDL, the main one I have identified are:
-  - Overriding default precedence hw/sw, paritycheck field
-  - Automatic control of endianness
+  - Overriding default precedence hw/sw, parity check field
+  - Automatic control of endian-ness
   - Definition of HDL path, constraint
 
 But I think RIF has a few improved featured (in no particular order) :
@@ -105,11 +105,11 @@ sim = "../yarig/sim"
 vhdl = "../yarig/vhdl"
 ```
 
-Most settings from the configuration file can be overriden by command-line arguments. Run `yarig -h` to list all available options.
+Most settings from the configuration file can be overridden by command-line arguments. Run `yarig -h` to list all available options.
 
 ## Generator Traits
 
-To streamline the developement of new output targets, the library contains three base generator traits,
+To streamline the development of new output targets, the library contains three base generator traits,
 which basically go through the different elements of the structure and apply the visibility checks (public/private).
 The exact behavior of each traits can be tweaked with some associated constant.
 
@@ -133,7 +133,7 @@ The exact behavior of each traits can be tweaked with some associated constant.
   - [ ] Support option to repeat field description for interrupt derived register
   - [x] Support latex equation in description
   - [ ] Support overlapping register in hardware. Exclusive access (RO/WO) is already check at compile time: might be a good place to add some overlap flag to ease the generator job ...
-  - [ ] Option to add representation value for enum. Syntax could be 'NAME = VAL (repr) "description"'. Could be usefull when enum is representing a limited set of integer or real values.
+  - [ ] Option to add representation value for enum. Syntax could be 'NAME = VAL (repr) "description"'. Could be useful when enum is representing a limited set of integer or real values.
     - [x] Update parser to support new syntax
     - [x] Add python function in the enum class for conversion to/from float
     - [ ] Add C function for conversion to/from float/int ? Would need to add option to the generator allowing to disable the feature, use int, float or double as the representation type

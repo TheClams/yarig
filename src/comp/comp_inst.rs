@@ -597,6 +597,18 @@ impl ArrayIdx {
         }
     }
 
+    pub fn idx_str(&self, bracket: bool) -> String {
+        if self.dim() > 0 {
+            if bracket {
+                format!("[{}]", self.idx())
+            } else {
+                format!("{}", self.idx())
+            }
+        } else {
+            "".to_owned()
+        }
+    }
+
     pub fn dim_inst(&self) -> u16 {
         match self {
             ArrayIdx::Inst(_, dim) => *dim,

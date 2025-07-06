@@ -455,7 +455,7 @@ impl RegImpl {
                     }
                     field_impl.array += f.array.value(params) as u16;
                     let enum_def = f.enum_kind.get_def(&rifs.enums);
-                    // TODO: might need to check dimensions (or maybe shjould be done at parsing level)
+                    // TODO: might need to check dimensions (or maybe should be done at parsing level)
                     for r in f.reset.iter() {
                         field_impl.reset.push(r.compile(f.signed, f.nb_frac, params, enum_def)?);
                     }
@@ -607,11 +607,13 @@ pub struct HwRegInst {
     pub intr_derived: bool,
     /// Missing fields
     pub missing_fields: BTreeMap<String, MissingFieldInfo>,
+    /// Fields with limit: usefull to collect
+    pub limits: Vec<String>
 }
 
 impl HwRegInst {
-    pub fn new(group: String, array_size: u16, port: RegPortKind, intr_derived: bool, missing_fields: BTreeMap<String, MissingFieldInfo>) -> Self {
-        HwRegInst {group, dim: array_size, port, intr_derived, missing_fields}
+    pub fn new(group: String, array_size: u16, port: RegPortKind, intr_derived: bool, missing_fields: BTreeMap<String, MissingFieldInfo>, limits: Vec<String>) -> Self {
+        HwRegInst {group, dim: array_size, port, intr_derived, missing_fields, limits}
     }
 }
 
@@ -627,8 +629,6 @@ impl HwRegs {
         for page in pages {
             for reg in &page.regs {
                 let group_name = format!("{}{}", reg.group_name, reg.intr_info.0.get_suffix());
-                // let group_name = reg.group_name.to_owned();
-                // println!("{:?} ({:?}) : {:?}", reg.reg_name, group_name, reg.intr_info);
                 // If instance already exists remove every field from the register instance
                 if let Some(hw_reg) = hw_regs.get_mut(&group_name) {
                     for fr in reg.fields.iter() {
@@ -677,7 +677,15 @@ impl HwRegs {
                     // println!("{:?} ({:?}) : {:?} ", reg.reg_name, group_name, port);
                     hw_regs.insert(
                         group_name.clone(),
-                        HwRegInst::new(reg.group_type.clone(), reg.array.dim_inst(), port, reg.intr_info.0.is_derived(), missing)
+                        HwRegInst::new(reg.group_type.clone(), reg.array.dim_inst(), port, reg.intr_info.0.is_derived(), missing, Vec::new())
+                    );
+                }
+                // Check for field limit specific to register instance
+                if let Some(hw_reg) = hw_regs.get_mut(&group_name) {
+                    hw_reg.limits.extend(
+                        reg.fields.iter()
+                            .filter(|f| f.has_limit())
+                            .map(|f| format!("{}{}_{}", reg.group_name, reg.array.idx_str(false), f.name_flat()))
                     );
                 }
             }
