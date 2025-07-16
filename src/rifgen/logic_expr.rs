@@ -266,6 +266,16 @@ impl From<&MissingFieldInfo> for LogicExpr {
     }
 }
 
+/// Implement conversion from a couple value,max
+impl From<(u16,u16)> for LogicExpr {
+    fn from(value: (u16,u16)) -> Self {
+        LogicExpr::ValueU(
+            value.0 as u128,
+            (u16::BITS - value.1.leading_zeros()) as usize
+        )
+    }
+}
+
 impl LogicExpr {
     /// Create a Value (Signed/Unsigned) from a u128 and a field definition (for signed and width)
     pub fn value(v: u128, info: &RifFieldInst) -> LogicExpr {

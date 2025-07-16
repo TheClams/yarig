@@ -50,7 +50,8 @@ rif: test_rif
     instances: auto
 ```
 
-Highlighting for SublimeText is available on [github](https://github.com/TheClams/rif).
+Highlighting for SublimeText is available on [github](https://github.com/TheClams/rif)
+and for VScode on the [marketplace](https://marketplace.visualstudio.com/items?itemName=Clamsax.rifgen-syntax)
 
 ### Why another language ?
 
@@ -124,9 +125,13 @@ The exact behavior of each traits can be tweaked with some associated constant.
 
 ## Feature
   - [ ] Support for generics
-    - [ ] Generics for register instance size
+    - [x] Add description in generic definition
+    - [x] Generics for register instance size
     - [ ] Generics for optional register
     - [ ] Generics for optional pages
+    - [ ] Generics for field array: the field size would be defined by the max value (since struct are not parameterizable in SV)
+          but the logic for out-of-range field element would be forced to 0
+    - [ ] The else part of generic should force unused signal to 0 to avoid lint warning ? (TBC)
   - [x] Support reset value as enum name
   - [ ] Support for AXI4 bus
   - [ ] Support pipe option RTL

@@ -4,7 +4,7 @@ use winnow::{
   ascii::Caseless, combinator::{alt, opt, preceded, repeat, separated_pair, terminated}, error::StrContext, Parser
 };
 
-use super::{Res, identifier, ResF, ws, item_cntxt, val_u8};
+use super::{identifier, item_cntxt, quoted_string, val_u8, ws, Res, ResF};
 
 //--------------------------------
 // Top Level
@@ -86,9 +86,13 @@ pub fn reset_def(input: &str) -> ResF<ResetDef> {
 }
 
 pub fn generic_range<'a>(input: &mut &'a str) -> Res<'a, GenericRange> {
-  repeat(1..=3, terminated(ws(val_u8), opt(":")))
+  let values = repeat(1..=3, terminated(ws(val_u8), opt(":")))
     .context(StrContext::Label("range"))
-    .parse_next(input).map(|v : Vec<u8>| v.into())
+    .parse_next(input)?;
+  let desc = opt(quoted_string)
+    .context(StrContext::Label("description"))
+    .parse_next(input)?;
+  Ok((values, desc).into())
 }
 
 
@@ -154,9 +158,9 @@ mod tests_parsing {
 
   #[test]
   fn test_generic_range() {
-    assert_eq!(generic_range(&mut "8"), Ok(GenericRange {min:1, max:8, default:8}));
-    assert_eq!(generic_range(&mut "4:5"), Ok(GenericRange {min:1, max:5, default:4}));
-    assert_eq!(generic_range(&mut "3:7:16"), Ok(GenericRange {min:3, max:16, default:7}));
+    assert_eq!(generic_range(&mut "8"), Ok(GenericRange {min:1, max:8, default:8, desc: None}));
+    assert_eq!(generic_range(&mut "4:5 \"Range 4 to 5\""), Ok(GenericRange {min:1, max:5, default:4, desc: Some("Range 4 to 5".to_owned())}));
+    assert_eq!(generic_range(&mut "3:7:16"), Ok(GenericRange {min:3, max:16, default:7, desc: None}));
   }
 
 }

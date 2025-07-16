@@ -7,8 +7,7 @@ use crate::{
     },
     parser::parser_expr::ParamValues,
     rifgen::{
-        CastInfo, ExprId, LogicExpr, SignalRange,
-        order_dict::OrderDict, Access, ClkEn, ClockingInfo, EnumEntry, EnumKind, ExternalKind, FieldHwKind, FieldSwKind, Interface, InterruptClr, InterruptRegKind, InterruptTrigger, LimitValue, RegPulseKind, ResetDef}
+        order_dict::OrderDict, Access, CastInfo, ClkEn, ClockingInfo, EnumEntry, EnumKind, ExprId, ExternalKind, FieldHwKind, FieldSwKind, GenericRange, Interface, InterruptClr, InterruptRegKind, InterruptTrigger, LimitValue, LogicExpr, RegPulseKind, ResetDef, SignalRange}
 };
 
 use super::{
@@ -289,6 +288,14 @@ pub trait GeneratorHw : GeneratorBase {
         let addr_shift = (rif.data_width as f32).log2().ceil() as u16 - 3; // Min data width is 8 bits
         self.write_file_header();
         self.write_module_decl_header(&rif_name);
+        if !rif.generics.is_empty() {
+            self.write_module_generic_header();
+            let mut generics = rif.generics.items().peekable();
+            while let Some((name,range)) = generics.next() {
+                self.write_module_generic_decl(name, range, generics.peek().is_none());
+            }
+        }
+        self.write_module_port_header();
 
         // Clocks/Reset/Clear
         let mut list_clocking = HashSet::with_capacity(2);
@@ -424,6 +431,10 @@ pub trait GeneratorHw : GeneratorBase {
                     format!("rif_{group_name}"),
                     pkg_name.clone(), group_type_sw.clone(), hw_reg.dim).into());
             }
+            // Add signal to handle out-of-limit check
+            for limit in hw_reg.limits.iter() {
+                self.write_signal_decl(&SignalDef::new_bit(format!("{limit}__check")).into());
+            }
             for idx_u16 in 0..reg_dim.max(1) {
                 let idx = if reg_dim > 0 {format!("{idx_u16}")} else {"".to_owned()};
                 // Interrupt register
@@ -501,10 +512,6 @@ pub trait GeneratorHw : GeneratorBase {
                 // Field combinatorial next value
                 for f in hw_reg_def.fields.iter() {
                     let f_name = format!("{group_name}{idx}_{}", self.casing(&f.name));
-                    // Add signal to handle out-of-limit check
-                    if f.limit.value != LimitValue::None {
-                        self.write_signal_decl(&SignalDef::new_bit(format!("{f_name}__check")).into());
-                    }
                     // Skip external field
                     let Some(ctrl) = hw_reg_def.regs_ctrl.get(f.ctrl_idx) else {
                         return Err(format!("Field {}.{} points to ctrl {} but max is {}",
@@ -634,21 +641,35 @@ pub trait GeneratorHw : GeneratorBase {
                     .collect();
                 if reg.has_decode() {
                     let name = self.casing(&format!("{}__decode", reg.name()));
-                    let value = if field_limit.is_empty() {LogicExpr::ValueU(1, 1)} else {
-                        let checks : Vec<LogicExpr> = field_limit.iter().map(|(n,bypass)| {
-                            let idx = reg.array.idx_str(false);
-                            let check : LogicExpr = format!("{group_name}{idx}_{n}__check").into();
-                            if bypass.is_empty() {check}
-                            else {LogicExpr::or(check, bypass.as_str().into())}
-                        }).collect();
-                        LogicExpr::or(rd_wrn.clone(), LogicExpr::And(checks))
-                    };
+                    let value =
+                        if field_limit.is_empty() {
+                            reg.optional.as_ref().unwrap_or_else(|| &LogicExpr::ValueU(1, 1)).to_owned()
+                        } else {
+                            let checks : Vec<LogicExpr> = field_limit.iter().map(|(n,bypass)| {
+                                let idx = reg.array.idx_str(false);
+                                let check : LogicExpr = format!("{group_name}{idx}_{n}__check").into();
+                                if bypass.is_empty() {check}
+                                else {LogicExpr::or(check, bypass.as_str().into())}
+                            }).collect();
+                            let expr = LogicExpr::or(rd_wrn.clone(), LogicExpr::And(checks));
+                            if let Some(opt) = &reg.optional {
+                                LogicExpr::and(opt.clone(), expr)
+                            } else {
+                                expr
+                            }
+
+                        };
                     self.write_assign_comb(4, name.into(), value);
                 }
                 // Copy corresponding read_data signal
                 self.write_assign_comb(4, "rif_read_data_l ".into(), format!("{name_flat}__read_data").into());
-                // Address is valid
-                self.write_assign_comb(4, "rif_err_addr_l  ".into(), LogicExpr::ValueU(0, 1));
+                // Address is valid if register is not optional
+                let err_addr = if let Some(opt) = &reg.optional {
+                    LogicExpr::ite(opt.to_owned(), LogicExpr::ValueU(1, 1), LogicExpr::ValueU(0, 1))
+                } else {
+                    LogicExpr::ValueU(0, 1)
+                };
+                self.write_assign_comb(4, "rif_err_addr_l  ".into(), err_addr);
                 // Access error when writing a read-only field, reading a write only field,
                 //  or writing one field outside its set value (when limits are defined)
                 let err_val : LogicExpr = match reg.sw_access {
@@ -728,6 +749,9 @@ pub trait GeneratorHw : GeneratorBase {
                 self.write("\n");
                 self.write_comment(1, &format!("Register {reg_name_i}"));
                 // Assign field
+                if let Some(opt) = &reg.optional {
+                    self.write_generate_if(opt.to_owned(), format!("gen_reg_{reg_name}{reg_idxf}"));
+                }
                 for field in reg.fields.iter() {
                     let field_impl = reg_impl.get_field(&field.name)?;
                     let partial  = field.to_range(false);
@@ -1524,7 +1548,14 @@ pub trait GeneratorHw : GeneratorBase {
                     LogicExpr::Concat(values)
                 };
                 let rd_data : ExprId = format!("{reg_name}__read_data").into();
-                self.write_assign(rd_data, rhs);
+                self.write_assign(rd_data.clone(), rhs);
+
+                // For optional register close the generate part and assign the read_data to 0
+                if reg.optional.is_some() {
+                    self.write_generate_else(format!("gen_noreg_{reg_name}{reg_idxf}"));
+                    self.write_assign(rd_data, LogicExpr::ValueU(0, rif.data_width.into()));
+                    self.write_generate_end(format!("gen_reg_{reg_name}{reg_idxf}"));
+                }
             }
         }
 
@@ -1608,6 +1639,7 @@ pub trait GeneratorHw : GeneratorBase {
         self.set_rifmux_info(rifmux);
         self.write_file_header();
         self.write_module_decl_header(&rifmux_name);
+        self.write_module_port_header();
         // Add port/reset port if not default interface
         if !rifmux.interface.is_default() {
             self.write_port_decl(&PortInfo::new_in(
@@ -1766,6 +1798,7 @@ pub trait GeneratorHw : GeneratorBase {
         self.write_file_header();
         // Module declaration
         self.write_module_decl_header(&riftop_name);
+        self.write_module_port_header();
         self.write_comment(1, "RTL clock/reset");
         self.write_port_decl(&PortInfo::new_in(sw_clk.to_owned(), "Software clock".to_owned()), None, false);
         self.write_port_decl(&PortInfo::new_in(sw_rst.to_owned(), format!("Software reset : {}", rifmux.sw_clocking.rst.desc())), None, false);
@@ -1932,8 +1965,11 @@ pub trait GeneratorHw : GeneratorBase {
     fn write_struct_header(&mut self, name: &str, fields: &[SignalDecl]) {}
     fn write_struct_field(&mut self, field: &SignalDecl, is_last: bool) {}
     fn write_struct_footer(&mut self, name: &str) {}
+    fn write_module_generic_header(&mut self) {}
+    fn write_module_generic_decl(&mut self, name: &str, range: &GenericRange, is_last: bool) {}
     fn write_module_decl_header(&mut self, name: &str) {}
     fn write_module_decl_footer(&mut self, name: &str) {}
+    fn write_module_port_header(&mut self) {}
     fn write_signal_decl_footer(&mut self, is_rif: bool) {}
     fn write_module_impl_footer(&mut self, name: &str) {}
     fn write_port_decl(&mut self, port: &PortInfo, prefix: Option<&String>, is_last: bool) {}
@@ -1952,6 +1988,9 @@ pub trait GeneratorHw : GeneratorBase {
     fn write_cond_if(&mut self, lvl: usize, cond: LogicExpr) {}
     fn write_cond_else(&mut self, lvl: usize, cond: Option<LogicExpr>) {}
     fn write_cond_end(&mut self, lvl: usize) {}
+    fn write_generate_if(&mut self, cond: LogicExpr, name: String) {}
+    fn write_generate_else(&mut self, name: String) {}
+    fn write_generate_end(&mut self, name: String) {}
     fn write_assign_comb(&mut self, lvl: usize, lhs: ExprId, rhs: LogicExpr) {}
     fn write_process_comb_footer(&mut self, name: &str) {}
 

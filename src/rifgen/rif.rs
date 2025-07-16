@@ -99,23 +99,26 @@ pub struct GenericRange {
     pub min : u8,
     pub max : u8,
     pub default : u8,
+    pub desc: Option<String>,
 }
 
-impl From<Vec<u8>> for GenericRange {
-    fn from(v: Vec<u8>) -> GenericRange {
-        match v.len() {
+impl From<(Vec<u8>, Option<&str>)> for GenericRange {
+    fn from(v: (Vec<u8>, Option<&str>)) -> GenericRange {
+        let desc =  v.1.map(|d| d.to_owned());
+        match v.0.len() {
             // Empty vec ? just set everything to 1, should never happen
-            0 => GenericRange{min:1, default:1, max:1},
+            0 => GenericRange{min:1, default:1, max:1, desc},
             // Only one value => default==max
-            1 => GenericRange{min:1, default:v[0], max:v[0]},
+            1 => GenericRange{min:1, default:v.0[0], max:v.0[0], desc},
             // Two values => default and max
-            2 => GenericRange{min:1, default:v[0], max:v[1]},
+            2 => GenericRange{min:1, default:v.0[0], max:v.0[1], desc},
             // 3 or more ? min, default and max
-            _ => GenericRange{min:v[0], default:v[1], max:v[2]},
+            _ => GenericRange{min:v.0[0], default:v.0[1], max:v.0[2], desc},
         }
     }
 }
 
+pub type GenericValues = OrderDict<String,GenericRange>;
 
 #[derive(Clone, Debug)]
 pub struct Rif {
@@ -142,7 +145,7 @@ pub struct Rif {
     /// Parameters definition
     pub parameters: OrderDict<String,ExprTokens>,
     /// Generics definition
-    pub generics: OrderDict<String,GenericRange>,
+    pub generics: GenericValues,
     /// Extra Custom information
     pub info: OrderDict<String,String>,
 }

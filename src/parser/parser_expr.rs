@@ -2,7 +2,7 @@ use std::{fmt::Display, ops::{Deref, DerefMut}};
 
 use winnow::{ascii::{space0, Caseless}, combinator::{alt, delimited}, error::StrContext, Parser};
 
-use crate::{error::RifError, rifgen::order_dict::OrderDict};
+use crate::{error::RifError, rifgen::{order_dict::OrderDict, GenericRange, GenericValues}};
 use super::{identifier, val_f64, val_isize, ws, Res};
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -401,6 +401,38 @@ impl ExprTokens {
             Ok(result.round() as isize)
         } else {
             Err(ExprError::Malformed)
+        }
+    }
+
+    pub fn eval_with_gen(&self, variables: &ParamValues, generics: &GenericValues) -> Result<ExprValue, ExprError> {
+        match self.eval(variables) {
+            Ok(n) => Ok(ExprValue::Value(n)),
+            Err(ExprError::UnknownVar(n)) => {
+                if self.len() > 1 {
+                    Err(ExprError::Malformed)
+                } else if let Some(range) = generics.get(&n) {
+                    Ok(ExprValue::Range(n,range.clone()))
+                } else {
+                    Err(ExprError::UnknownVar(n))
+                }
+            }
+            Err(e) => Err(e)
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ExprValue {
+    Value(isize),
+    Range(String,GenericRange),
+}
+
+impl ExprValue {
+
+    pub fn max(&self) -> isize {
+        match self {
+            ExprValue::Value(n) => *n,
+            ExprValue::Range(_,r) => r.max.into(),
         }
     }
 }

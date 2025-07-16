@@ -1,6 +1,6 @@
 use crate::{
     comp::hw_info::{PortDir, PortInfo, SignalDecl, SignalDef, SignalInfo, SignalKind},
-    rifgen::{CastInfo, ExprId, LogicExpr, EnumEntry, ResetDef}
+    rifgen::{CastInfo, EnumEntry, ExprId, GenericRange, LogicExpr, ResetDef}
 };
 
 use super::{
@@ -302,7 +302,33 @@ impl GeneratorHw for GeneratorSv {
 
     // Module declaration
     fn write_module_decl_header(&mut self, name: &str) {
-        self.write(&format!("module {name} (\n"));
+        self.write(&format!("module {name}"));
+    }
+
+    fn write_module_generic_header(&mut self) {
+        self.write(" #(\n");
+    }
+
+    fn write_module_generic_decl(&mut self, name: &str, range: &GenericRange, is_last: bool) {
+        self.write("   parameter bit ");
+        if range.max > 1 {
+            let msb = (u8::BITS - range.max.leading_zeros()) - 1;
+            self.write(&format!("[{msb}:0] "));
+        }
+        self.write(&format!("{name} = {}", range.default));
+        let sep = if is_last {" "} else {","};
+        self.write(sep);
+        if let Some(desc) = &range.desc {
+            self.write(&format!(" // {desc} [{}:{}]", range.min, range.max));
+        }
+        self.write("\n");
+        if is_last {
+            self.write(")")
+        }
+    }
+
+    fn write_module_port_header(&mut self) {
+        self.write(" (\n");
     }
 
     fn write_module_decl_footer(&mut self, _name: &str) {
@@ -463,6 +489,24 @@ impl GeneratorHw for GeneratorSv {
     fn write_cond_end(&mut self, lvl: usize) {
         self.write(&" ".repeat(3*lvl));
         self.write("end\n");
+    }
+
+    fn write_generate_if(&mut self, cond: LogicExpr, name: String) {
+        self.write("   if(");
+        self.add_logic_expr(&cond, 0, false);
+        self.write(") begin : ");
+        self.write(&name);
+        self.write("\n");
+    }
+
+    fn write_generate_else(&mut self, name: String) {
+        self.write("   end else begin : ");
+        self.write(&name);
+        self.write("\n");
+    }
+
+    fn write_generate_end(&mut self, _name: String) {
+        self.write("   end\n");
     }
 
     fn write_assign_comb(&mut self, lvl: usize, lhs: ExprId, rhs: LogicExpr) {

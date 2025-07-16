@@ -1,9 +1,9 @@
 use std::collections::{BTreeMap, HashMap};
 
 use crate::{
-    parser::{get_rif, parser_expr::ParamValues, RifGenSrc, RifGenTop},
+    parser::{get_rif, parser_expr::{ExprValue, ParamValues}, RifGenSrc, RifGenTop},
     rifgen::{
-        order_dict::{OrderDict, OrderedDictIterV}, Access, AddressKind, ClockingInfo, CounterInfo, Description, EnumDef, EnumDefs, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, GenericRange, Interface, InterruptRegKind, InterruptTrigger, Limit, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegPulseKind, ResetVal, ResetValOverride, Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SignalRange, SuffixInfo, Visibility
+        order_dict::{OrderDict, OrderedDictIterV}, Access, AddressKind, ClockingInfo, CounterInfo, Description, EnumDef, EnumDefs, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, GenericRange, GenericValues, Interface, InterruptRegKind, InterruptTrigger, Limit, LogicExpr, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegPulseKind, ResetVal, ResetValOverride, Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SignalRange, SuffixInfo, Visibility
     },
 };
 
@@ -237,6 +237,8 @@ pub struct RifsInfo<'a> {
     pub rifs: &'a HashMap<String, Rif>,
     /// Parameter values
     pub params: ParamValues,
+    /// Generic values
+    pub generics: GenericValues,
     /// Enum definition
     pub enums: EnumDefs,
     /// Partial field dictionnary: allows checking all part of a field are present at the end
@@ -244,10 +246,11 @@ pub struct RifsInfo<'a> {
 }
 
 impl<'a> RifsInfo<'a>  {
-    pub fn new(rifs: &'a HashMap<String, Rif>, params: ParamValues, enums: EnumDefs) -> Self {
+    pub fn new(rifs: &'a HashMap<String, Rif>, params: ParamValues, generics: GenericValues, enums: EnumDefs) -> Self {
         RifsInfo {
             rifs,
             params,
+            generics,
             enums,
             partials: PartialFieldDict::new()
         }
@@ -288,7 +291,7 @@ pub struct RifInst {
     /// Hardware interface clock definition
     pub hw_clocking: Vec<ClockingInfo>,
     /// Generic definition
-    pub generics: OrderDict<String,GenericRange>,
+    pub generics: GenericValues,
     /// Extra Custom information
     pub info: OrderDict<String,String>,
     /// Parameter values
@@ -328,7 +331,7 @@ impl RifInst {
         }
         // Collect all register instantiated in a page
         let mut pages : Vec<RifPageInst> = Vec::with_capacity(rif.pages.len());
-        let mut rifs_info = RifsInfo::new(rifs, params, enum_defs);
+        let mut rifs_info = RifsInfo::new(rifs, params, rif.generics.clone(), enum_defs);
         for page in rif.pages.iter() {
             // Create page instance
             let inst = RifPageInst::new(&mut rifs_info, page, addr_incr)?;
@@ -438,13 +441,14 @@ impl RifPageInst {
                     // (regdef.def,regdef.intr_kind, regdef.intr_idx)
                     let addr = inst_addr.updt(reg.addr, reg.addr_kind);
                     // println!("Reg {} with {:?}({:04x}) -> {:04x}", reg.inst_name, reg.addr_kind, reg.addr, addr);
-
-                    let nb = reg.array.eval(&rifs.params)? as u16;
+                    let array_size = reg.array.eval_with_gen(&rifs.params, &rifs.generics)?;
+                    let nb = array_size.max();
+                    let range = if let ExprValue::Range(n,r) = array_size {Some((n,r))} else {None};
                     // For array create one instance per element with the array information
                     if nb > 1 {
                         inst_addr.decr(); // Pre-decrement because address will be incremented for each array element
                         for i in 0..nb {
-                            let args = RegInstArgs::Arr(ArrayIdx::Inst(i, nb));
+                            let args = RegInstArgs::Arr(ArrayIdx::Inst(i as u16, nb as u16), range.clone());
                             p.add_reg(RifRegInst::new(regdef.def, inst_addr.incr(), Some(reg), args, regdef.incl.to_owned(), rifs)?);
                         }
                     }
@@ -520,7 +524,7 @@ impl RifPageInst {
                         if nb > 1 {
                             // println!("Array of size {nb} found for {} (Auto)", d.name);
                             for i in 0..nb {
-                                self.add_reg(RifRegInst::new(d, addr, inst, RegInstArgs::Arr(ArrayIdx::Def(i, nb)), None, rifs)?);
+                                self.add_reg(RifRegInst::new(d, addr, inst, RegInstArgs::Arr(ArrayIdx::Def(i, nb), None), None, rifs)?);
                                 addr += addr_incr as u64;
                             }
                         } else {
@@ -642,7 +646,7 @@ impl Default for ArrayIdx {
 
 pub enum RegInstArgs {
     Intr(InterruptRegKind,usize,bool),
-    Arr(ArrayIdx),
+    Arr(ArrayIdx, Option<(String,GenericRange)>),
     Basic
 }
 
@@ -667,6 +671,7 @@ pub struct RifRegInst {
     pub array: ArrayIdx,
     pub group_idx: usize,
     pub visibility: Visibility,
+    pub optional: Option<LogicExpr>,
     pub incl: Option<String>,
 }
 
@@ -709,10 +714,20 @@ impl RifRegInst {
             reg_name = inst_name;
             intr_info = (InterruptRegKind::None,"".to_owned());
         };
-        let description = if let RegInstArgs::Arr(idx) = args {
+        let description = if let RegInstArgs::Arr(idx,_) = args {
             def.description.interpolate(idx.idx())
         } else {
             def.description.to_owned()
+        };
+        let array =  if let RegInstArgs::Arr(idx,_) = args {idx} else {ArrayIdx::Def(0,0)};
+        let optional = if let RegInstArgs::Arr(idx, Some((gen_name, range))) = &args {
+            if idx.idx() > range.min.into() {
+                Some(LogicExpr::gte(gen_name.to_owned().into(), (idx.idx(), range.max as u16).into() ))
+            } else {
+                None
+            }
+        } else {
+            None
         };
         let intr_kind = intr_info.0.to_owned();
         let mut r = RifRegInst {
@@ -731,7 +746,8 @@ impl RifRegInst {
             reset: 0,
             group_idx: 0,
             fields: Vec::new(),
-            array : if let RegInstArgs::Arr(idx) = args {idx} else {ArrayIdx::Def(0,0)},
+            array ,
+            optional,
             visibility: def.visibility,
             incl
         };

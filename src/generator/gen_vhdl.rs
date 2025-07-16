@@ -3,7 +3,7 @@ use crate::{
         comp_inst::{RifInst, RifmuxInst},
         hw_info::{PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalInfo, SignalKind}
     },
-    rifgen::{CastInfo, ExprId, LogicExpr, order_dict::OrderDict, EnumEntry, Interface, ResetDef}
+    rifgen::{order_dict::OrderDict, CastInfo, EnumEntry, ExprId, GenericRange, Interface, LogicExpr, ResetDef}
 };
 
 use super::{
@@ -448,6 +448,27 @@ impl GeneratorHw for GeneratorVhdl {
         self.write("use ieee.numeric_std.all;\n\n");
         self.write(&format!("use work.{name}_pkg.all;\n\n"));
         self.write(&format!("entity {name} is\n"));
+    }
+
+    fn write_module_generic_header(&mut self) {
+        self.write("   generic (\n");
+    }
+
+    fn write_module_generic_decl(&mut self, name: &str, range: &GenericRange, is_last: bool) {
+        self.write(&format!("      {name} : integer range {} to {} := {}",
+            range.min, range.max, range.default));
+        let sep = if is_last {" "} else {","};
+        self.write(sep);
+        if let Some(desc) = &range.desc {
+            self.write(&format!(" -- {desc}"));
+        }
+        self.write("\n");
+        if is_last {
+            self.write("   );\n")
+        }
+    }
+
+    fn write_module_port_header(&mut self) {
         self.write("   port (\n");
     }
 
@@ -644,6 +665,26 @@ impl GeneratorHw for GeneratorVhdl {
     fn write_cond_end(&mut self, lvl: usize) {
         self.write(&" ".repeat(3*lvl));
         self.write("end if;\n");
+    }
+
+    fn write_generate_if(&mut self, cond: LogicExpr, name: String) {
+        self.write("   ");
+        self.write(&name);
+        self.write(": if(");
+        self.add_logic_expr(&cond, 0, LogicExprKind::Bool, false);
+        self.write(") generate");
+        self.write("\n");
+    }
+
+    fn write_generate_else(&mut self, _name: String) {
+        self.write("   else generate");
+        self.write("\n");
+    }
+
+    fn write_generate_end(&mut self, name: String) {
+        self.write("   end generate");
+        self.write(&name);
+        self.write("\n");
     }
 
     fn write_assign_comb(&mut self, lvl: usize, lhs: ExprId, rhs: LogicExpr) {
