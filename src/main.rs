@@ -25,6 +25,9 @@ struct RifGenArgs{
     /// List of targets
     #[arg(short, long, num_args = 1..)]
     targets: Vec<RifGenTarget>,
+    /// Check syntax only, generator are not called
+    #[arg(long, action)]
+    check: bool,
     /// List of included component to generate. Use "*" to select all.
     #[arg(long, num_args = 0..)]
     gen_inc: Vec<String>,
@@ -130,7 +133,10 @@ fn main() {
     if !args.gen_inc.is_empty() {cfg.gen_inc = args.gen_inc.clone()};
     if !args.targets.is_empty() {cfg.targets = args.targets.to_owned()};
     if args.public {cfg.public = true};
-    if !args.targets.is_empty() {cfg.targets = args.targets.to_owned()};
+    // Clear target if check is enabled and override target if at least one is defined on the command-line
+    if args.check {cfg.targets.clear();}
+    else if !args.targets.is_empty() {cfg.targets = args.targets.to_owned()};
+    //
     if !args.parameters.is_empty() {cfg.parameters.extend(args.parameters)};
     if let Some(suffix) = args.suffix {cfg.suffixes.insert("".to_owned(), suffix);};
     if args.py_version.is_some() {cfg.py.version = args.py_version};
@@ -166,6 +172,8 @@ fn main() {
 
     if let Err(e) = cfg.gen_all() {
         eprintln!(" -> Error ! {e}");
+    } else if cfg.targets.is_empty() {
+        println!("Compilation succeed !")
     }
 
 }
