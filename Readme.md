@@ -147,10 +147,14 @@ The exact behavior of each traits can be tweaked with some associated constant.
   - [ ] For field array with register array definition, support case where total size is not reg_dim * field_dim. First idea would be to use the field reset initialization: if it's different from 1 and field_dim, then consider this is the total size
 
 ## Documentation
- - [x] Config file: full description
- - [ ] Base generator trait
- - [x] Why Yarig vs other existing solution (mostly SystemRDL)
- - [ ] List of syntax example for typical use-cases
+  - [x] Config file: full description
+  - [ ] Base generator trait
+  - [x] Why Yarig vs other existing solution (mostly SystemRDL)
+  - [ ] List of syntax example for typical use-cases
+  - [ ] Improve targets.md
+    - [ ] Detail tag naming in AsciiDoc
+    - [ ] Detail CSS property for HTML
+    - [ ] Detail styling for Framemaker
 
 ## Known Bugs / Edge cases
  - [ ] Support partial fields arrays
