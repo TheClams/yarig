@@ -1,6 +1,10 @@
 # Change Log
 
-## [0.14.0] - Unreleased
+## [0.14.0] - 2025-07-17
+
+### Added
+  - Support generics in array size instance
+  - Generics definition now supports an optional description
 
 ### Fixed
   - Override: for register array, indexed and default override are now merged (previously default was fully ignored even without indexed override)

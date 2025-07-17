@@ -750,7 +750,7 @@ pub trait GeneratorHw : GeneratorBase {
                 self.write_comment(1, &format!("Register {reg_name_i}"));
                 // Assign field
                 if let Some(opt) = &reg.optional {
-                    self.write_generate_if(opt.to_owned(), format!("gen_reg_{reg_name}{reg_idxf}"));
+                    self.write_generate_if(opt.to_owned(), format!("gen_reg_{reg_name}"));
                 }
                 for field in reg.fields.iter() {
                     let field_impl = reg_impl.get_field(&field.name)?;
@@ -1552,9 +1552,9 @@ pub trait GeneratorHw : GeneratorBase {
 
                 // For optional register close the generate part and assign the read_data to 0
                 if reg.optional.is_some() {
-                    self.write_generate_else(format!("gen_noreg_{reg_name}{reg_idxf}"));
+                    self.write_generate_else(format!("gen_noreg_{reg_name}"));
                     self.write_assign(rd_data, LogicExpr::ValueU(0, rif.data_width.into()));
-                    self.write_generate_end(format!("gen_reg_{reg_name}{reg_idxf}"));
+                    self.write_generate_end(format!("gen_reg_{reg_name}"));
                 }
             }
         }

@@ -143,6 +143,8 @@ The exact behavior of each traits can be tweaked with some associated constant.
     - [x] Add python function in the enum class for conversion to/from float
     - [ ] Add C function for conversion to/from float/int ? Would need to add option to the generator allowing to disable the feature, use int, float or double as the representation type
   - [ ] Option to control if clear works without clock enable or not
+  - [ ] Add syntax to support override on a range/list of register/field array. Syntax could be [1:5], or [1,3,7] and ideally support a mix like [0:5,8,11:13,15]
+  - [ ] For field array with register array definition, support case where total size is not reg_dim * field_dim. First idea would be to use the field reset initialization: if it's different from 1 and field_dim, then consider this is the total size
 
 ## Documentation
  - [x] Config file: full description

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{
     comp::{
         comp_inst::{RifInst, RifmuxInst},
@@ -20,6 +22,8 @@ pub struct GeneratorVhdl {
     is_bridge : bool,
     /// Component interface
     intf : Interface,
+    /// List of generic with their size (used for conversion in logical expression)
+    generics : HashMap<String, u8>,
     /// List of outputs port (needed to add intermediate signals)
     outputs : OrderDict<String,String>,
     outputs_locked: bool,
@@ -35,6 +39,7 @@ impl GeneratorVhdl {
             core: GeneratorCore::new(4,setting),
             enum_width: 0,
             is_bridge: false,
+            generics: HashMap::new(),
             outputs: OrderDict::new(),
             outputs_locked: false,
             intf: Interface::Default,
@@ -227,6 +232,10 @@ impl GeneratorVhdl {
         let is_intf_field = expr.field.as_ref()
             .map(|f| Self::IF_RIF_FIELDS.contains(&f.trim()));
         let is_intf = expr.name.starts_with("if_") && is_intf_field==Some(true);
+        let has_cast_gen = kind==LogicExprKind::MathU && self.generics.contains_key(&expr.name);
+        if has_cast_gen {
+            self.write("to_");
+        }
         match kind {
             LogicExprKind::MathU => self.write("unsigned("),
             LogicExprKind::MathS => self.write("signed("),
@@ -258,10 +267,16 @@ impl GeneratorVhdl {
                 self.write(&format!("({} downto {})", r.msb, r.lsb));
             }
         }
+        if has_cast_gen {
+            let w = self.generics.get(&expr.name).unwrap();
+            self.write(&format!(",{w}"));
+        }
         match kind {
             LogicExprKind::Bool => self.write(" = '1'"),
             LogicExprKind::MathU |
-            LogicExprKind::MathS => self.write(")"),
+            LogicExprKind::MathS => {
+                self.write(")");
+            }
             LogicExprKind::Basic => {}
         }
     }
@@ -452,9 +467,12 @@ impl GeneratorHw for GeneratorVhdl {
 
     fn write_module_generic_header(&mut self) {
         self.write("   generic (\n");
+        self.generics.clear();
     }
 
     fn write_module_generic_decl(&mut self, name: &str, range: &GenericRange, is_last: bool) {
+        let width = (u8::BITS - range.max.leading_zeros()) as u8;
+        self.generics.insert(name.to_owned(), width);
         self.write(&format!("      {name} : integer range {} to {} := {}",
             range.min, range.max, range.default));
         let sep = if is_last {" "} else {","};
@@ -682,9 +700,9 @@ impl GeneratorHw for GeneratorVhdl {
     }
 
     fn write_generate_end(&mut self, name: String) {
-        self.write("   end generate");
+        self.write("   end generate ");
         self.write(&name);
-        self.write("\n");
+        self.write(";\n");
     }
 
     fn write_assign_comb(&mut self, lvl: usize, lhs: ExprId, rhs: LogicExpr) {
