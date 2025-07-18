@@ -5,7 +5,7 @@ use crate::parser::{get_rif, parser_expr::ExprTokens};
 use super::{Access, ClkEn, Description, InterruptRegKind, LimitP, RegDef, RegDefOrIncl, ResetValP, Rif, Visibility};
 
 /// Result of register definition search
-/// Contains the register deifntion itself, information about the interrupt kind and its RIF source if included
+/// Contains the register definition itself, information about the interrupt kind and its RIF source if included
 pub struct RegDefMatch<'a> {
     pub def: &'a RegDef,
     pub incl: Option<String>,
@@ -210,7 +210,7 @@ impl FieldOverride {
             self.optional = def.optional.clone();
         }
         if self.visibility.is_none() {
-            self.visibility = def.visibility.clone();
+            self.visibility = def.visibility;
         }
         if self.limit.is_none() {
             self.limit = def.limit.clone();
@@ -252,15 +252,15 @@ impl RegOverride {
                 merged.optional = d.optional.clone();
             }
             if self.visibility.is_none() {
-                merged.visibility = d.visibility.clone();
+                merged.visibility = d.visibility;
             }
             if self.hw_acc.is_none() {
-                merged.hw_acc = d.hw_acc.clone();
+                merged.hw_acc = d.hw_acc;
             }
             // Field override: merge
             for (k,v) in merged.fields.iter_mut() {
                 if let Some(def_v) = d.fields.get(k) {
-                    v.merge(&def_v);
+                    v.merge(def_v);
                 }
             }
             d.fields.iter()

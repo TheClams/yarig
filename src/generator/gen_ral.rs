@@ -209,7 +209,7 @@ impl GeneratorSw for GeneratorRal {
             let idx_base = if reg_1st.is_reg_def() {field.array.idx() % field.array.dim()} else {field.array.idx()};
             let Some(base_field) = reg_1st.find_field(&field.name, idx_base) else {
                 panic!("[ERROR] Field {fieldname} == {} with index {:?} (reg {:?}): Unable to find amongst {:?}",
-                    field.name, field.array, reg_1st.array, reg_1st.fields.iter().map(|fi| (&fi.name, fi.array)).collect::<Vec<_>>());
+                    field.name, field.array, reg_1st.array, reg_1st.fields.iter().map(|fi| (&fi.name, fi.array.clone())).collect::<Vec<_>>());
             };
             let base_field_name = self.get_field_name(reg_1st, base_field);
             self.push_stash(1, &format!("   {rand_s}uvm_reg_field {regname}_{fieldname};\n"));

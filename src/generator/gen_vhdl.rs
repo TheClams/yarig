@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::{
     comp::{
         comp_inst::{RifInst, RifmuxInst},
-        hw_info::{PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalInfo, SignalKind}
+        hw_info::{PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalDim, SignalInfo, SignalKind}
     },
     rifgen::{order_dict::OrderDict, CastInfo, EnumEntry, ExprId, GenericRange, Interface, LogicExpr, ResetDef}
 };
@@ -58,15 +58,15 @@ impl GeneratorVhdl {
             self.core.write(&name);
         }
         self.core.write(" : ");
-        self.write_signal_kind(&def.kind, def.dim);
+        self.write_signal_kind(&def.kind, &def.dim);
     }
 
-    fn signal_kind(&mut self, kind: &SignalKind, dim: u16) -> String {
+    fn signal_kind(&mut self, kind: &SignalKind, dim: &SignalDim) -> String {
         let mut kind_str = String::with_capacity(32);
         match kind {
             SignalKind::Signed(w) |
             SignalKind::Unsigned(w) => {
-                if dim == 0 {
+                if dim.is_null() {
                     kind_str.push_str("std_logic");
                     if *w > 1 {
                         kind_str.push_str(&format!("_vector({} downto 0)", w-1));
@@ -74,14 +74,15 @@ impl GeneratorVhdl {
                 } else {
                     match w {
                         1 => kind_str.push_str("t_sla"),
-                        n => kind_str.push_str(&format!("t_slv_a{n}(0 to {})", dim-1)),
+                        n => kind_str.push_str(&format!("t_slv_a{n}")),
                     }
+                    kind_str.push_str(&format!("(0 to {dim:#})"));
                 }
             },
             SignalKind::Custom((_,n)) => {
                 kind_str.push_str(n);
-                if dim > 0 {
-                    kind_str.push_str(&format!("_a(0 to {dim})"));
+                if dim.is_array() {
+                    kind_str.push_str(&format!("_a(0 to {dim:#})"));
                 }
             }
             SignalKind::Integer     => kind_str.push_str("integer "),
@@ -91,7 +92,7 @@ impl GeneratorVhdl {
         kind_str
     }
 
-    fn write_signal_kind(&mut self, kind: &SignalKind, dim: u16) {
+    fn write_signal_kind(&mut self, kind: &SignalKind, dim: &SignalDim) {
         let k = self.signal_kind(kind, dim);
         self.write(&k);
     }
@@ -316,7 +317,7 @@ impl GeneratorHw for GeneratorVhdl {
         let mut vec_a = Vec::new();
         for hw_reg in rif.hw_regs.values() {
             if names.contains(&&hw_reg.group) {continue;}
-            if hw_reg.dim > 0 {
+            if hw_reg.dim.val() > 0 {
                 names.push(&hw_reg.group);
                 if hw_reg.port.is_in() {
                     self.push_stash(3, &format!("   type t_{0}_hw_a is array (natural range <>) of t_{0}_hw;\n", hw_reg.group));
@@ -471,7 +472,7 @@ impl GeneratorHw for GeneratorVhdl {
     }
 
     fn write_module_generic_decl(&mut self, name: &str, range: &GenericRange, is_last: bool) {
-        let width = (u8::BITS - range.max.leading_zeros()) as u8;
+        let width = (u8::BITS - (range.max-1).leading_zeros()).max(1) as u8;
         self.generics.insert(name.to_owned(), width);
         self.write(&format!("      {name} : integer range {} to {} := {}",
             range.min, range.max, range.default));
@@ -514,7 +515,7 @@ impl GeneratorHw for GeneratorVhdl {
                     self.write("      ");
                 }
                 self.write(&format!("   {base}_{n}{pad} : {d} "));
-                self.write_signal_kind(p.kind(), 0);
+                self.write_signal_kind(p.kind(), &SignalDim::Fixed(0));
                 self.write(&format!("; -- {} {desc}\n", &port.desc));
             }
             return;

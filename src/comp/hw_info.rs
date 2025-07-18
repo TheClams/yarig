@@ -67,45 +67,117 @@ impl SignalKind {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum SignalDim {
+    Fixed(u16),
+    Generic(String, u16)
+}
+
+impl SignalDim {
+    pub fn is_null(&self) -> bool {
+        matches!(self, SignalDim::Fixed(0))
+    }
+
+    pub fn is_array(&self) -> bool {
+        !self.is_null()
+    }
+
+    pub fn val(&self) -> u16 {
+        match self {
+            SignalDim::Fixed(d) => *d,
+            SignalDim::Generic(_, d) => *d,
+        }
+    }
+
+}
+
+impl std::fmt::Display for SignalDim {
+    /// Display the dimension as the fixed number of the name of the generic
+    /// The alternate flag print dimension-1 (usefull to get the MSB as string)
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SignalDim::Fixed(d) => {
+                if f.alternate() {write!(f,"{}",d-1)}
+                else {write!(f,"{d}")}
+            }
+            SignalDim::Generic(n, _) => {
+                if f.alternate() {write!(f,"{n}-1")}
+                else {write!(f,"{n}")}
+            }
+        }
+    }
+}
+
+impl From<u16> for SignalDim {
+    fn from(value: u16) -> Self {
+        SignalDim::Fixed(value)
+    }
+}
+
 /// Signal declaration info: contains both name and type
 #[derive(Clone, Debug)]
-#[allow(dead_code)]
 pub struct SignalDef {
     /// Signal name
     pub name: String,
     /// Signal kind (unsigned/signed/custom type)
     pub kind: SignalKind,
     /// Array dimension (0 means not an array)
-    pub dim: u16,
+    pub dim: SignalDim,
 }
 
 impl SignalDef {
-    pub fn new(name: String, kind: SignalKind, dim: u16) -> Self {
+    /// Direct constructor
+    pub fn new_arr(name: String, kind: SignalKind, dim: SignalDim) -> Self {
         SignalDef { name, kind, dim}
     }
 
+    /// Simple Signal
+    pub fn new(name: String, kind: SignalKind) -> Self {
+        SignalDef { name, kind, dim: SignalDim::Fixed(0)}
+    }
+
+    /// Single bit signal
     pub fn new_bit(name: String) -> Self {
-        SignalDef { name, kind: SignalKind::Unsigned(1), dim: 0}
+        SignalDef { name, kind: SignalKind::Unsigned(1), dim: SignalDim::Fixed(0)}
     }
 
+    /// Bus signal
     pub fn new_bus(name: String, width: u16, signed: bool) -> Self {
-        SignalDef { name, kind: SignalKind::new(width, signed), dim: 0}
+        SignalDef { name, kind: SignalKind::new(width, signed), dim: SignalDim::Fixed(0)}
     }
 
+    /// Integer signal
     pub fn new_int(name: String) -> Self {
-        SignalDef { name, kind: SignalKind::Integer, dim: 0}
+        SignalDef { name, kind: SignalKind::Integer, dim: SignalDim::Fixed(0)}
     }
 
     /// Define a signal with User-define type
-    pub fn new_ud(name: String, scope: String, type_name: String, dim: u16) -> Self {
-        SignalDef { name, kind: SignalKind::Custom((Some(scope), type_name)), dim}
+    pub fn new_ud(name: String, scope: String, type_name: String) -> Self {
+        SignalDef {
+            name,
+            kind: SignalKind::Custom((Some(scope), type_name)),
+            dim: SignalDim::Fixed(0)
+        }
+    }
+
+    /// Define a signal with User-define type
+    pub fn new_ud_arr(name: String, scope: String, type_name: String, dim: SignalDim) -> Self {
+        SignalDef {
+            name,
+            kind: SignalKind::Custom((Some(scope), type_name)),
+            dim
+        }
+    }
+
+    /// Check is signal is an array
+    pub fn is_array(&self) -> bool {
+        self.dim.is_array()
     }
 }
 
 
 /// Signal declaration info: contains both name and type
 #[derive(Clone, Debug)]
-#[allow(dead_code)]
 pub struct SignalDecl {
     /// Signal definition (name, kind, dim)
     pub def: SignalDef,
@@ -228,15 +300,23 @@ impl PortInfo {
 
     pub fn new_intf(name: String, if_name: String, modport: String, desc: String) -> Self {
         PortInfo {
-            def: SignalDef::new(name, SignalKind::Custom((None,if_name)), 0),
+            def: SignalDef::new(name, SignalKind::Custom((None,if_name))),
             dir: PortDir::Modport(modport),
             desc,
         }
     }
 
-    pub fn new(name: String, kind: SignalKind, dir: PortDir, dim: u16, desc: String) -> Self {
+    pub fn new(name: String, kind: SignalKind, dir: PortDir, dim: SignalDim, desc: String) -> Self {
         PortInfo {
-            def: SignalDef::new(name, kind, dim),
+            def: SignalDef::new_arr(name, kind, dim),
+            dir,
+            desc,
+        }
+    }
+
+    pub fn new_basic(name: String, kind: SignalKind, dir: PortDir, desc: String) -> Self {
+        PortInfo {
+            def: SignalDef::new(name, kind),
             dir,
             desc,
         }
@@ -250,8 +330,8 @@ impl PortInfo {
         &self.def.name
     }
 
-    pub fn dim(&self) -> u16 {
-        self.def.dim
+    pub fn dim(&self) -> &SignalDim {
+        &self.def.dim
     }
 
     pub fn kind(&self) -> &SignalKind {
@@ -414,7 +494,7 @@ impl PortList {
                     group_name.to_owned(),
                     SignalKind::Custom((Some(pkg_name.clone()), format!("t_{group_type}_hw"))),
                     PortDir::In,
-                    hw_reg.dim,
+                    hw_reg.dim.clone(),
                     desc.to_owned(),
                 );
                 regs.push(port);
@@ -425,7 +505,7 @@ impl PortList {
                     format!("rif_{group_name}"),
                     SignalKind::Custom((Some(pkg_name), format!("t_{group_type}_{suffix}"))),
                     PortDir::Out,
-                    hw_reg.dim,
+                    hw_reg.dim.clone(),
                     desc.to_owned(),
                 );
                 regs.push(port);
@@ -473,11 +553,11 @@ impl RifIntfPorts {
                     ]
                 } else {
                     vec![
-                        PortInfo::new(    "reg_addr           ".to_owned(), SignalKind::Address, PortDir::In, 0, "Register address".to_owned()),
+                        PortInfo::new_basic(    "reg_addr           ".to_owned(), SignalKind::Address, PortDir::In, "Register address".to_owned()),
                         PortInfo::new_in( "reg_en             ".to_owned(), "Register enable".to_owned()),
                         PortInfo::new_in( "reg_rd_wrn         ".to_owned(), "Register write/not read".to_owned()),
-                        PortInfo::new(    "reg_wr_data        ".to_owned(), SignalKind::Data, PortDir::In , 0, "Register write data".to_owned()),
-                        PortInfo::new(    "reg_rd_data        ".to_owned(), SignalKind::Data, PortDir::Out, 0, "Register read data".to_owned()),
+                        PortInfo::new_basic(    "reg_wr_data        ".to_owned(), SignalKind::Data, PortDir::In , "Register write data".to_owned()),
+                        PortInfo::new_basic(    "reg_rd_data        ".to_owned(), SignalKind::Data, PortDir::Out, "Register read data".to_owned()),
                         PortInfo::new_out("reg_done           ".to_owned(), "Register ready".to_owned()),
                         PortInfo::new_out("reg_done_next      ".to_owned(), "Register ready next".to_owned()),
                         PortInfo::new_out("reg_err_addr       ".to_owned(), "Register address error".to_owned()),
@@ -488,24 +568,24 @@ impl RifIntfPorts {
                 }
             },
             Interface::Apb => vec![
-                PortInfo::new(    "paddr  ".to_owned(), SignalKind::Address, PortDir::In, 0, "APB Address".to_owned()),
+                PortInfo::new_basic(    "paddr  ".to_owned(), SignalKind::Address, PortDir::In, "APB Address".to_owned()),
                 PortInfo::new_in( "psel   ".to_owned(), "APB Select".to_owned()),
                 PortInfo::new_in( "penable".to_owned(), "APB Enable".to_owned()),
                 PortInfo::new_in( "pwrite ".to_owned(), "APB Write".to_owned()),
-                PortInfo::new(    "pwdata ".to_owned(), SignalKind::Data, PortDir::In, 0, "APB Write Data".to_owned()),
-                PortInfo::new(    "prdata ".to_owned(), SignalKind::Data, PortDir::Out, 0, "APB Read Data".to_owned()),
+                PortInfo::new_basic(    "pwdata ".to_owned(), SignalKind::Data, PortDir::In, "APB Write Data".to_owned()),
+                PortInfo::new_basic(    "prdata ".to_owned(), SignalKind::Data, PortDir::Out, "APB Read Data".to_owned()),
                 PortInfo::new_out("pready ".to_owned(), "APB Ready".to_owned()),
                 PortInfo::new_out("pslverr".to_owned(), "APB Slave Error".to_owned()),
             ],
             Interface::Uaux => vec![
-                PortInfo::new(   "uaux_addr      ".to_owned(), SignalKind::Address, PortDir::In, 0, "AUX address".to_owned()),
+                PortInfo::new_basic(   "uaux_addr      ".to_owned(), SignalKind::Address, PortDir::In, "AUX address".to_owned()),
                 PortInfo::new_in("uaux_en        ".to_owned(), "AUX enable".to_owned()),
                 PortInfo::new_in("uaux_cmt_phase ".to_owned(), "AUX commit status".to_owned()),
                 PortInfo::new_in("uaux_cmt_valid ".to_owned(), "AUX commit Valid".to_owned()),
                 PortInfo::new_in("uaux_read      ".to_owned(), "AUX read".to_owned()),
                 PortInfo::new_in("uaux_write     ".to_owned(), "AUX write".to_owned()),
-                PortInfo::new(   "uaux_wdata     ".to_owned(), SignalKind::Data, PortDir::In, 0, "AUX write Data".to_owned()),
-                PortInfo::new(   "uaux_rdata     ".to_owned(), SignalKind::Data, PortDir::Out, 0, "AUX read Data".to_owned()),
+                PortInfo::new_basic(   "uaux_wdata     ".to_owned(), SignalKind::Data, PortDir::In, "AUX write Data".to_owned()),
+                PortInfo::new_basic(   "uaux_rdata     ".to_owned(), SignalKind::Data, PortDir::Out, "AUX read Data".to_owned()),
                 PortInfo::new_out("uaux_busy     ".to_owned(), "AUX busy".to_owned()),
                 PortInfo::new_out("uaux_illegal  ".to_owned(), "SR/LR illegal".to_owned()),
                 PortInfo::new_out("uaux_k_rd     ".to_owned(), "AUX read privilege violation".to_owned()),

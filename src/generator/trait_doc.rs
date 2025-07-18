@@ -449,7 +449,7 @@ pub trait GeneratorDoc : GeneratorBase {
                                 } else {
                                     // Should never happen, but print a clear message to debug library if I mess something in the future
                                     eprintln!("[ERROR] Field {fieldname} == {} with index {:?} (reg {:?}): Unable to find amongst {:?}",
-                                        f.name, f.array, reg_inst.array, reg_inst.fields.iter().map(|fi| (&fi.name, fi.array)).collect::<Vec<_>>());
+                                        f.name, f.array, reg_inst.array, reg_inst.fields.iter().map(|fi| (&fi.name, fi.array.clone())).collect::<Vec<_>>());
                                     None
                                 }
                             }).collect();

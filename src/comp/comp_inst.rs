@@ -202,7 +202,6 @@ impl InstAddr {
 
 /// Group instances with a common offset under a common name prefix
 #[derive(Clone, Debug)]
-#[allow(dead_code)]
 pub struct RifmuxGroupInst {
     /// Name of the RIF instance
     pub name: String,
@@ -257,7 +256,6 @@ impl<'a> RifsInfo<'a>  {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct RifInst {
     /// Instance name
@@ -442,13 +440,13 @@ impl RifPageInst {
                     let addr = inst_addr.updt(reg.addr, reg.addr_kind);
                     // println!("Reg {} with {:?}({:04x}) -> {:04x}", reg.inst_name, reg.addr_kind, reg.addr, addr);
                     let array_size = reg.array.eval_with_gen(&rifs.params, &rifs.generics)?;
-                    let nb = array_size.max();
+                    let nb = array_size.max() as u16;
                     let range = if let ExprValue::Range(n,r) = array_size {Some((n,r))} else {None};
                     // For array create one instance per element with the array information
                     if nb > 1 {
                         inst_addr.decr(); // Pre-decrement because address will be incremented for each array element
                         for i in 0..nb {
-                            let args = RegInstArgs::Arr(ArrayIdx::Inst(i as u16, nb as u16), range.clone());
+                            let args = RegInstArgs::arr(i, nb, range.clone());
                             p.add_reg(RifRegInst::new(regdef.def, inst_addr.incr(), Some(reg), args, regdef.incl.to_owned(), rifs)?);
                         }
                     }
@@ -524,7 +522,7 @@ impl RifPageInst {
                         if nb > 1 {
                             // println!("Array of size {nb} found for {} (Auto)", d.name);
                             for i in 0..nb {
-                                self.add_reg(RifRegInst::new(d, addr, inst, RegInstArgs::Arr(ArrayIdx::Def(i, nb), None), None, rifs)?);
+                                self.add_reg(RifRegInst::new(d, addr, inst, RegInstArgs::arr_def(i, nb), None, rifs)?);
                                 addr += addr_incr as u64;
                             }
                         } else {
@@ -579,28 +577,35 @@ impl<'a> Iterator for RegInstTypeIter<'a> {
 
 /// Pair of u16 giving index over dimension
 /// The enum variant allows to make the difference between an array at the register definition level or the instance level
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum ArrayIdx{
     Def(u16,u16),
     Inst(u16,u16),
+    Gen(u16,GenericRange,String),
 }
 
 impl ArrayIdx {
 
+    /// Return array index
     pub fn idx(&self) -> u16 {
         match self {
             ArrayIdx::Def(idx, _) => *idx,
             ArrayIdx::Inst(idx, _) => *idx,
+            ArrayIdx::Gen(idx, _, _) => *idx,
         }
     }
 
+    /// Return max dimension of the array
     pub fn dim(&self) -> u16 {
         match self {
             ArrayIdx::Def(_, dim) => *dim,
             ArrayIdx::Inst(_, dim) => *dim,
+            ArrayIdx::Gen(_, range,_) => range.max as u16, // TODO: change range to support array > 255 ?
         }
     }
 
+    /// Display the dimension of the array as a string, with or without bracket
+    // Could offer option to select the kind of bracket : none, straight bracket, parenthesis at least
     pub fn idx_str(&self, bracket: bool) -> String {
         if self.dim() > 0 {
             if bracket {
@@ -614,10 +619,8 @@ impl ArrayIdx {
     }
 
     pub fn dim_inst(&self) -> u16 {
-        match self {
-            ArrayIdx::Inst(_, dim) => *dim,
-            _ => 0,
-        }
+        if self.is_def() {0}
+        else {self.dim()}
     }
 
     pub fn is_def(&self) -> bool {
@@ -627,6 +630,13 @@ impl ArrayIdx {
     pub fn is_inst(&self) -> bool {
         matches!(self,ArrayIdx::Inst(_,_))
     }
+
+    pub fn gen_name(&self) -> Option<&str> {
+        match self {
+            ArrayIdx::Gen(_, _,name) => Some(name),
+            _ => None,
+        }
+    }
 }
 
 impl std::fmt::Display for ArrayIdx {
@@ -634,6 +644,7 @@ impl std::fmt::Display for ArrayIdx {
         match self {
             ArrayIdx::Def(idx, dim) => write!(f, "{idx}/{dim} (Def)"),
             ArrayIdx::Inst(idx, dim) => write!(f, "{idx}/{dim} (Inst)"),
+            ArrayIdx::Gen(idx, range, name) => write!(f, "{idx}/{} (Generic: {name})", range.max),
         }
     }
 }
@@ -644,15 +655,32 @@ impl Default for ArrayIdx {
     }
 }
 
+/// Argument for register instance to distinguish some special cases such as interrupt and arrays
 pub enum RegInstArgs {
+    /// Basic single dimension register
+    Basic,
+    /// Interrupt register with variant (enable/mask/pending) with index of alternate name, and flag indicating if instance was automatic
     Intr(InterruptRegKind,usize,bool),
-    Arr(ArrayIdx, Option<(String,GenericRange)>),
-    Basic
+    /// Array register (either from definition or instance)
+    Arr(ArrayIdx),
 }
+
+impl RegInstArgs {
+    pub fn arr(index: u16, max_dim: u16, range: Option<(String, GenericRange)>) -> Self {
+        if let Some((name, range)) = range {
+            RegInstArgs::Arr(ArrayIdx::Gen(index, range, name))
+        } else {
+            RegInstArgs::Arr(ArrayIdx::Inst(index, max_dim))
+        }
+    }
+    pub fn arr_def(index: u16, dim: u16) -> Self {
+        RegInstArgs::Arr(ArrayIdx::Def(index, dim))
+    }
+}
+
 
 /// Register instance
 #[derive(Clone, Debug)]
-#[allow(dead_code)]
 pub struct RifRegInst {
     pub reg_type: String,
     pub reg_name: String,
@@ -714,15 +742,15 @@ impl RifRegInst {
             reg_name = inst_name;
             intr_info = (InterruptRegKind::None,"".to_owned());
         };
-        let description = if let RegInstArgs::Arr(idx,_) = args {
+        let description = if let RegInstArgs::Arr(idx) = &args {
             def.description.interpolate(idx.idx())
         } else {
             def.description.to_owned()
         };
-        let array =  if let RegInstArgs::Arr(idx,_) = args {idx} else {ArrayIdx::Def(0,0)};
-        let optional = if let RegInstArgs::Arr(idx, Some((gen_name, range))) = &args {
-            if idx.idx() > range.min.into() {
-                Some(LogicExpr::gte(gen_name.to_owned().into(), (idx.idx(), range.max as u16).into() ))
+        let array =  if let RegInstArgs::Arr(idx) = &args {idx} else {&ArrayIdx::Def(0,0)};
+        let optional = if let ArrayIdx::Gen(_,range,gen_name) = &array {
+            if array.idx() > range.min.into() {
+                Some(LogicExpr::gte(gen_name.to_owned().into(), (array.idx(), range.max as u16).into() ))
             } else {
                 None
             }
@@ -746,7 +774,7 @@ impl RifRegInst {
             reset: 0,
             group_idx: 0,
             fields: Vec::new(),
-            array ,
+            array: array.to_owned() ,
             optional,
             visibility: def.visibility,
             incl
@@ -1187,7 +1215,6 @@ impl RifFieldInst {
         !self.limit.is_none()
     }
 
-    #[allow(dead_code)]
     /// Flag when a field is a counter
     pub fn is_counter(&self)  -> bool {
         self.hw_kind.iter().any(|x| x.is_counter())
@@ -1295,6 +1322,8 @@ impl RifFieldInst {
     }
 }
 
+/// Display a value with certain width either in decimal or hex
+/// The format is chosen automatically based on the width of the value
 pub fn val_str(val: u128, width: u16, is_signed: bool) -> String {
     let w = (width >> 2) as usize;
     // let width

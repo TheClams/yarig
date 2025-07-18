@@ -2,7 +2,7 @@ use std::{collections::HashSet, ops::Deref};
 
 use crate::{
     comp::{
-        comp_inst::{ArrayIdx, Comp, CompInst, RifInst, RifmuxInst},
+        comp_inst::{Comp, CompInst, RifInst, RifmuxInst},
         hw_info::{PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalInfo, SignalKind}
     },
     parser::parser_expr::ParamValues,
@@ -108,7 +108,7 @@ pub trait GeneratorHw : GeneratorBase {
                 };
                 let field_name = if f.sw_kind.is_password() {format!("{name}_locked")} else {name.to_owned()};
                 let field_decl = SignalDecl::new(
-                    SignalDef::new(field_name, kind, f.array) ,
+                    SignalDef::new_arr(field_name, kind, f.array.into()),
                     f.description.get_short(false)
                 );
                 // Add field to SW structure writable by firmware or readable by hardware
@@ -330,7 +330,7 @@ pub trait GeneratorHw : GeneratorBase {
                     Some(self.casing(&pkg_name)),
                     format!("t_{}_{kind}", self.casing(&hw_reg.group)))),
                 PortDir::In,
-                hw_reg.dim,
+                hw_reg.dim.clone(),
                 hw_reg_def.description.get_short(false)
             );
             if hw_reg.port.is_in() {
@@ -420,16 +420,16 @@ pub trait GeneratorHw : GeneratorBase {
         for (inst_name, hw_reg) in rif.hw_regs.items().filter(|(_,r)| !r.intr_derived) {
             let group_name = self.casing(inst_name);
             let hw_reg_def = rif.get_hw_reg(&hw_reg.group);
-            let reg_dim = hw_reg.dim;
+            let reg_dim = hw_reg.dim.val();
             let group_type_sw = format!("t_{}_sw", hw_reg.group);
             let group_type_hw = format!("t_{}_hw", hw_reg.group);
             let pkg_base = if let Some(pkg) = &hw_reg_def.pkg {pkg} else {&rif_pkg_name};
             let pkg_name = format!("{pkg_base}_pkg");
             // Local register
             if hw_reg_def.is_local() {
-                self.write_signal_decl(&SignalDef::new_ud(
+                self.write_signal_decl(&SignalDef::new_ud_arr(
                     format!("rif_{group_name}"),
-                    pkg_name.clone(), group_type_sw.clone(), hw_reg.dim).into());
+                    pkg_name.clone(), group_type_sw.clone(), hw_reg.dim.clone()).into());
             }
             // Add signal to handle out-of-limit check
             for limit in hw_reg.limits.iter() {
@@ -450,17 +450,17 @@ pub trait GeneratorHw : GeneratorBase {
                         if !hw_reg.port.is_out() {
                             self.write_signal_decl(&SignalDef::new_ud(
                                 format!("rif_{name}{idx}"),
-                                pkg_name.clone(), group_type_sw.clone(), 0).into());
+                                pkg_name.clone(), group_type_sw.clone()).into());
                         }
                         // Interrupt need a local signal (and between input and enable)
                         self.write_signal_decl(&SignalDef::new_ud(
                             format!("{name}{idx}_l"),
-                            pkg_name.clone(), group_type_hw.clone(), 0).into());
+                            pkg_name.clone(), group_type_hw.clone()).into());
                         // Add delay register if trigger works on edges
                         if intr_info.edge_trigger() {
                             self.write_signal_decl(&SignalDef::new_ud(
                                 format!("{name}{idx}_d1"),
-                                pkg_name.clone(), group_type_hw.clone(), 0).into());
+                                pkg_name.clone(), group_type_hw.clone()).into());
                         }
                         // Add optional enable/mask register
                         if intr_info.enable.is_some() {
@@ -469,7 +469,7 @@ pub trait GeneratorHw : GeneratorBase {
                                 if !hw_reg_en.port.is_out() {
                                     self.write_signal_decl(&SignalDef::new_ud(
                                         format!("rif_{name}{idx}_en"),
-                                        pkg_name.clone(), group_type_hw.clone(), 0).into());
+                                        pkg_name.clone(), group_type_hw.clone()).into());
                                 }
                             }
                         }
@@ -479,14 +479,14 @@ pub trait GeneratorHw : GeneratorBase {
                                 if !hw_reg_mask.port.is_out() {
                                     self.write_signal_decl(&SignalDef::new_ud(
                                         format!("rif_{name}{idx}_mask"),
-                                        pkg_name.clone(), group_type_hw.clone(), 0).into());
+                                        pkg_name.clone(), group_type_hw.clone()).into());
                                 }
                             }
                         }
                         // Internal pending signal is always present (used to generate the irq output)
                         self.write_signal_decl(&SignalDef::new_ud(
                             format!("rif_{name}{idx}_pending"),
-                            pkg_name.clone(), group_type_hw.clone(), 0).into());
+                            pkg_name.clone(), group_type_hw.clone()).into());
                         self.write_signal_decl(&SignalDef::new_bit(format!("clk_en_intr_{name}{idx}")).into());
                         // Add next signal for each field
                         for f in hw_reg_def.fields.iter() {
@@ -531,16 +531,16 @@ pub trait GeneratorHw : GeneratorBase {
                     if f.array > 0 {
                         for i in 0..f.array {
                             self.write_signal_decl(&SignalDef::new(
-                                format!("{f_name}{i}__next"), sig_kind.clone(), 0).into());
+                                format!("{f_name}{i}__next"), sig_kind.clone()).into());
                         }
                     } else {
                         self.write_signal_decl(&SignalDef::new(
-                            format!("{f_name}__next"), sig_kind.clone(), 0).into());
+                            format!("{f_name}__next"), sig_kind.clone()).into());
                     }
                     // Add register to store local value when register is not visible at the output
                     if f.is_local() {
                         self.write_signal_decl(&SignalDef::new(
-                            format!("{f_name}__reg"), sig_kind.clone(), 0).into());
+                            format!("{f_name}__reg"), sig_kind.clone()).into());
                     }
                 }
             }
@@ -643,7 +643,7 @@ pub trait GeneratorHw : GeneratorBase {
                     let name = self.casing(&format!("{}__decode", reg.name()));
                     let value =
                         if field_limit.is_empty() {
-                            reg.optional.as_ref().unwrap_or_else(|| &LogicExpr::ValueU(1, 1)).to_owned()
+                            reg.optional.as_ref().unwrap_or(&LogicExpr::ValueU(1, 1)).to_owned()
                         } else {
                             let checks : Vec<LogicExpr> = field_limit.iter().map(|(n,bypass)| {
                                 let idx = reg.array.idx_str(false);
@@ -740,7 +740,7 @@ pub trait GeneratorHw : GeneratorBase {
                 let reg_name  = reg.name().to_casing(Snake); // Register Name with index apped after
                 let group_name = reg.group_name().to_casing(Snake); // Group name without index
                 let reg_name_i   = reg.name_i().to_casing(Snake); // Register name with optional index in bracket
-                let reg_idx    = if let ArrayIdx::Inst(idx,_) = reg.array {Some(idx)} else {None};
+                let reg_idx    = if reg.array.dim_inst() > 0 {Some(reg.array.idx())} else {None};
                 let group_id : ExprId = (group_name.clone(), reg_idx).into();
                 let sw_groupd_id : ExprId = (format!("rif_{group_name}"), reg_idx).into();
                 let reg_idxf   = if let Some(idx) = reg_idx {format!("{idx}")} else {"".to_owned()};

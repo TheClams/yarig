@@ -48,7 +48,7 @@ impl GeneratorSv {
         } else {
             self.write(def.name.trim());
         }
-        if def.dim > 0 {
+        if def.is_array() {
             self.write(&format!("[{}]", def.dim));
         }
     }
@@ -280,7 +280,7 @@ impl GeneratorHw for GeneratorSv {
 
     // Structure declaration
     fn write_struct_header(&mut self, _name: &str, fields: &[SignalDecl]) {
-        let has_array = fields.iter().any(|f| f.def.dim > 0);
+        let has_array = fields.iter().any(|f| f.def.is_array());
         let packed = if has_array { "" } else { "packed " };
         self.write(&format!("   typedef struct {packed}{{\n"));
     }
@@ -312,7 +312,7 @@ impl GeneratorHw for GeneratorSv {
     fn write_module_generic_decl(&mut self, name: &str, range: &GenericRange, is_last: bool) {
         self.write("   parameter bit ");
         if range.max > 1 {
-            let msb = (u8::BITS - range.max.leading_zeros()) - 1;
+            let msb = (u8::BITS - (range.max-1).leading_zeros()) - 1;
             self.write(&format!("[{msb}:0] "));
         }
         self.write(&format!("{name} = {}", range.default));

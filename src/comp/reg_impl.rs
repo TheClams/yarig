@@ -8,7 +8,7 @@ use crate::{
 };
 
 use super::{
-    comp_inst::{val_str, PartialFieldInfos, RifPageInst, RifRegInst, RifsInfo},
+    comp_inst::{val_str, ArrayIdx, PartialFieldInfos, RifPageInst, RifRegInst, RifsInfo}, hw_info::SignalDim,
 };
 
 /// Field Implementation
@@ -600,7 +600,7 @@ pub struct HwRegInst {
     /// Group type of the register
     pub group: String,
     /// Dimension of the register: 0 if not an array of registers
-    pub dim: u16,
+    pub dim: SignalDim,
     /// Port direction
     pub port: RegPortKind,
     /// Register instance derived (interrupt en/mask/pending)
@@ -612,8 +612,16 @@ pub struct HwRegInst {
 }
 
 impl HwRegInst {
-    pub fn new(group: String, array_size: u16, port: RegPortKind, intr_derived: bool, missing_fields: BTreeMap<String, MissingFieldInfo>, limits: Vec<String>) -> Self {
-        HwRegInst {group, dim: array_size, port, intr_derived, missing_fields, limits}
+    // pub fn new(group: String, array_idx: &ArrayIdx, port: RegPortKind, intr_derived: bool, missing_fields: BTreeMap<String, MissingFieldInfo>, limits: Vec<String>) -> Self {
+    pub fn new(reg: &RifRegInst, port: RegPortKind, missing_fields: BTreeMap<String, MissingFieldInfo>, limits: Vec<String>) -> Self {
+        let group = reg.group_type.to_owned();
+        let intr_derived = reg.intr_info.0.is_derived();
+        let dim = match &reg.array {
+            ArrayIdx::Def(_, _) => SignalDim::Fixed(0),
+            ArrayIdx::Inst(_, dim) => SignalDim::Fixed(*dim),
+            ArrayIdx::Gen(_, range, name) => SignalDim::Generic(name.to_owned(), range.max as u16),
+        };
+        HwRegInst {group, dim, port, intr_derived, missing_fields, limits}
     }
 }
 
@@ -677,7 +685,7 @@ impl HwRegs {
                     // println!("{:?} ({:?}) : {:?} ", reg.reg_name, group_name, port);
                     hw_regs.insert(
                         group_name.clone(),
-                        HwRegInst::new(reg.group_type.clone(), reg.array.dim_inst(), port, reg.intr_info.0.is_derived(), missing, Vec::new())
+                        HwRegInst::new(reg, port, missing, Vec::new())
                     );
                 }
                 // Check for field limit specific to register instance

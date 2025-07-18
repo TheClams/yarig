@@ -1,5 +1,13 @@
 # Change Log
 
+## [0.14.1] - 2025-07-18
+
+### Fixed
+  - Hardware: Generic was not use in the port declaration
+
+### Added
+  - Documentation on all diferent target output
+
 ## [0.14.0] - 2025-07-17
 
 ### Added
