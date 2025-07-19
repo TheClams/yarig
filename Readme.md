@@ -127,11 +127,13 @@ The exact behavior of each traits can be tweaked with some associated constant.
   - [ ] Support for generics
     - [x] Add description in generic definition
     - [x] Generics for register instance size
-    - [ ] Generics for optional register
+    - [x] Generics for optional register
     - [ ] Generics for optional pages
+    - [ ] Generics for optional fields
     - [ ] Generics for field array: the field size would be defined by the max value (since struct are not parameterizable in SV)
           but the logic for out-of-range field element would be forced to 0
     - [ ] The else part of generic should force unused signal to 0 to avoid lint warning ? (TBC)
+    - [ ] Value used in documentation should be controllable via parameter settings (default to max, like currently)
   - [x] Support reset value as enum name
   - [ ] Support for AXI4 bus
   - [ ] Support pipe option RTL

@@ -431,7 +431,7 @@ impl RifPageInst {
             let mut inst_addr = InstAddr::new(addr_incr);
             for reg in page.instances.iter() {
                 if let Some(ovr) = reg.reg_override.get(&None) {
-                    if !ovr.optional.is_empty() && ovr.optional.eval(&rifs.params)? == 0 {
+                    if !ovr.optional.is_empty() && ovr.optional.eval_with_gen(&rifs.params,&rifs.generics)? == ExprValue::Value(0) {
                         continue;
                     }
                 }
@@ -846,9 +846,11 @@ impl RifRegInst {
                     };
                 }
                 if !ovr.optional.is_empty() {
-                    let optional = ovr.optional.eval(&rifs.params)?;
-                    if optional == 0 {
-                        return Ok(None);
+                    match ovr.optional.eval_with_gen(&rifs.params, &rifs.generics)? {
+                        ExprValue::Value(i) => if i==0 {return Ok(None);}
+                        ExprValue::Range(name, _) => {
+                            r.optional = Some(LogicExpr::eq(name.into(),LogicExpr::ValueU(1, 1)));
+                        }
                     }
                 }
                 if let Some(v) = ovr.visibility {

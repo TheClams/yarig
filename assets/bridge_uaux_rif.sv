@@ -3,11 +3,10 @@
 //  Bridge between RIF Gen interface and ARC User AUX register interface 
 //
 //----------------------------------------------------------------------------*/
-`default_nettype none
 
 module bridge_uaux_rif #(parameter int ADDR_W=16, DATA_W=32) (
   // RIF Interface //
-  rif_if.ctrl                 if_rif ,
+  rif_if.ctrl                if_rif ,
   
   // User AUX Interface //
   input  wire                uaux_en_r  ,            //  Aux enable
@@ -22,7 +21,7 @@ module bridge_uaux_rif #(parameter int ADDR_W=16, DATA_W=32) (
   output wire                uaux_k_wr,              //  need Kernel Wr
   output wire                uaux_unimpl,            //  Invalid Reg
   output wire                uaux_serial_sr,         //  SR group flush
-  output wire                uaux_strict_sr,         //  SR single flus  h
+  output wire                uaux_strict_sr,         //  SR single flush
 
   input  wire                uaux_cmt_phase  ,       //  UAUX Commit status
   input  wire                uaux_cmt_valid  ,       //  UAUX Commit Valid
@@ -73,5 +72,3 @@ module bridge_uaux_rif #(parameter int ADDR_W=16, DATA_W=32) (
   assign uaux_strict_sr = 1'b0;
 
 endmodule : bridge_uaux_rif
-`default_nettype wire
-
