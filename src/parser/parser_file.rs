@@ -180,7 +180,7 @@ impl RifGenSrc {
         let mut line_num = 0;
         let mut desc_lvl = 0;
         let mut last_enum : Option<String> = None;
-        let mut ovr_idx: OverrideIndex = (None, None, None);
+        let mut ovr_idx = OverrideIndex::default();
         let mut sw_clk_defined = (false,false);
         while let Some(Ok(l)) = lines.next() {
             let mut l = l.as_str();
@@ -731,7 +731,7 @@ impl RifGenSrc {
                     self.last_rifmux().add_top_suffix(key, val);
                 }
                 Context::RegInst => {
-                    ovr_idx = (None,None,None); // Clear override index
+                    ovr_idx.clear();
                     let info = reg_inst_properties(&mut l)?;
                     match info {
                         Context::Description => {
@@ -757,7 +757,7 @@ impl RifGenSrc {
                             self.last_reg_inst().set_visibility(&ovr_idx, v);
                         }
                         Context::RegIndex(i) => {
-                            ovr_idx = (Some(i), None, None);
+                            ovr_idx.set_reg_list(i);
                             let info = reg_inst_array_properties(&mut l)?;
                             match info {
                                 Context::Description => {
@@ -795,7 +795,7 @@ impl RifGenSrc {
                                     return Err(RifError::unsupported(info, l));
                                 }
                                 Context::Item(n) => {
-                                    ovr_idx.1 = Some(n);
+                                    ovr_idx.set_field_name(n);
                                     self.parse_inst_field(&mut context_stack, ilvl, &ovr_idx, &mut l)?;
                                 }
                                 _ => {
@@ -804,12 +804,11 @@ impl RifGenSrc {
                             }
                         }
                         Context::Item(n) => {
-                            ovr_idx.1 = Some(n);
+                            ovr_idx.set_field_name(n);
                             self.parse_inst_field(&mut context_stack, ilvl, &ovr_idx, &mut l)?;
                         }
                         Context::FieldIndex((n,i)) => {
-                            ovr_idx.2 = Some(i);
-                            ovr_idx.1 = Some(n);
+                            ovr_idx.set_field_list(n,i);
                             self.parse_inst_field(&mut context_stack, ilvl, &ovr_idx, &mut l)?;
                         }
                         _ => {

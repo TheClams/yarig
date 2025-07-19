@@ -1,6 +1,7 @@
 # RIF syntax
 
 The syntax for the RIF is loosely inspired by YAML: a human readable text file with structure based on indentation.
+It supports comments starting with `//` or `#`.
 
 It is composed of different levels:
  - [Top](#Top) : Top level structure, only one per file, contains settings, parameters and pages
@@ -94,13 +95,11 @@ Parameters value can be overridden by a command-line argument `--parameters <nam
 
 ## Generics
 
-A generic is defined as `- <name> = [<min>:]<default>:<max>`.
+A generic is defined as `- <name> = [<min>:]<default>:<max> "description"`.
 
 This generate an RTL with input parameter.
 The generic value can only be used for register instances array size.
 If no minimum value is provided, it is set to 1.
-
-Note: not supported yet !
 
 
 ## Page
@@ -321,12 +320,25 @@ The _groupName_ is only necessary when there is multiple instances of register b
 It is possible to override some properties at the instance level. Here the syntax to use, indented by one level
  - `description : <bla bla>` : register description, can be multi-line as long as it is indented by another level. Quotation mark on first line are removed.
  - `hw r|w|rw|na` : change the hardware access of a register
- - `field_name.description <bla bla>` : change a field description
- - `field_name.reset = <rst_val>` : change a field reset value
+ - `<field_name>.description <bla bla>` : change a field description
+ - `<field_name>.reset = <rst_val>` : change a field reset value
+ - `<field_name>.disable [= <disable_val>]` : disable a field (i.e. value is fixed). If no value is provided, it default to the reset value.
 
 It is also possible to create an array of register by specifying `- <regname>[<arraysize>]`.
 The address is auto-incremented for each register instance.
 Note that if the register is part of a group, all the register must be instantiated with the same array size.
+
+It is possible to override properties of array element (register or fields). The array index can be a single value (`[0]`), a comma separated list (`[1,5]`) and/or a range (`[0:3]`).
+
+Here is an example with a register array and various override:
+```yaml
+    instances:
+      - version   @ 0x00
+      - cfg[$NUM_PINS] = cfg
+        description:  GPIO[$i]  configuration register
+        [0,5,6].pull_mode.reset = 2
+        [0:6,12:14].clk_en.disable = 0
+```
 
 ## Extra information
 In almost every context (rif, rifmux, register/field definition and instance) it is possible to attach

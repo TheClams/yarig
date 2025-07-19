@@ -1,5 +1,10 @@
 # Change Log
 
+## [0.xx.x] - Unreleased
+
+### Added
+  - Syntax: register/field array index now support comma separated and/or range index (like `[0:3,7]`)
+
 ## [0.14.1] - 2025-07-18
 
 ### Fixed

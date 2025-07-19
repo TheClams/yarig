@@ -275,7 +275,63 @@ impl RegOverride {
 pub type OptArrayIndex = Option<u16>;
 /// Field name of the register to override. None if override is for the register it-self
 pub type FieldOverrideIndex = Option<String>;
-pub type OverrideIndex = (OptArrayIndex, FieldOverrideIndex, OptArrayIndex);
+
+#[derive(Debug, Clone, Default)]
+/// Override index info: List of register indexes, optional field name and field array indexes
+pub struct OverrideIndex(Vec<u16>, FieldOverrideIndex, Vec<u16>);
+
+impl OverrideIndex {
+    pub fn clear(&mut self) {
+        self.0.clear();
+        self.1 = None;
+        self.2.clear();
+    }
+
+    pub fn set_reg_list(&mut self, reg_list: Vec<u16>) {
+        self.0 = reg_list;
+        self.1 = None;
+        self.2.clear();
+    }
+
+    pub fn set_field_name(&mut self, name: String) {
+        self.1 = Some(name);
+    }
+
+    pub fn set_field_list(&mut self, name: String, field_list: Vec<u16>) {
+        self.1 = Some(name);
+        self.2 = field_list;
+    }
+
+    pub fn iter_reg(&self) -> OverrideIndexIter {
+        OverrideIndexIter {data: &self.0, idx: 0}
+    }
+
+    pub fn iter_field(&self) -> OverrideIndexIter {
+        OverrideIndexIter {data: &self.2, idx: 0}
+    }
+}
+
+pub struct OverrideIndexIter<'a> {
+    data: &'a[u16],
+    idx: usize
+}
+
+impl<'a> Iterator for OverrideIndexIter<'a> {
+    type Item = OptArrayIndex;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.data.is_empty() && self.idx == 0 {
+            self.idx += 1;
+            Some(None)
+        } else {
+            let out = self.data.get(self.idx);
+            self.idx += 1;
+            out.map(|d| Some(*d))
+        }
+    }
+
+}
+
 pub type RegOverrideDict = HashMap<OptArrayIndex,RegOverride>;
 
 /// Tuple from parser
@@ -328,77 +384,103 @@ impl RegInst {
     }
 
     pub fn desc_updt(&mut self, idx: &OverrideIndex, desc: &str, is_private: bool) {
-        let reg = self.reg_override.entry(idx.0).or_default();
-        match &idx.1 {
-            Some(name) => {
-                let field = Self::get_field_ovr(reg, name, idx.2);
-                if field.description.is_none() {
-                    field.description = Some(desc.into());
-                } else {
-                    field.description.as_mut().unwrap().updt(desc, is_private);
+        for reg_idx in idx.iter_reg() {
+            let reg = self.reg_override.entry(reg_idx).or_default();
+            match &idx.1 {
+                Some(name) => {
+                    for field_idx in idx.iter_field() {
+                        let field = Self::get_field_ovr(reg, name, field_idx);
+                        if field.description.is_none() {
+                            field.description = Some(desc.into());
+                        } else {
+                            field.description.as_mut().unwrap().updt(desc, is_private);
+                        }
+                    }
                 }
-            }
-            None => {
-                if reg.description.is_none() {
-                    reg.description = Some(desc.into());
-                } else {
-                    reg.description.as_mut().unwrap().updt(desc, is_private);
+                None => {
+                    if reg.description.is_none() {
+                        reg.description = Some(desc.into());
+                    } else {
+                        reg.description.as_mut().unwrap().updt(desc, is_private);
+                    }
                 }
             }
         }
     }
 
     pub fn set_optional(&mut self, idx: &OverrideIndex, v: ExprTokens) {
-        let reg = self.reg_override.entry(idx.0).or_default();
-        match &idx.1 {
-            Some(name) => {
-                let field = Self::get_field_ovr(reg, name, idx.2);
-                field.optional = v;
-            },
-            None => reg.optional = v,
+        for reg_idx in idx.iter_reg() {
+            let reg = self.reg_override.entry(reg_idx).or_default();
+            match &idx.1 {
+                Some(name) => {
+                    for field_idx in idx.iter_field() {
+                        let field = Self::get_field_ovr(reg, name, field_idx);
+                        field.optional = v.clone();
+                    }
+                },
+                None => reg.optional = v.clone(),
+            }
         }
     }
 
     pub fn set_visibility(&mut self, idx: &OverrideIndex, v: Visibility) {
-        let reg = self.reg_override.entry(idx.0).or_default();
-        match &idx.1 {
-            Some(name) => {
-                let field = Self::get_field_ovr(reg, name, idx.2);
-                field.visibility = Some(v);
-            },
-            None => reg.visibility = Some(v),
+        for reg_idx in idx.iter_reg() {
+            let reg = self.reg_override.entry(reg_idx).or_default();
+            match &idx.1 {
+                Some(name) => {
+                    for field_idx in idx.iter_field() {
+                        let field = Self::get_field_ovr(reg, name, field_idx);
+                        field.visibility = Some(v);
+                    }
+                },
+                None => reg.visibility = Some(v),
+            }
         }
     }
 
     pub fn set_hw_acc(&mut self, idx: &OverrideIndex, v: Access) {
-        let reg = self.reg_override.entry(idx.0).or_default();
-        reg.hw_acc = Some(v);
+        for reg_idx in idx.iter_reg() {
+            let reg = self.reg_override.entry(reg_idx).or_default();
+            reg.hw_acc = Some(v);
+        }
     }
 
     pub fn set_reset(&mut self, idx: &OverrideIndex, v: ResetValP) {
-        let reg = self.reg_override.entry(idx.0).or_default();
-        if let Some(name) = &idx.1 {
-            let field = Self::get_field_ovr(reg, name, idx.2);
-            field.reset = ResetValOverride::Reset(v);
+        for reg_idx in idx.iter_reg() {
+            let reg = self.reg_override.entry(reg_idx).or_default();
+            if let Some(name) = &idx.1 {
+                for field_idx in idx.iter_field() {
+                    let field = Self::get_field_ovr(reg, name, field_idx);
+                    field.reset = ResetValOverride::Reset(v.clone());
+                }
+            }
         }
     }
 
     pub fn set_limit(&mut self, idx: &OverrideIndex, limit: LimitP) {
-        let reg = self.reg_override.entry(idx.0).or_default();
-        if let Some(name) = &idx.1 {
-            let field = Self::get_field_ovr(reg, name, idx.2);
-            field.limit = Some(limit);
+        for reg_idx in idx.iter_reg() {
+            let reg = self.reg_override.entry(reg_idx).or_default();
+            if let Some(name) = &idx.1 {
+                for field_idx in idx.iter_field() {
+                    let field = Self::get_field_ovr(reg, name, field_idx);
+                    field.limit = Some(limit.clone());
+                }
+            }
         }
     }
 
     pub fn add_info(&mut self, idx: &OverrideIndex, key_val:(&str, &str)) {
-        let reg = self.reg_override.entry(idx.0).or_default();
-        match &idx.1 {
-            Some(name) => {
-                let field = Self::get_field_ovr(reg, name, idx.2);
-                field.info.insert(key_val.0.to_owned(), key_val.1.to_owned());
-            },
-            None => {panic!("Unsuported info on reg");},
+        for reg_idx in idx.iter_reg() {
+            let reg = self.reg_override.entry(reg_idx).or_default();
+            match &idx.1 {
+                Some(name) => {
+                    for field_idx in idx.iter_field() {
+                        let field = Self::get_field_ovr(reg, name, field_idx);
+                        field.info.insert(key_val.0.to_owned(), key_val.1.to_owned());
+                    }
+                },
+                None => {panic!("Unsuported info on reg");},
+            }
         }
     }
 

@@ -75,9 +75,9 @@ pub enum Context { #[default]
     Item(String),
     PathStart(String),
     /// Register index used to override register array instances default properties
-    RegIndex(u16),
+    RegIndex(Vec<u16>),
     /// Field index used to override field array instance default properties
-    FieldIndex((String,u16)),
+    FieldIndex((String,Vec<u16>)),
 }
 
 impl std::fmt::Display for Context {

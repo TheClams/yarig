@@ -861,7 +861,10 @@ impl RifRegInst {
                 for (k,ovr_f) in ovr.fields.iter() {
                     let Some(reg_field) = r.fields.iter_mut()
                         .find(|field| field.name == *k || field.name() == *k) else {
-                            return Err(format!("Field {k} must exist in {}",r.reg_type));
+                            return Err(
+                                format!("Field {k} must exist in {} | Fields available {:?}",
+                                    r.reg_type, r.fields.iter().map(|f| f.name()).collect::<Vec<String>>() )
+                            );
                         };
                     if let Some(desc) = &ovr_f.description {
                         reg_field.description = desc.clone();//interpolate(idx);

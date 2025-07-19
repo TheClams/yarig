@@ -2,7 +2,7 @@ use crate::rifgen::{AddressKind, Context, InstMode, RegInst};
 
 use winnow::{
     ascii::space0,
-    combinator::{alt, delimited, opt, preceded, terminated},
+    combinator::{alt, delimited, opt, preceded, separated, separated_pair, terminated},
     error::StrContext,
     token::take_until,
     Parser
@@ -80,9 +80,9 @@ pub fn reg_inst_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
             alt((ws("disabled"),ws("disable"))).value(Context::Disabled),
             ws("reserved").value(Context::Reserved),
             ws("hw").value(Context::HwAccess),
-            delimited(ws("["), val_u16, ws("].")).map(Context::RegIndex),
+            terminated(index_list,".").map(Context::RegIndex),
             terminated(identifier, ".").map(|v| Context::Item(v.into())),
-            reg_inst_field_array,
+            terminated(reg_inst_field_array, "."),
         )),
         opt(alt((ws(":"),ws("=")))),
     ).context(StrContext::Label("register instance property"))
@@ -124,13 +124,44 @@ pub fn reg_inst_field_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
 }
 
 pub fn reg_inst_field_array<'a>(input: &mut &'a str) -> Res<'a, Context> {
-    (
-        identifier,
-        delimited(ws("["), val_u16, ws("].")),
-    ).map(|v| Context::FieldIndex((v.0.to_owned(),v.1)))
+    (identifier,index_list)
+    .map(|v| Context::FieldIndex((v.0.to_owned(),v.1)))
     .context(StrContext::Label("register field array"))
     .parse_next(input)
 }
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum InstIndexElement {Value(u16), Range(u16,u16)}
+
+pub fn inst_index_range<'a>(input: &mut &'a str) -> Res<'a, InstIndexElement > {
+    separated_pair(val_u16, ws(alt((":","-",".."))), val_u16)
+    .map(|(low,high)| InstIndexElement::Range(low,high))
+    .parse_next(input)
+}
+
+pub fn inst_index_val<'a>(input: &mut &'a str) -> Res<'a, InstIndexElement > {
+    val_u16
+    .map(InstIndexElement::Value)
+    .parse_next(input)
+}
+
+pub fn index_list<'a>(input: &mut &'a str) -> Res<'a, Vec<u16>> {
+    delimited(
+        ws("["),
+        separated(1.., alt((inst_index_range,inst_index_val)), ws(",")),
+        ws("]")
+    ).map(|list : Vec<InstIndexElement>| {
+        let mut vec : Vec<u16> = Vec::with_capacity(list.len());
+        for e in list.iter() {
+            match e {
+                InstIndexElement::Value(v) => vec.push(*v),
+                InstIndexElement::Range(l,h) => vec.extend(*l..*h+1),
+            }
+        }
+        vec
+    }).parse_next(input)
+}
+
 
 //--------------------------------
 // Tests
@@ -167,6 +198,17 @@ mod tests_parsing {
         assert!(is_auto("anything else").is_err());
     }
 
+    #[test]
+    fn test_index_list() {
+        assert_eq!(index_list(&mut "[1:3]"), Ok(vec![1,2,3]));
+        assert_eq!(index_list(&mut "[1-3]"), Ok(vec![1,2,3]));
+        assert_eq!(index_list(&mut "[1..3]"), Ok(vec![1,2,3]));
+        assert_eq!(index_list(&mut "[3]"), Ok(vec![3]));
+        assert_eq!(index_list(&mut "[3,7]"), Ok(vec![3,7]));
+        assert_eq!(index_list(&mut "[3:5,7,9:11]"), Ok(vec![3,4,5,7,9,10,11]));
+        assert!(index_list(&mut "[3:5,]").is_err());
+    }
+
     // - reg_name[[array_size]] [= regType] [(groupName)] [@ regAddr]
     #[test]
     fn test_reg_inst() {
@@ -195,8 +237,20 @@ mod tests_parsing {
             })
         );
         assert_eq!(
+            reg_inst_properties(&mut "[0].description"),
+            Ok(Context::RegIndex(vec![0]))
+        );
+        assert_eq!(
+            reg_inst_properties(&mut "[0,3].description"),
+            Ok(Context::RegIndex(vec![0,3]))
+        );
+        assert_eq!(
             reg_inst_field_array(&mut "idx[0].reset = 0"),
-            Ok(Context::FieldIndex(("idx".to_owned(),0)))
+            Ok(Context::FieldIndex(("idx".to_owned(),vec![0])))
+        );
+        assert_eq!(
+            reg_inst_field_array(&mut "idx[0,4:6].reset = 0"),
+            Ok(Context::FieldIndex(("idx".to_owned(),vec![0,4,5,6])))
         );
     }
 }
