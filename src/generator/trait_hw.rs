@@ -665,7 +665,7 @@ pub trait GeneratorHw : GeneratorBase {
                 self.write_assign_comb(4, "rif_read_data_l ".into(), format!("{name_flat}__read_data").into());
                 // Address is valid if register is not optional
                 let err_addr = if let Some(opt) = &reg.optional {
-                    LogicExpr::ite(opt.to_owned(), LogicExpr::ValueU(1, 1), LogicExpr::ValueU(0, 1))
+                    LogicExpr::ite(opt.to_owned(), LogicExpr::ValueU(0, 1), LogicExpr::ValueU(1, 1))
                 } else {
                     LogicExpr::ValueU(0, 1)
                 };
