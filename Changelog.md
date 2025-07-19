@@ -5,6 +5,7 @@
 ### Added
   - Syntax: register/field array index now support comma separated and/or range index (like `[0:3,7]`)
   - Generics: support generics for optional register instance (not inside expression)
+  - Doc: if a field in an array is disabled for some indexes, there is now added description about it.
 
 ### Fixed
   - Generics: the address error signal was inverted

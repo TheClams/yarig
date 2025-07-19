@@ -148,7 +148,8 @@ The exact behavior of each traits can be tweaked with some associated constant.
   - [x] Add syntax to support override on a range/list of register/field array. Syntax could be [1:5], or [1,3,7] and ideally support a mix like [0:5,8,11:13,15]
   - [ ] For field array with register array definition, support case where total size is not reg_dim * field_dim. First idea would be to use the field reset initialization: if it's different from 1 and field_dim, then consider this is the total size
   - [ ] SV Generator: use SV interface for non-default case with option to control the interface type name
-  - [ ] Add some information in generated documentation for disabled field inside an array
+  - [x] Add some information in generated documentation for disabled field inside an array
+  - [ ] Hardware generator: support option to add some constants in the package such as address, field reset/position
 
 ## Documentation
   - [x] Config file: full description

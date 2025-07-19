@@ -1,7 +1,7 @@
 use std::ops::Deref;
 
 use crate::{
-    comp::comp_inst::{val_str, Comp, CompInst, RifInst, RifmuxGroupInst},
+    comp::comp_inst::{val_str, Comp, CompInst, RifInst, RifRegInst, RifmuxGroupInst},
     parser::remove_rif,
     rifgen::{EnumDef, FieldSwKind, ResetVal}
 };
@@ -228,7 +228,7 @@ pub trait GeneratorDoc : GeneratorBase {
         self.add_reg_detail(rif, idx, base_addr)
     }
 
-    /// Add register summary and build disctionnary of instance (TBC if still needed)
+    /// Add register summary
     fn add_reg_summary(&mut self, rif: &RifInst, info: &[RifInstInfo]) {
         let rif_name = remove_rif(&rif.type_name);
         let addr_w = ((rif.addr_width+3)>>2) as usize;
@@ -408,6 +408,7 @@ pub trait GeneratorDoc : GeneratorBase {
                     self.write_table_row_footer();
                     self.write_table_footer(TableKind::Layout);
                 }
+                let reg_insts : Vec<&RifRegInst> =  instances.iter().filter_map(|idx| page.regs.get(*idx as usize)).collect();
                 // Fields Details
                 // No details for derived interrupt register except if there is no layout summarizing the fields
                 let is_intr_derived = reg.intr_info.0.is_derived();
@@ -442,8 +443,7 @@ pub trait GeneratorDoc : GeneratorBase {
                         self.write_table_cell((TableKind::Field, CellKind::Access), 0, Self::access_str(&f.sw_kind), "", None);
                         // Build a reset string:
                         // if multiple value display the first two, and an ellipsis if at least a third value exists
-                        let resets : Vec<ResetVal> = instances.iter().filter_map(|idx| {
-                                let reg_inst = page.regs.get(*idx as usize).unwrap(); // Case were this does not exist already checked before
+                        let resets : Vec<ResetVal> = reg_insts.iter().filter_map(|reg_inst| {
                                 if let Some(f_inst) = reg_inst.find_field(&f.name, f.array.idx()) {
                                     Some(f_inst.reset.clone())
                                 } else {
@@ -498,6 +498,14 @@ pub trait GeneratorDoc : GeneratorBase {
                                 desc.push_str(&self.sanitize("\n"));
                             }
                             desc.push_str(&self.enum_def_desc(enum_def));
+                        }
+                        // Check for partial disable in an array
+                        let dis : Vec<u16> = reg_insts.iter().filter_map(|reg_inst| {
+                            let f = reg_inst.find_field(&f.name, f.array.idx()).unwrap();
+                            if f.is_disabled() {Some(reg_inst.array.idx())} else {None}
+                        }).collect();
+                        if !dis.is_empty() && reg_insts.len() > 1 && dis.len() != reg_insts.len() {
+                            desc.push_str(&self.sanitize(&format!(" \nNote: Disabled in register {dis:?}")));
                         }
                         self.write_table_cell((TableKind::Field, CellKind::Desc), 0, &desc, "", None);
                         self.write_table_row_footer();
