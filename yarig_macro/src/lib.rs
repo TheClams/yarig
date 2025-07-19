@@ -16,6 +16,10 @@ pub fn add_gen_core(attr: TokenStream, item: TokenStream) -> TokenStream {
     // Get the generics to preserve them in the output
     let generics = &input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+    // Get attribute and visibility to preserve it
+    let attrs = &input.attrs;
+    let vis = &input.vis;
     
     // Define the GeneratorBase impl that will be added
     let ext = ext.value();
@@ -43,7 +47,8 @@ pub fn add_gen_core(attr: TokenStream, item: TokenStream) -> TokenStream {
                     
                     // Create the new struct with the additional field and GeneratorBase impl
                     let expanded = quote! {
-                        pub struct #name #impl_generics #where_clause {
+                        #(#attrs)*
+                        #vis struct #name #impl_generics #where_clause {
                             pub core: GeneratorCore,
                             #fields
                         }
@@ -55,7 +60,8 @@ pub fn add_gen_core(attr: TokenStream, item: TokenStream) -> TokenStream {
                 // Handle unit structs
                 Fields::Unit => {
                     let expanded = quote! {
-                        pub struct #name #impl_generics #where_clause {
+                        #(#attrs)*
+                        #vis struct #name #impl_generics #where_clause {
                             pub core: GeneratorCore
                         }
                         

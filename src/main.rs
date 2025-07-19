@@ -88,6 +88,12 @@ struct RifGenArgs{
     /// Name of macro to create RAL register block
     #[arg(long)]
     ral_macro: Option<String>,
+    /// Add constant in RTL package for registers (address/reset)
+    #[arg(long, action)]
+    rtl_const_reg: bool,
+    /// Add constant in RTL package for fields (mask/position/reset)
+    #[arg(long, action)]
+    rtl_const_field: bool,
 }
 
 /// Parse a single key-value pair
@@ -143,6 +149,8 @@ fn main() {
     if args.casing.is_some() {cfg.casing = args.casing};
     if args.interface.is_some() {cfg.interface = args.interface};
     if args.suffix_rtl_only {cfg.suffix_rtl_only = true;}
+    if args.rtl_const_reg {cfg.rtl.const_reg = Some(true);}
+    if args.rtl_const_field {cfg.rtl.const_field = Some(true);}
     if args.keyword_rename {cfg.keywords.error = false;}
     if args.targets.contains(&RifGenTarget::Sv) {cfg.keywords.sv = true;}
     if args.targets.contains(&RifGenTarget::Vhdl) {cfg.keywords.vhdl = true;}

@@ -1,11 +1,10 @@
 use std::collections::HashMap;
 
 use crate::{
-    comp::{
+    cfg::CfgRtl, comp::{
         comp_inst::{RifInst, RifmuxInst},
         hw_info::{PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalDim, SignalInfo, SignalKind}
-    },
-    rifgen::{order_dict::OrderDict, CastInfo, EnumEntry, ExprId, GenericRange, Interface, LogicExpr, ResetDef}
+    }, rifgen::{order_dict::OrderDict, CastInfo, EnumEntry, ExprId, GenericRange, Interface, LogicExpr, ResetDef}
 };
 
 use super::{
@@ -15,7 +14,14 @@ use super::{
 
 use yarig_macro::add_gen_core;
 #[add_gen_core("vhd")]
+#[allow(dead_code)]
 pub struct GeneratorVhdl {
+    /// Number of pipe level for register access (default 1 on the read value)
+    nb_pipe: u8,
+    /// Generate constant for register address in the package
+    const_reg: bool,
+    /// Generate constant for field reset/position/width
+    const_field: bool,
     /// Current enumerated type width
     enum_width : u8,
     /// True when current module instance is a bridge
@@ -34,10 +40,18 @@ enum LogicExprKind {Basic, Bool, MathU, MathS}
 
 impl GeneratorVhdl {
 
-    pub fn new(setting: GeneratorBaseSetting) -> Self {
+    pub fn new(setting: GeneratorBaseSetting, extra: CfgRtl) -> Self {
+        let mut core = GeneratorCore::new(4,setting);
+        // Override gen_inc if defined in the python settings
+        if let Some(gen_inc) = extra.gen_inc {
+            core.setting.gen_inc = gen_inc;
+        }
         GeneratorVhdl {
-            core: GeneratorCore::new(4,setting),
+            core,
             enum_width: 0,
+            nb_pipe: extra.nb_pipe.unwrap_or(1),
+            const_reg: extra.const_reg.unwrap_or(false),
+            const_field: extra.const_field.unwrap_or(false),
             is_bridge: false,
             generics: HashMap::new(),
             outputs: OrderDict::new(),
@@ -285,10 +299,15 @@ impl GeneratorVhdl {
 }
 
 impl GeneratorHw for GeneratorVhdl {
-    const HAS_ADDR_CONST    : bool = true;
-    const HAS_FIELD_CONST   : bool = true;
+
     const SUPPORT_INTF      : bool = false;
     const SUPPORT_IMPL_BIND : bool = false;
+
+    /// Flag when register constants (address/reset) should be generated
+    fn has_const_reg(&self) -> bool {self.const_reg}
+
+    /// Flag when field constants (mask, lsb, msb, reset) should be generated
+    fn has_const_field(&self) -> bool {self.const_field}
 
     /// Write generic header for a file
     fn write_file_header(&mut self) {

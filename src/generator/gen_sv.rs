@@ -1,6 +1,5 @@
 use crate::{
-    comp::hw_info::{PortDir, PortInfo, SignalDecl, SignalDef, SignalInfo, SignalKind},
-    rifgen::{CastInfo, EnumEntry, ExprId, GenericRange, LogicExpr, ResetDef}
+    cfg::CfgRtl, comp::hw_info::{PortDir, PortInfo, SignalDecl, SignalDef, SignalInfo, SignalKind}, rifgen::{CastInfo, EnumEntry, ExprId, GenericRange, LogicExpr, ResetDef}
 };
 
 use super::{
@@ -10,16 +9,31 @@ use super::{
 
 use yarig_macro::add_gen_core;
 #[add_gen_core("sv")]
+#[allow(dead_code)]
 pub struct GeneratorSv {
+    /// Number of pipe level for register access (default 1 on the read value)
+    nb_pipe: u8,
+    /// Generate constant for register address in the package
+    const_reg: bool,
+    /// Generate constant for field reset/position/width
+    const_field: bool,
     /// True when current module instance is a bridge
     is_bridge : bool,
 }
 
 impl GeneratorSv {
 
-    pub fn new(setting: GeneratorBaseSetting) -> Self {
+    pub fn new(setting: GeneratorBaseSetting, extra: CfgRtl) -> Self {
+        let mut core = GeneratorCore::new(0,setting);
+        // Override gen_inc if defined in the python settings
+        if let Some(gen_inc) = extra.gen_inc {
+            core.setting.gen_inc = gen_inc;
+        }
         GeneratorSv {
-            core: GeneratorCore::new(0,setting),
+            core,
+            nb_pipe: extra.nb_pipe.unwrap_or(1),
+            const_reg: extra.const_reg.unwrap_or(false),
+            const_field: extra.const_field.unwrap_or(false),
             is_bridge: false
         }
     }
@@ -206,6 +220,12 @@ impl GeneratorSv {
 }
 
 impl GeneratorHw for GeneratorSv {
+
+    /// Flag when register constants (address/reset) should be generated
+    fn has_const_reg(&self) -> bool {self.const_reg}
+
+    /// Flag when field constants (mask, lsb, msb, reset) should be generated
+    fn has_const_field(&self) -> bool {self.const_field}
 
     /// Write generic header for a file
     fn write_file_header(&mut self) {

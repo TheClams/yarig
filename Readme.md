@@ -149,7 +149,7 @@ The exact behavior of each traits can be tweaked with some associated constant.
   - [ ] For field array with register array definition, support case where total size is not reg_dim * field_dim. First idea would be to use the field reset initialization: if it's different from 1 and field_dim, then consider this is the total size
   - [ ] SV Generator: use SV interface for non-default case with option to control the interface type name
   - [x] Add some information in generated documentation for disabled field inside an array
-  - [ ] Hardware generator: support option to add some constants in the package such as address, field reset/position
+  - [x] Hardware generator: support option to add some constants in the package such as address, field reset/position
 
 ## Documentation
   - [x] Config file: full description

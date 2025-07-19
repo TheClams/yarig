@@ -190,6 +190,7 @@ local = ["module1"]
 ```toml
 [rtl]
 # Optional: Number of pipeline levels for register access (default: 1)
+# Currently ignored
 nb_pipe = 2
 
 # Optional: Override global gen_inc for this target
@@ -197,6 +198,13 @@ gen_inc = ["*"]
 
 # Optional: Override global local for this target
 local = ["module1"]
+
+# Generate constant for register address in the package
+const_addr = true
+
+# Generate constant for field reset/position/width
+const_field = true
+
 ```
 
 ### Register Abstraction Layer (RAL)

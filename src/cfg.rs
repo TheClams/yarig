@@ -171,11 +171,15 @@ pub struct CfgC {
 #[derive(Deserialize, Debug, Clone, Default)]
 pub struct CfgRtl {
     /// Number of pipe level for register access (default 1 on the read value)
-    pub nb_pipe: u8,
+    pub nb_pipe: Option<u8>,
     /// List of included reference to generate (use ["*"] for all)
     pub gen_inc: Option<Vec<String>>,
     /// List of included reference which must be generated locally (use ["*"] to match all component in the gen_inc definition)
     pub local: Option<Vec<String>>,
+    /// Generate constant for register address in the package
+    pub const_reg: Option<bool>,
+    /// Generate constant for field reset/position/width
+    pub const_field: Option<bool>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -396,11 +400,7 @@ impl YarigCfg {
                     if self.suffix_rtl_only {
                         rif_obj.set_suffixes(&self.suffixes);
                     }
-                    // Override gen_inc if defined in the python settings
-                    if let Some(gen_inc) = &self.rtl.gen_inc {
-                        setting.gen_inc = gen_inc.clone();
-                    }
-                    let mut g = GeneratorSv::new(setting);
+                    let mut g = GeneratorSv::new(setting, self.rtl.clone());
                     g.gen_all(&rif_obj).map_err(|e| format!("SystemVerilog generation failed: {e}"))?;
                     if self.suffix_rtl_only {
                         rif_obj.set_suffixes(&no_suffixes);
@@ -410,11 +410,7 @@ impl YarigCfg {
                     if self.suffix_rtl_only {
                         rif_obj.set_suffixes(&self.suffixes);
                     }
-                    // Override gen_inc if defined in the python settings
-                    if let Some(gen_inc) = &self.rtl.gen_inc {
-                        setting.gen_inc = gen_inc.clone();
-                    }
-                    let mut g = GeneratorVhdl::new(setting);
+                    let mut g = GeneratorVhdl::new(setting, self.rtl.clone());
                     g.gen_all(&rif_obj).map_err(|e| format!("VHDL generation failed: {e}"))?;
                     if self.suffix_rtl_only {
                         rif_obj.set_suffixes(&no_suffixes);

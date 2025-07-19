@@ -1,11 +1,13 @@
 # Change Log
 
-## [0.14.2] - Unreleased
+## [0.15.0] - Unreleased
 
 ### Added
   - Syntax: register/field array index now support comma separated and/or range index (like `[0:3,7]`)
-  - Generics: support generics for optional register instance (not inside expression)
-  - Doc: if a field in an array is disabled for some indexes, there is now added description about it.
+  - Generics: support generics for optional register instance
+  - Doc Trait: if a field in an array is disabled for some indexes, there is now added description about it.
+  - Hardware Trait: add option const_reg and const_field to add some constants in the package
+    such as address, field reset/position
 
 ### Fixed
   - Generics: the address error signal was inverted

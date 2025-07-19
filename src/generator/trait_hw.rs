@@ -19,11 +19,15 @@ use super::{
 #[allow(unused_variables)]
 pub trait GeneratorHw : GeneratorBase {
 
-    const HAS_ADDR_CONST    : bool = false;
-    const HAS_FIELD_CONST   : bool = false;
     const SUPPORT_INTF      : bool = true;
     const SUPPORT_IMPL_BIND : bool = true;
     const IF_RIF_FIELDS: [&str; 11] = ["addr", "en", "rd_wrn", "wr_data", "rd_data", "done", "err_addr", "err_access", "done_next", "err_addr_next", "err_access_next"];
+
+    /// Flag when register constants (address/reset) should be generated
+    fn has_const_reg(&self) -> bool {false}
+
+    /// Flag when field constants (mask, lsb, msb, reset) should be generated
+    fn has_const_field(&self) -> bool {false}
 
     /// Write generic header for a file
     fn write_file_header(&mut self) {}
@@ -245,6 +249,45 @@ pub trait GeneratorHw : GeneratorBase {
                 }
                 self.write_struct_footer(&type_name);
             }
+        }
+
+        let basename_uc = rif.type_name.to_uppercase();
+        // Create register constant if enabled
+        if self.has_const_reg() {
+            for reg in rif.iter_reg() {
+                let regname = reg.name().to_uppercase();
+                let decl = SignalDef::new_bus(format!("C_ADDR_{basename_uc}_{regname}"), rif.addr_width.into(), false);
+                self.write_const(&decl.into(), LogicExpr::ValueU(reg.addr.into(), rif.addr_width.into()));
+                let decl = SignalDef::new_bus(format!("C_RESET_{basename_uc}_{regname}"), rif.data_width.into(), false);
+                self.write_const(&decl.into(), LogicExpr::ValueU(reg.reset, rif.data_width.into()));
+            }
+            self.write("\n");
+        }
+
+        if self.has_const_field() {
+            for reg in rif.iter_reg() {
+                let base = format!("{basename_uc}_{}", reg.name().to_uppercase());
+                for f in reg.fields.iter() {
+                    let fieldname = f.name_flat().to_uppercase();
+                    let decl  = SignalDef::new_bus(format!("C_MSK_{base}_{fieldname}  "), rif.data_width.into(), false);
+                    let value = LogicExpr::ValueU((1_u128<<f.width).wrapping_sub(1), rif.data_width.into());
+                    self.write_const(&decl.into(), value);
+                    let decl  = SignalDef::new_int(format!("C_IL_{base}_{fieldname}   "));
+                    let value = LogicExpr::ValueU(f.lsb.into(), 8);
+                    self.write_const(&decl.into(), value);
+                    let decl  = SignalDef::new_int(format!("C_IH_{base}_{fieldname}   "));
+                    let value = LogicExpr::ValueU(f.msb().into(), 8);
+                    self.write_const(&decl.into(), value);
+                    let decl  = SignalDef::new_bus(format!("C_RESET_{base}_{fieldname}"), f.width.into(), f.is_signed());
+                    let value = if f.is_signed() {
+                        LogicExpr::ValueI(f.reset() as i128, f.width.into())
+                    } else {
+                        LogicExpr::ValueU(f.reset(), f.width.into())
+                    };
+                    self.write_const(&decl.into(), value);
+                }
+            }
+            self.write("\n");
         }
 
         // Add end of package and save file

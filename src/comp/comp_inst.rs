@@ -393,6 +393,11 @@ impl RifInst {
         }
     }
 
+    pub fn iter_reg(&self) -> impl Iterator<Item=&RifRegInst> {
+        self.pages.iter()
+            .filter(|p| p.external.is_none())
+            .flat_map(|p| p.regs.iter())
+    }
 
 }
 
