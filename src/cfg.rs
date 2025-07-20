@@ -2,12 +2,9 @@ use serde_derive::Deserialize;
 use std::{collections::HashMap, fs, path::PathBuf, str::FromStr};
 use toml;
 use crate::{
-    comp::comp_inst::Comp,
-    generator::{
+    cli::RifGenArgs, comp::comp_inst::Comp, generator::{
         casing::Casing, gen_adoc::GeneratorAdoc, gen_c::GeneratorC, gen_common::GeneratorBaseSetting, gen_html::GeneratorHtml, gen_ipxact::GeneratorIpXact, gen_json::GeneratorJson, gen_latex::GeneratorLatex, gen_mif::GeneratorMif, gen_py::{GeneratorPy, PyVersion}, gen_ral::GeneratorRal, gen_sv::GeneratorSv, gen_svd::GeneratorSvd, gen_vhdl::GeneratorVhdl, trait_doc::GeneratorDoc, trait_hw::GeneratorHw, trait_sw::GeneratorSw
-    },
-    parser::{parser_expr::ParamValues, RifGenSrc, RsvdKeywordSel},
-    rifgen::{Interface, SuffixInfo}
+    }, parser::{parser_expr::ParamValues, RifGenSrc, RsvdKeywordSel}, rifgen::{Interface, SuffixInfo}
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -277,6 +274,65 @@ impl YarigCfg {
             }
         }
         Ok(cfg)
+    }
+
+    pub fn from_cli(args: RifGenArgs) -> Result<YarigCfg,String> {
+        let mut cfg = if let Some(cfg_path) = &args.cfg {
+            match YarigCfg::from_file(cfg_path) {
+                Ok(cfg) => cfg,
+                Err(msg) => return Err(msg),
+            }
+        } else {
+                YarigCfg::default()
+        };
+        cfg.update_with_cli(args);
+        Ok(cfg)
+    }
+
+    pub fn update_with_cli(&mut self, args: RifGenArgs) {
+        if let Some(fname) = args.rif {self.filename = fname.to_owned()};
+        if !args.include.is_empty() {self.include = args.include.clone()};
+        if !args.gen_inc.is_empty() {self.gen_inc = args.gen_inc.clone()};
+        if !args.targets.is_empty() {self.targets = args.targets.to_owned()};
+        if args.public {self.public = true};
+        // Clear target if check is enabled and override target if at least one is defined on the command-line
+        if args.check {self.targets.clear();}
+        else if !args.targets.is_empty() {self.targets = args.targets.to_owned()};
+        //
+        if !args.parameters.is_empty() {self.parameters.extend(args.parameters)};
+        if let Some(suffix) = args.suffix {self.suffixes.insert("".to_owned(), suffix);};
+        if args.py_version.is_some() {self.py.version = args.py_version};
+        if args.casing.is_some() {self.casing = args.casing};
+        if args.interface.is_some() {self.interface = args.interface};
+        if args.suffix_rtl_only {self.suffix_rtl_only = true;}
+        if args.rtl_const_reg {self.rtl.const_reg = Some(true);}
+        if args.rtl_const_field {self.rtl.const_field = Some(true);}
+        if args.keyword_rename {self.keywords.error = false;}
+        if args.targets.contains(&RifGenTarget::Sv) {self.keywords.sv = true;}
+        if args.targets.contains(&RifGenTarget::Vhdl) {self.keywords.vhdl = true;}
+
+        for t in args.split.iter() {
+            match t {
+                RifGenTarget::Html => self.html.split = Some(true),
+                RifGenTarget::Adoc => self.adoc.split = Some(true),
+                RifGenTarget::Mif  => self.mif.split  = Some(true),
+                _ => eprintln!("Split target {t} not supported ! Expecting html, adoc, mif."),
+            }
+        }
+
+        //
+        let outputs = [
+            ("c"  , args.output_c),
+            ("py" , args.output_py),
+            ("doc", args.output_doc),
+            ("json", args.output_json),
+            ("rtl", args.output_rtl),
+            ("sim", args.output_sim)];
+        for (k,v) in outputs.iter() {
+            if let Some(path) = v {
+                self.outputs.insert(k.to_string(), path.to_owned());
+            }
+        }
     }
 
     /// Retrieve output path definition from the configuration given a target

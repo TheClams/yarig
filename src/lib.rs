@@ -4,3 +4,4 @@ pub mod rifgen;
 pub mod comp;
 pub mod generator;
 pub mod cfg;
+pub mod cli;
