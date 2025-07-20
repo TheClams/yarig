@@ -19,8 +19,11 @@ use super::{
 #[allow(unused_variables)]
 pub trait GeneratorHw : GeneratorBase {
 
+    /// Support SystemVerilog like interfaces
     const SUPPORT_INTF      : bool = true;
+    /// Support implicit binding
     const SUPPORT_IMPL_BIND : bool = true;
+
     const IF_RIF_FIELDS: [&str; 11] = ["addr", "en", "rd_wrn", "wr_data", "rd_data", "done", "err_addr", "err_access", "done_next", "err_addr_next", "err_access_next"];
 
     /// Flag when register constants (address/reset) should be generated

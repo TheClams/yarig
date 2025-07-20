@@ -298,7 +298,7 @@ impl GeneratorCore {
         }
     }
 
-    /// Write srting on the main text
+    /// Write string on the main text
     pub fn write(&mut self, string: &str) {
         self.txt.push_str(string);
     }

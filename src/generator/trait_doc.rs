@@ -9,7 +9,6 @@ use crate::{
 use super::gen_common::{GeneratorBase, InstDict, RifInstInfo, RifList};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[allow(dead_code)]
 pub enum TableKind {
     Rifmux, RifInst, Page, RegInst, Layout, Field, FieldRsvd
 }
@@ -35,7 +34,6 @@ impl CellKind {
         }
     }
 
-    #[allow(dead_code)]
     pub fn is_type(&self) -> bool {
         matches!(self, CellKind::RifType | CellKind::RegType)
     }
