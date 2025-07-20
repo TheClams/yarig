@@ -1,10 +1,10 @@
 use crate::rifgen::{Context, Interface, ResetDef, GenericRange};
 
 use winnow::{
-  ascii::Caseless, combinator::{alt, opt, preceded, repeat, separated_pair, terminated}, error::StrContext, Parser
+  ascii::Caseless, combinator::{alt, opt, preceded, separated_pair, terminated}, error::StrContext, Parser
 };
 
-use super::{identifier, item_cntxt, quoted_string, val_u8, ws, Res, ResF};
+use super::{identifier, item_cntxt, parse_binary, parse_range, quoted_string, ws, Res, ResF};
 
 //--------------------------------
 // Top Level
@@ -86,11 +86,13 @@ pub fn reset_def(input: &str) -> ResF<ResetDef> {
 }
 
 pub fn generic_range<'a>(input: &mut &'a str) -> Res<'a, GenericRange> {
-  let values = repeat(1..=3, terminated(ws(val_u8), opt(":")))
-    .context(StrContext::Label("range"))
+  let values = alt((
+      parse_range,
+      parse_binary.map(|v| vec![v]),
+    )).context(StrContext::Label("generic range"))
     .parse_next(input)?;
   let desc = opt(quoted_string)
-    .context(StrContext::Label("description"))
+    .context(StrContext::Label("generic description"))
     .parse_next(input)?;
   Ok((values, desc).into())
 }
@@ -158,9 +160,11 @@ mod tests_parsing {
 
   #[test]
   fn test_generic_range() {
+    assert_eq!(generic_range(&mut "false"), Ok(GenericRange {min:0, max:1, default:0, desc: None}));
+    assert_eq!(generic_range(&mut "true"), Ok(GenericRange {min:0, max:1, default:1, desc: None}));
     assert_eq!(generic_range(&mut "8"), Ok(GenericRange {min:1, max:8, default:8, desc: None}));
     assert_eq!(generic_range(&mut "4:5 \"Range 4 to 5\""), Ok(GenericRange {min:1, max:5, default:4, desc: Some("Range 4 to 5".to_owned())}));
-    assert_eq!(generic_range(&mut "3:7:16"), Ok(GenericRange {min:3, max:16, default:7, desc: None}));
+    assert_eq!(generic_range(&mut "1:7:16"), Ok(GenericRange {min:1, max:16, default:7, desc: None}));
   }
 
 }

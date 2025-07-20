@@ -102,14 +102,26 @@ pub struct GenericRange {
     pub desc: Option<String>,
 }
 
+impl GenericRange {
+    pub fn binary(init: u8, desc: Option<String>) -> Self {
+        GenericRange {min:0, default:init, max:1, desc}
+    }
+}
+
 impl From<(Vec<u8>, Option<&str>)> for GenericRange {
     fn from(v: (Vec<u8>, Option<&str>)) -> GenericRange {
         let desc =  v.1.map(|d| d.to_owned());
         match v.0.len() {
             // Empty vec ? just set everything to 1, should never happen
-            0 => GenericRange{min:1, default:1, max:1, desc},
+            0 => GenericRange::binary(0, desc),
             // Only one value => default==max
-            1 => GenericRange{min:1, default:v.0[0], max:v.0[0], desc},
+            1 => {
+                if v.0[0] < 2 {
+                    GenericRange::binary(v.0[0], desc)
+                } else {
+                    GenericRange{min:1, default:v.0[0], max:v.0[0], desc}
+                }
+            }
             // Two values => default and max
             2 => GenericRange{min:1, default:v.0[0], max:v.0[1], desc},
             // 3 or more ? min, default and max

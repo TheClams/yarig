@@ -150,6 +150,23 @@ pub fn parse_bool<'a>(input: &mut &'a str) -> Res<'a, bool> {
     .parse_next(input)
 }
 
+pub fn parse_binary<'a>(input: &mut &'a str) -> Res<'a, u8> {
+    alt((
+        ws(Caseless("true")).value(1),
+        ws(Caseless("false")).value(0),
+        ws("1").value(1),
+        ws("0").value(0),
+    ))
+    .context(StrContext::Label("binary"))
+    .parse_next(input)
+}
+
+pub fn parse_range<'a>(input: &mut &'a str) -> Res<'a, Vec<u8>> {
+    repeat(1..=3, terminated(ws(val_u8), opt(":")))
+    .context(StrContext::Label("range"))
+    .parse_next(input)
+}
+
 pub fn bool_or_default(input: &str, def: bool) -> ResF<bool> {
     alt((
         parse_bool,
