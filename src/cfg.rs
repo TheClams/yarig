@@ -278,10 +278,7 @@ impl YarigCfg {
 
     pub fn from_cli(args: RifGenArgs) -> Result<YarigCfg,String> {
         let mut cfg = if let Some(cfg_path) = &args.cfg {
-            match YarigCfg::from_file(cfg_path) {
-                Ok(cfg) => cfg,
-                Err(msg) => return Err(msg),
-            }
+            YarigCfg::from_file(cfg_path)?
         } else {
                 YarigCfg::default()
         };

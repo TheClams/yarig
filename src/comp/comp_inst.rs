@@ -623,8 +623,15 @@ impl ArrayIdx {
         }
     }
 
+    /// Return the array dimension only if instance, otherwise return 0
     pub fn dim_inst(&self) -> u16 {
         if self.is_def() {0}
+        else {self.dim()}
+    }
+
+    /// Return the array dimension only if definition, otherwise return 0
+    pub fn dim_def(&self) -> u16 {
+        if self.is_inst() {0}
         else {self.dim()}
     }
 
@@ -795,8 +802,9 @@ impl RifRegInst {
                         if r.array.dim()>0 && r.array.is_def() {Some(ArrayIdx::Def(i,offset))}
                         else {Some(ArrayIdx::Inst(i,offset))}
                     } else { None };
-                let fi = RifFieldInst::new(f, intr_kind, &mut next_lsb, rifs, arr_idx)?;
-                r.fields.push(fi);
+                if let Some(fi) = RifFieldInst::new(f, intr_kind, &mut next_lsb, rifs, arr_idx)? {
+                    r.fields.push(fi);
+                }
             }
         }
         // Check overlapping fields
@@ -1060,7 +1068,7 @@ impl RifFieldInst {
         next_lsb: &mut u8,
         rifs: &RifsInfo,
         array: Option<ArrayIdx>,
-    ) -> Result<Self,String> {
+    ) -> Result<Option<Self>,String> {
         let params = &rifs.params;
         let (mut lsb, width) = match &field.pos {
             FieldPos::MsbLsb((m, l)) => (l.value(params), m.value(params) - l.value(params) + 1),
@@ -1077,8 +1085,7 @@ impl RifFieldInst {
         }
         let mut reset = field.reset.first()
             .unwrap_or_default()
-            .compile(field.signed, field.nb_frac, params, enum_def)
-            .unwrap_or_default(); // TODO: handle error
+            .compile(field.signed, field.nb_frac, params, enum_def)?;
         let idx : ArrayIdx;
         // Create format string for description
         let s = if field.signed {'s'} else {'u'};
@@ -1094,14 +1101,21 @@ impl RifFieldInst {
             lsb += array.idx() as u8 * incr;
 
             // Get the reset value if enough value are provided
+            // If the reset size is the same as a register field array size, then repeat reset modulo the field array size
+            // If the reset size is bigger then a register field array size, and the index is out-of-range, then skip field instance
             // (otherwise simply repeat the one at indice 0)
-            let rst_idx = array.idx() as usize
+            let mut rst_idx = array.idx() as usize
                         + if array.is_def() {array.dim() as usize} else {0};
+            let field_array_dim = field.array.value(&rifs.params) as usize;
+            if rst_idx > field.reset.len() && field.reset.len() == field_array_dim {
+                rst_idx %= field_array_dim;
+            }
             if field.reset.len() > rst_idx {
                 reset = field.reset.get(rst_idx)
                     .unwrap_or_default()
-                    .compile(field.signed, field.nb_frac, params, enum_def)
-                    .unwrap_or_default();
+                    .compile(field.signed, field.nb_frac, params, enum_def)?;
+            } else if field.reset.len() > field_array_dim {
+                return Ok(None);
             }
             let i = array.dim() + array.idx();
             idx = ArrayIdx::Def(i,field.array.value(params).into());
@@ -1135,7 +1149,7 @@ impl RifFieldInst {
         }
 
         *next_lsb += width;
-        Ok(RifFieldInst {
+        Ok(Some(RifFieldInst {
             name: field.name.to_owned(),
             base_description: desc.no_dollar(),
             description: desc,
@@ -1151,7 +1165,7 @@ impl RifFieldInst {
             lsb,
             width,
             array: idx,
-        })
+        }))
     }
 
     /// Check if field position overlap with another field

@@ -266,7 +266,7 @@ The optional _reprValue_ can be an integer or a float: it allows to provide the 
 For example:
 ```yaml
   - decoder: "Viterbi decoder control register"
-   - coding_rate = 0    4:2   rw "Coding rate selection"
+    - coding_rate = 0    4:2   rw "Coding rate selection"
       enum: e_cr
         - CR_1_2    = 0 "Code rate 1/2"
         - CR_2_3    = 1 "Code rate 2/3"
@@ -274,33 +274,36 @@ For example:
 ```
 
 A field can also be declared as array by simply giving the array size with the fieldname: `- <fieldName>[<arraySize>] ...`:
- - The reset value can be given either as a single value when all element have teh same value or as an array of value enclosed in curly bracket (e.g. `- arr[5] = {1,2,3,4,5}`).
- - The position of the field corresponds to the position of the field at index 0.
- - The others are auto-instantiated, with a position that increment by the size of the fields by default. To change the increment, add the property `arrayPosIncr <value>`.
- - It is also possible to have an array that extends on more than one register: this works like the partial field, with the property `arrayPartial <offset>`. The registers must belong to the same register group.
-   Another possibility is to declared the register itself as an array: the total field array size will be given the register array size multiply by the field array size. In this case all fields of the register must be arrays
- - In the description, the field index can be referenced by `$i` or even in a formula such as `${2*i+1}`.
+  - The reset value can be given either as a single value when all element have the same value or as an array of value enclosed in curly bracket (e.g. `- arr[5] = {1,2,3,4,5}`).
+  - The position of the field corresponds to the position of the field at index 0.
+  - The others are auto-instantiated, with a position that increment by the size of the fields by default. To change the increment, add the property `arrayPosIncr <value>`.
+  - It is also possible to have an array that extends on more than one register: this works like the partial field, with the property `arrayPartial <offset>`.
+    The registers must belong to the same register group.
+    Another possibility is to declared the register itself as an array: the total field array size will be given by
+    the register array size multiply by the field array size or the length of the reset value array if it is bigger than the field array itself.
+    In this case all fields of the register must be arrays.
+  - In the description, the field index can be referenced by `$i` or even in a formula such as `${2*i+1}`.
 
 First example of field array split on two distinct register. This create a field array `coeff` with a total size of 5 elements of 7 bits.
 The first three elements are inside `reg1` starting at bits 8, 16 and 24 due to the use `arrayPosIncr` while the last two element are inside `reg2` at position 0 and 8.
 The description of each `coeff` register will be "Coefficient value 0", "Coefficient value 1", ...
 ```yaml
- - reg1 : (ctrl) "Control register 1"
-   - enable = 0 0:0 "Enable block"
-   - status   0 7:4 ro "Block status"
-   - coeff[3] = {0x01,0x12,0x23} 14:8 "Coefficient value $i"
-     arrayPosIncr 8
- - reg2 : (ctrl) "Control register 2"
-   - coeff[2] = {0x34,0x45} 6:0  "Coefficient value $i"
-     arrayPosIncr 8
-     arrayPartial 3
+  - reg1 : (ctrl) "Control register 1"
+    - enable = 0 0:0 "Enable block"
+    - status   0 7:4 ro "Block status"
+    - coeff[3] = {0x01,0x12,0x23} 14:8 "Coefficient value $i"
+      arrayPosIncr 8
+  - reg2 : (ctrl) "Control register 2"
+    - coeff[2] = {0x34,0x45} 6:0  "Coefficient value $i"
+      arrayPosIncr 8
+      arrayPartial 3
 ```
 
 This second example shows the use of a register array definition. The total size of fields key and val is 5.
 ```yaml
- - reg_kv[5] : (ctrl) "Key value pairs $i"
-   - key[1] = {0,1,2,3,4} 7:0 "Key $i"
-   - val[1] = {0x101,0x202,0x303,0x404,0x505} 27:8 "Value $i"
+  - reg_kv[5] : (ctrl) "Key value pairs $i"
+    - key[1] = {0,1,2,3,4} 7:0 "Key $i"
+    - val[1] = {0x101,0x202,0x303,0x404,0x505} 27:8 "Value $i"
 ```
 
 

@@ -445,9 +445,12 @@ pub trait GeneratorDoc : GeneratorBase {
                                 if let Some(f_inst) = reg_inst.find_field(&f.name, f.array.idx()) {
                                     Some(f_inst.reset.clone())
                                 } else {
-                                    // Should never happen, but print a clear message to debug library if I mess something in the future
-                                    eprintln!("[ERROR] Field {fieldname} == {} with index {:?} (reg {:?}): Unable to find amongst {:?}",
-                                        f.name, f.array, reg_inst.array, reg_inst.fields.iter().map(|fi| (&fi.name, fi.array.clone())).collect::<Vec<_>>());
+                                    // Can happen only in case of field array in a register array
+                                    // Print a clear message if this happens in other circumstances to debug library
+                                    if !(reg_inst.array.is_def() && reg_inst.array.idx() > 0) {
+                                        eprintln!("[ERROR] Field {fieldname} == {} with index {:?} (reg {:?}): Unable to find amongst {:?}",
+                                            f.name, f.array, reg_inst.array, reg_inst.fields.iter().map(|fi| (&fi.name, fi.array.clone())).collect::<Vec<_>>());
+                                    }
                                     None
                                 }
                             }).collect();
@@ -499,11 +502,24 @@ pub trait GeneratorDoc : GeneratorBase {
                         }
                         // Check for partial disable in an array
                         let dis : Vec<u16> = reg_insts.iter().filter_map(|reg_inst| {
-                            let f = reg_inst.find_field(&f.name, f.array.idx()).unwrap();
-                            if f.is_disabled() {Some(reg_inst.array.idx())} else {None}
+                            if let Some(f) = reg_inst.find_field(&f.name, f.array.idx()) {
+                                if f.is_disabled() {Some(reg_inst.array.idx())} else {None}
+                            } else {
+                                None
+                            }
                         }).collect();
                         if !dis.is_empty() && reg_insts.len() > 1 && dis.len() != reg_insts.len() {
                             desc.push_str(&self.sanitize(&format!(" \nNote: Disabled in register {dis:?}")));
+                        }
+                        // Check for field array not exisiing in some register instances
+                        if reg.array.dim_def() > 1 {
+                            if let Ok(field_impl) = reg_impl.get_field(&f.name) {
+                                let reg_idx = reg.array.dim_def() - 1;
+                                let last_field_idx = reg_idx * f.array.dim() + f.array.idx();
+                                if last_field_idx >= field_impl.array {
+                                    desc.push_str(&self.sanitize(&format!(" \nNote: Disabled in register {}[{reg_idx}]", reg_impl.name)));
+                                }
+                            }
                         }
                         self.write_table_cell((TableKind::Field, CellKind::Desc), 0, &desc, "", None);
                         self.write_table_row_footer();

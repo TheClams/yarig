@@ -1,6 +1,11 @@
 # Change Log
 
-## [0.15.0] - Unreleased
+## [0.15.1] - 2025-07-27
+
+### Changed
+  - Syntax: when a field array is defined into a register array and the field reset length is bigger than the field array but smaller than the product, then it defined the total field array
+
+## [0.15.0] - 2025-07-20
 
 ### Added
   - Syntax: register/field array index now support comma separated and/or range index (like `[0:3,7]`)

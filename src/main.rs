@@ -8,14 +8,14 @@ fn main() {
 
     let args = RifGenArgs::parse();
 
-    let cfg;
-    match YarigCfg::from_cli(args) {
-        Ok(c) => cfg = c,
+    
+    let cfg = match YarigCfg::from_cli(args) {
+        Ok(c) => c,
         Err(msg) => {
             eprintln!("{msg}");
             return;
         }
-    }
+    };
 
     if cfg.filename.is_empty() {
         eprintln!("A RIF file must be specified ! (argument -r/--rif or through a command .toml file)");

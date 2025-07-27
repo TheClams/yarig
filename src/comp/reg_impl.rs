@@ -60,10 +60,12 @@ impl FieldImpl {
     fn new(field: &Field, reg_array: u16, ctrl_idx: usize, rifs: &RifsInfo, partials: Option<&PartialFieldInfos>) -> Result<Self, String> {
         let params = &rifs.params;
         let enum_def = field.enum_kind.get_def(&rifs.enums);
-        // Handle case of partial array
-        let mut array = reg_array.max(1) * field.array.value(params) as u16;
-        if reg_array > 0 {
-            array += field.partial.1;
+        // Handle field array: total size is given by the register size, the field partial info, and the field reset length
+        let field_array = field.array.value(params) as u16;
+        let nb_reset = field.reset.len() as u16;
+        let mut array = reg_array.max(1) * field_array + field.partial.1;
+        if array > nb_reset && nb_reset > field_array {
+            array = nb_reset;
         }
         // Handle case of partial field
         let (width, resets) = if field.is_partial() {

@@ -81,7 +81,7 @@ impl GeneratorDoc for GeneratorLatex {
         }
         if let Some(addr) = base_addr {
             let w = ((self.addr_width()+3) >> 2) as usize;
-            self.write(&format!(" @ 0x{addr:0w$x}"));
+            self.write(&format!(" @ 0x{addr:0w$x?}"));
         }
         self.write("}\n");
     }
