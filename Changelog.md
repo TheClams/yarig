@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.16.0] - 2025-08-01
+
+### Changed
+  - Syntax: Support non-array field inside register array definition. This is equivalent to have multiple register with partial field.
+
+
 ## [0.15.1] - 2025-07-27
 
 ### Changed

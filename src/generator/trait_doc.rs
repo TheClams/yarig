@@ -443,7 +443,8 @@ pub trait GeneratorDoc : GeneratorBase {
                         // if multiple value display the first two, and an ellipsis if at least a third value exists
                         let resets : Vec<ResetVal> = reg_insts.iter().filter_map(|reg_inst| {
                                 if let Some(f_inst) = reg_inst.find_field(&f.name, f.array.idx()) {
-                                    Some(f_inst.reset.clone())
+                                    let reg_def_idx = if f.array.dim() == 0 {reg_inst.def_idx()} else {None};
+                                    Some(f_inst.reset_val(reg_def_idx))
                                 } else {
                                     // Can happen only in case of field array in a register array
                                     // Print a clear message if this happens in other circumstances to debug library
@@ -454,13 +455,15 @@ pub trait GeneratorDoc : GeneratorBase {
                                     None
                                 }
                             }).collect();
-                        let mut rst = f.reset_str();
-                        let mut f_inst_reset = f.reset.clone();
+                        let reg_def_idx = if f.array.dim() == 0 {reg.def_idx()} else {None};
+                        let mut rst = f.reset_str(reg_def_idx);
+                        let f0 = resets.first().cloned().unwrap_or_default();
+                        let mut f_inst_reset = f.reset_val(reg_def_idx);
                         for inst_rst in resets.iter().skip(1) {
-                            if *inst_rst != f.reset && *inst_rst != f_inst_reset {
+                            if *inst_rst != f0 && *inst_rst != f_inst_reset {
                                 rst.push('/');
-                                if f_inst_reset == f.reset {
-                                    rst.push_str(&val_str(inst_rst.to_u128(f.width), f.width.into(), f.is_signed()));
+                                if f_inst_reset == f0 {
+                                    rst.push_str(&val_str(inst_rst.to_u128(f.width), f.width.into(), f.is_signed(), reg_def_idx));
                                     f_inst_reset = inst_rst.clone();
                                 } else {
                                     rst.push('…');
@@ -468,6 +471,7 @@ pub trait GeneratorDoc : GeneratorBase {
                                 }
                             }
                         }
+                        // if resets.len() > 1 {println!("Field {fieldname} : {resets:?}");}
                         let tip = if f.nb_frac!=0 {
                             let prec = if f.nb_frac < 0 {0} else {f.nb_frac as usize};
                             Some(resets.iter().map(|r| {
@@ -479,7 +483,7 @@ pub trait GeneratorDoc : GeneratorBase {
                             }).collect::<Vec<String>>().join("\n"))
                         } else if rst.ends_with('…') {
                             Some(resets.iter().map(|r|
-                                val_str(r.to_u128(f.width), f.width.into(), f.is_signed())
+                                val_str(r.to_u128(f.width), f.width.into(), f.is_signed(), reg_def_idx)
                             ).collect::<Vec<String>>().join("\n"))
                         } else {
                             None
@@ -512,9 +516,9 @@ pub trait GeneratorDoc : GeneratorBase {
                             desc.push_str(&self.sanitize(&format!(" \nNote: Disabled in register {dis:?}")));
                         }
                         // Check for field array not exisiing in some register instances
-                        if reg.array.dim_def() > 1 {
+                        if !reg.array.is_inst() && reg.array.dim() > 1 && f.array.dim() > 0 {
                             if let Ok(field_impl) = reg_impl.get_field(&f.name) {
-                                let reg_idx = reg.array.dim_def() - 1;
+                                let reg_idx = reg.array.dim() - 1;
                                 let last_field_idx = reg_idx * f.array.dim() + f.array.idx();
                                 if last_field_idx >= field_impl.array {
                                     desc.push_str(&self.sanitize(&format!(" \nNote: Disabled in register {}[{reg_idx}]", reg_impl.name)));

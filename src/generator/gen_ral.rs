@@ -158,7 +158,7 @@ impl GeneratorSw for GeneratorRal {
         self.push_stash(0, &format!("      this.{fieldname}.configure(this, {}, {}, ", field.width, field.lsb));
         self.push_stash(0, &format!("{}, ", Self::field_acc(field)));
         self.push_stash(0, &format!("{}, ", if field.hw_access.is_writable() {"1"} else {"0"}));
-        let rst = field.reset();
+        let rst = field.reset(reg.def_idx());
         let w = (field.width>>2) as usize;
         self.push_stash(0, &format!("{}'h{rst:0w$X}, ", field.width));
         self.push_stash(0, &format!("{}, 0, 0);\n", if field.sw_kind.is_ro() {0} else {1}));
@@ -206,7 +206,7 @@ impl GeneratorSw for GeneratorRal {
                 .enumerate() {
             let rand_s = if field.is_sw_write() {"rand "} else {""};
             let fieldname = self.get_field_name(reg, field);
-            let idx_base = if reg_1st.is_reg_def() {field.array.idx() % field.array.dim()} else {field.array.idx()};
+            let idx_base = if reg_1st.is_reg_def() {field.array.idx() % field.array.dim().max(1)} else {field.array.idx()};
             let Some(base_field) = reg_1st.find_field(&field.name, idx_base) else {
                 eprintln!("[ERROR] RAL | Field {fieldname} == {} with index {:?} (reg {:?}): Unable to find amongst {:?}",
                     field.name, field.array, reg_1st.array, reg_1st.fields.iter().map(|fi| (&fi.name, fi.array.clone())).collect::<Vec<_>>());
@@ -215,8 +215,8 @@ impl GeneratorSw for GeneratorRal {
             let base_field_name = self.get_field_name(reg_1st, base_field);
             self.push_stash(1, &format!("   {rand_s}uvm_reg_field {regname}_{fieldname};\n"));
             self.push_stash(2, &format!("      this.{regname}_{fieldname} = this.{regname}.{base_field_name};\n"));
-            let rst = field.reset();
-            if rst != reg_1st.fields[fi].reset() {
+            let rst = field.reset(reg.def_idx());
+            if rst != reg_1st.fields[fi].reset(reg_1st.def_idx()) {
                 self.push_stash(2,
                     &format!("      this.{regname}_{fieldname}.set_reset({});\n",
                         Self::format_u128(rst, field.width, field.is_signed())));

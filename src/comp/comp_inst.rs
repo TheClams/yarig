@@ -631,7 +631,7 @@ impl ArrayIdx {
 
     /// Return the array dimension only if definition, otherwise return 0
     pub fn dim_def(&self) -> u16 {
-        if self.is_inst() {0}
+        if !self.is_def() {0}
         else {self.dim()}
     }
 
@@ -912,7 +912,6 @@ impl RifRegInst {
 
         // get the register value once all override were applied
         for f in r.fields.iter() {
-            let reset = f.reset.to_u128(f.width);
             if f.is_partial() {
                 if f.is_password() {
                     return Err(format!("Field {} is defined as counter and partial: this is not supported !", f.name()));
@@ -920,6 +919,13 @@ impl RifRegInst {
                     return Err(format!("Field {} is defined as password and partial: this is not supported !", f.name()));
                 }
                 r.group_idx = rifs.partials.push(&r.group_type, &r.group_name, PartialFieldInfo::new(f));
+            }
+
+            let mut reset = f.reset.to_u128(f.width);
+            if f.array.dim() == 0 {
+                if let Some(idx) = r.def_idx() {
+                    reset = (reset >> (idx * f.width as u16)) & ((1<<f.width)-1);
+                }
             }
             r.reset |= reset << f.lsb;
         }
@@ -1025,6 +1031,15 @@ impl RifRegInst {
             dim > 0
         } else {
             false
+        }
+    }
+
+    /// Return index in a definition array (None if not a defintiion array)
+    pub fn def_idx(&self) -> Option<u16> {
+        if self.array.dim_def() > 0 {
+            Some(self.array.idx())
+        } else {
+            None
         }
     }
 
@@ -1292,10 +1307,15 @@ impl RifFieldInst {
     }
 
     /// Return a signal range if partial or part of an array
-    pub fn to_range(&self, array_en: bool) -> Option<SignalRange> {
+    pub fn to_range(&self, reg_idx: Option<u16>, array_en: bool) -> Option<SignalRange> {
         if let (Some(lsb),_) = &self.partial {
             let lsb = *lsb as u8;
             Some(SignalRange::new(lsb, self.width - 1 + lsb))
+        } else if self.array.dim() == 0 && reg_idx.is_some() {
+            let reg_idx = reg_idx.unwrap() as u8;
+            let lsb = self.width * reg_idx;
+            let msb = self.width * (reg_idx+1) - 1;
+            Some(SignalRange::new(lsb, msb))
         } else if array_en {
             // if let ArrayIdx::Inst(idx,_) = self.array {
             if self.array.dim() > 0 {
@@ -1326,15 +1346,32 @@ impl RifFieldInst {
         }
     }
 
+    /// return reset value on 128b taking into account expanded field
+    pub fn reset(&self, reg_def_idx: Option<u16>) -> u128 {
+        let r = self.reset.to_u128(self.width);
+        let idx = if self.array.dim() == 0 {reg_def_idx} else {None};
+        if let Some(idx) = idx {
+            (r >> (self.width as u16 * idx)) & ((1<<self.width)-1)
+        } else {
+            r
+        }
+    }
 
-    /// return reset value on 128b
-    pub fn reset(&self) -> u128 {
-        self.reset.to_u128(self.width)
+    /// return reset value type taking into account expanded field
+    pub fn reset_val(&self, reg_def_idx: Option<u16>) -> ResetVal {
+        if let Some(idx) = reg_def_idx {
+            let r = self.reset.to_u128(self.width);
+            let rm = (r >> (self.width as u16 * idx)) & ((1<<self.width)-1);
+            ResetVal::Unsigned(rm)
+        } else {
+            self.reset.clone()
+        }
     }
 
     /// return reset value in a string: hexa/decimal are chosen automatically based on width
-    pub fn reset_str(&self) -> String {
-        val_str(self.reset(), self.width.into(), self.is_signed())
+    pub fn reset_str(&self, reg_def_idx: Option<u16>) -> String {
+        let idx = if self.array.dim() == 0 {reg_def_idx} else {None};
+        val_str(self.reset(None), self.width.into(), self.is_signed(), idx)
     }
 
     /// Return interrupt trigger for the field
@@ -1348,15 +1385,18 @@ impl RifFieldInst {
 
 /// Display a value with certain width either in decimal or hex
 /// The format is chosen automatically based on the width of the value
-pub fn val_str(val: u128, width: u16, is_signed: bool) -> String {
+pub fn val_str(val: u128, width: u16, is_signed: bool, reg_def_idx: Option<u16>) -> String {
     let w = (width >> 2) as usize;
-    // let width
-    if width > 12 {
-        format!("0x{val:0w$X}")
-    } else if is_signed && width > 1 && val >= 1<<(width-1) {
-        format!("{}", val as i128 - (1<<(width)))
+    let mut v = val;
+    if let Some(idx) = reg_def_idx {
+        v = (v >> (width * idx)) & ((1<<width)-1);
+    }
+    if width > 12 || reg_def_idx.is_some() {
+        format!("0x{v:0w$X}")
+    } else if is_signed && width > 1 && v >= 1<<(width-1) {
+        format!("{}", v as i128 - (1<<(width)))
     } else {
-        format!("{val}")
+        format!("{v}")
     }
 }
 

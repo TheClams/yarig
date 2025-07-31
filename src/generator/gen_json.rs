@@ -64,7 +64,7 @@ impl GeneratorSw for GeneratorJson {
         self.write(         "      \"fields\" : {\n");
     }
 
-    fn write_field_decl(&mut self, _basename: &str, _reg: &RifRegInst, field: &RifFieldInst, enum_def: Option<&EnumDef>, is_last: bool) {
+    fn write_field_decl(&mut self, _basename: &str, reg: &RifRegInst, field: &RifFieldInst, enum_def: Option<&EnumDef>, is_last: bool) {
         let tab = " ".repeat(3*3);
         let name = self.casing(&field.name());
         let signed = if field.is_signed() {"true"} else {"false"};
@@ -73,7 +73,7 @@ impl GeneratorSw for GeneratorJson {
         self.write(&format!("{tab}\"{name}\" : {{\n"));
         self.write(&format!("{tab}   \"pos\" : {},\n", field.lsb));
         self.write(&format!("{tab}   \"width\" : {},\n", field.width));
-        self.write(&format!("{tab}   \"value\" : {},\n", field.reset()));
+        self.write(&format!("{tab}   \"value\" : {},\n", field.reset(reg.def_idx())));
         self.write(&format!("{tab}   \"signed\" : {signed},\n"));
         self.write(&format!("{tab}   \"kind\" : \"{sw_kind}\",\n"));
         if let Some(enum_def) = enum_def {

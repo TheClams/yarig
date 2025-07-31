@@ -576,7 +576,8 @@ impl From<&ResetVal> for ResetValP {
 }
 
 impl ResetVal {
-    // Suppose used only on compiled value
+
+    /// Convert value on w bits (signed or unsigned) to u128
     pub fn to_u128(&self, w: u8) -> u128 {
         match self {
             ResetVal::Unsigned(v) => *v,
@@ -584,7 +585,7 @@ impl ResetVal {
         }
     }
 
-    // Suppose used only on compiled value
+    // Convert value to floating point using a fractoinnal number of bit
     pub fn to_f64(&self, nb_frac: isize) -> f64 {
         let scale = f64::powf(2.0, -nb_frac as f64);
         match self {

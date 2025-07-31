@@ -254,3 +254,4 @@ This trait is used by the generators for AsciiDoc, HTML, Latex and Mif (FrameMak
  - [ ] Support partial counter (for counter larger than register size)
  - [x] Add parsing of LogicExpr (currently logic expression works only for SystemVerilog)
  - [x] Add check on password not being partial fields
+ - [ ] Add check that reset value fit the field width

@@ -109,7 +109,7 @@ impl GeneratorSw for GeneratorIpXact {
         self.write(&format!("{tab}  <ipxact:size>{}</ipxact:size>\n", self.data_width()));
     }
 
-    fn write_field_decl(&mut self, _basename: &str, _reg: &RifRegInst, field: &RifFieldInst, enum_def: Option<&EnumDef>, _is_last: bool) {
+    fn write_field_decl(&mut self, _basename: &str, reg: &RifRegInst, field: &RifFieldInst, enum_def: Option<&EnumDef>, _is_last: bool) {
         let tab = "  ".repeat(6);
         let name = self.casing(&field.name_flat());
         let desc = self.desc_to_string(&field.description);
@@ -130,7 +130,7 @@ impl GeneratorSw for GeneratorIpXact {
         self.write(&format!("{tab}  <ipxact:bitWidth>{}</ipxact:bitWidth>\n", field.width));
         self.write(&format!("{tab}  <ipxact:resets>\n"));
         self.write(&format!("{tab}    <ipxact:reset>\n"));
-        self.write(&format!("{tab}      <ipxact:value>'h{:x}</ipxact:value>\n",field.reset()));
+        self.write(&format!("{tab}      <ipxact:value>'h{:x}</ipxact:value>\n",field.reset(reg.def_idx())));
         self.write(&format!("{tab}      <ipxact:mask>'h{:x}</ipxact:mask>\n",(1_u128<<field.width)-1));
         self.write(&format!("{tab}    </ipxact:reset>\n"));
         self.write(&format!("{tab}  </ipxact:resets>\n"));

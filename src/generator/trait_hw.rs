@@ -283,9 +283,9 @@ pub trait GeneratorHw : GeneratorBase {
                     self.write_const(&decl.into(), value);
                     let decl  = SignalDef::new_bus(format!("C_RESET_{base}_{fieldname}"), f.width.into(), f.is_signed());
                     let value = if f.is_signed() {
-                        LogicExpr::ValueI(f.reset() as i128, f.width.into())
+                        LogicExpr::ValueI(f.reset(None) as i128, f.width.into())
                     } else {
-                        LogicExpr::ValueU(f.reset(), f.width.into())
+                        LogicExpr::ValueU(f.reset(None), f.width.into())
                     };
                     self.write_const(&decl.into(), value);
                 }
@@ -783,7 +783,7 @@ pub trait GeneratorHw : GeneratorBase {
             for reg in page.regs.iter() {
                 let reg_impl = rif.get_hw_reg(&reg.group_type);
                 // Save a few string to be reused
-                let reg_name  = reg.name().to_casing(Snake); // Register Name with index apped after
+                let reg_name  = reg.name().to_casing(Snake); // Register Name with index append after
                 let group_name = reg.group_name().to_casing(Snake); // Group name without index
                 let reg_name_i   = reg.name_i().to_casing(Snake); // Register name with optional index in bracket
                 let reg_idx    = if reg.array.dim_inst() > 0 {Some(reg.array.idx())} else {None};
@@ -792,6 +792,7 @@ pub trait GeneratorHw : GeneratorBase {
                 let reg_idxf   = if let Some(idx) = reg_idx {format!("{idx}")} else {"".to_owned()};
                 let intr_suffix = reg.intr_info.0.get_suffix();
                 let decode : LogicExpr = format!("{reg_name}__decode").into();
+                let reg_def_idx = reg.def_idx();
                 self.write("\n");
                 self.write_comment(1, &format!("Register {reg_name_i}"));
                 // Assign field
@@ -800,8 +801,8 @@ pub trait GeneratorHw : GeneratorBase {
                 }
                 for field in reg.fields.iter() {
                     let field_impl = reg_impl.get_field(&field.name)?;
-                    let partial  = field.to_range(false);
-                    let field_range = field.to_range(true);
+                    let partial  = field.to_range(reg_def_idx,false);
+                    let field_range = field.to_range(reg_def_idx,true);
                     let field_name = self.casing(&field.name);
                     let field_name_flat = self.casing(&field.name_flat());
                     let reg_field_name = format!("{group_name}{intr_suffix}{reg_idxf}_{field_name_flat}");
@@ -1244,6 +1245,10 @@ pub trait GeneratorHw : GeneratorBase {
                     // Collect each field signal info in a hashmap indexed by a couple (clk/rst)
                     let mut signals: OrderDict<(String,String), Vec<SignalInfo> > = OrderDict::new();
                     for field in reg.fields.iter().filter(|f| !f.is_disabled() && f.partial_lsb()==0 && !f.sw_kind.is_pulse_comb()) {
+                        // Skip expanded field after first index
+                        if reg.array.dim_def() > 0 && reg.array.idx() > 0 && field.array.dim() == 0 {
+                            continue;
+                        }
                         // Get field implementation
                         let field_impl = reg_impl.get_field(&field.name)?;
                         // Skip field with no hardware
@@ -1362,7 +1367,7 @@ pub trait GeneratorHw : GeneratorBase {
                                     LogicExpr::ValueU(rst_val, field_impl.width.into())
                                 }
                             } else {
-                                LogicExpr::reset(&field.reset, field.width)
+                                LogicExpr::reset(&field.reset, field_impl.width as u8)
                             };
                             if field_cast.is_custom() {
                                 LogicExpr::Cast(field_cast.clone(), Box::new(field_reset))
@@ -1552,7 +1557,7 @@ pub trait GeneratorHw : GeneratorBase {
                     }
                     //
                     if !reg.is_external() && field_impl.is_local() && field.has_write_mod() {
-                        let partial  = field.to_range(false);
+                        let partial  = field.to_range(reg_def_idx,false);
                         let name = self.casing(&format!("{group_name}{intr_suffix}{reg_idxf}_{}__reg", field.name_flat()));
                         values.push(ExprId::new_range(name, partial.clone()).into());
                     } else if let FieldSwKind::Password(info) = &field.sw_kind {
@@ -1568,7 +1573,7 @@ pub trait GeneratorHw : GeneratorBase {
                     } else {
                         let prefix = if !reg.is_external() && (field_impl.is_sw_write() || field.is_hw_write() || field_impl.is_constant()) {"rif_"} else {""};
                         let name = format!("{prefix}{group_name}{intr_suffix}");
-                        let field_range = field.to_range(true);
+                        let field_range = field.to_range(reg_def_idx,true);
                         let value = ExprId::new_field_range(name, reg_idx, field_name.to_owned(), field_range);
                         if let EnumKind::Type(n) = &field.enum_kind {
                             values.push(LogicExpr::CastFrom(n.to_owned(), field.width, Box::new(value.into())));

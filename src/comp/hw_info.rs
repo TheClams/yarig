@@ -234,6 +234,7 @@ impl From<(&str, u16)> for SignalDecl {
     }
 }
 
+#[derive(Debug)]
 pub struct SignalInfo {
     pub name: ExprId,
     pub reset: LogicExpr,

@@ -265,7 +265,7 @@ impl GeneratorSw for GeneratorPy {
         let tab = " ".repeat(9);
         self.write(&format!("{tab}pos : int = {}\n", field.lsb));
         self.write(&format!("{tab}width : int = {}\n", field.width));
-        self.write(&format!("{tab}value : int = {}\n", field.reset()));
+        self.write(&format!("{tab}value : int = {}\n", field.reset(reg.def_idx())));
         self.write(&format!("{tab}signed : bool = {}\n",
             if field.is_signed() {"True"} else {"False"}));
         if field.nb_frac != 0 {

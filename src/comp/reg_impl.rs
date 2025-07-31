@@ -8,7 +8,8 @@ use crate::{
 };
 
 use super::{
-    comp_inst::{val_str, ArrayIdx, PartialFieldInfos, RifPageInst, RifRegInst, RifsInfo}, hw_info::SignalDim,
+    comp_inst::{ArrayIdx, PartialFieldInfos, RifPageInst, RifRegInst, RifsInfo},
+    hw_info::SignalDim,
 };
 
 /// Field Implementation
@@ -76,7 +77,8 @@ impl FieldImpl {
             for reset in field.reset.iter() {
                 resets.push(reset.compile(field.signed, field.nb_frac, params, enum_def)?);
             }
-            (field.width(params) as u16, resets)
+            let k = if field_array == 0 && reg_array > 1 {reg_array} else {1};
+            (field.width(params) as u16 * k, resets)
         };
         let limit = field.limit.compile(field.signed, field.nb_frac, params, enum_def)?;
         // Get description
@@ -170,11 +172,6 @@ impl FieldImpl {
     /// Flag field which requires a local flop
     pub fn is_local(&self) -> bool {
         self.has_write_mod() && !self.hw_acc.is_readable()
-    }
-
-    /// return reset value in a string: hexa/decimal are chosen automatically based on width
-    pub fn reset_str(&self, idx: usize) -> String {
-        val_str(self.get_reset(idx), self.width, self.signed)
     }
 
     /// Return width of hardware signal needed for implementation
