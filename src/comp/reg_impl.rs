@@ -84,7 +84,7 @@ impl FieldImpl {
         // Get description
         let s = if field.signed {'s'} else {'u'};
         let format_str = format!("{s}{}.{}", width, field.nb_frac);
-        let description = field.description.with_format(&format_str);
+        let description = field.description.with_format(&format_str).no_dollar();
         // Handle case where only access is a set/clr from software: this implies the equivalent from hardware to be complete
         let mut hw_kind = field.hw_kind.to_owned();
         if let Some(kind) = field.get_auto_hw_kind(params) {
@@ -406,7 +406,7 @@ impl RegImpl {
         }
         Ok(RegImpl {
             name: reg.get_group_name().to_owned(),
-            description: reg.description.clone(),
+            description: reg.description.no_dollar(),
             fields, port,
             interrupt: reg.interrupt.clone(),
             clk: reg.clk.clone(),

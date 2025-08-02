@@ -65,21 +65,31 @@ impl Description {
         self.public.len() + (if is_public {0} else {self.private.len()})
     }
 
-    pub fn interpolate(&self, idx: u16) -> Description {
+    pub fn interpolate(&self, idx: DescIdx) -> Description {
         let public = Self::interpolate_str(&self.public, idx);
         let private = Self::interpolate_str(&self.private, idx);
         Description {public, private}
     }
 
-    fn interpolate_str(s: &str, idx: u16) -> String {
+    fn interpolate_str(s: &str, idx: DescIdx) -> String {
         let mut desc = String::with_capacity(s.len());
-        let params = ParamValues::new_with_idx(idx as isize);
+        let params = ParamValues::new_with_idx(idx.val() as isize);
         let mut parts = s.split('$');
         desc.push_str(parts.next().unwrap_or(""));
         for mut s in parts {
             // Variable $i replaced by index
             if let Some(stripped) = s.strip_prefix('i') {
-                desc.push_str(&format!("{idx}"));
+                desc.push_str(&format!("{}", idx.val()));
+                desc.push_str(stripped);
+            }
+            // Replace $[] by [msb:lsb]
+            else if let Some(stripped) = s.strip_prefix("[]") {
+                match idx {
+                    DescIdx::None => {},
+                    DescIdx::Array(i)     => desc.push_str(&format!("[{i}]")),
+                    DescIdx::RegBus(w, i) => desc.push_str(&format!("[{}:{}]", i * w + w - 1, i*w)),
+                    DescIdx::FieldBus(w, _) => desc.push_str(&format!("[i*{w}+{}:i*{w}]", w-1)),
+                }
                 desc.push_str(stripped);
             }
             // Start of an equation
@@ -106,8 +116,8 @@ impl Description {
     // Remove the $ special character from description:
     //  used when we do not want the interpolated version (for register base description typically)
     pub fn no_dollar(&self) -> Description {
-        let public = self.public.replace('$', "");
-        let private = self.private.replace('$', "");
+        let public = self.public.replace("$i", "").replace("$[]", "").replace('$', "");
+        let private = self.private.replace("$i", "").replace("$[]", "").replace('$', "");
         Description{public, private}
     }
 }
@@ -121,5 +131,76 @@ impl From<String> for Description {
 impl From<&str> for Description {
     fn from(s: &str) -> Description {
         Description{public: s.to_owned(), private: "".to_owned()}
+    }
+}
+
+
+#[derive(Debug, Clone, Copy)]
+pub enum DescIdx {
+    None,
+    Array(u16),
+    RegBus(u16,u16),
+    FieldBus(u16,u16),
+}
+
+impl DescIdx {
+    pub fn array(idx: u16) -> Self {
+        DescIdx::Array(idx)
+    }
+
+    pub fn reg_bus(width: u16, idx: u16) -> Self {
+        DescIdx::RegBus(width, idx)
+    }
+
+    pub fn field_bus(width: u16, idx: u16) -> Self {
+        DescIdx::RegBus(width, idx)
+    }
+
+    pub fn val(&self) -> u16 {
+        match self {
+            DescIdx::None => 0,
+            DescIdx::Array(i) => *i,
+            DescIdx::RegBus(_, i) => *i,
+            DescIdx::FieldBus(_, i) => *i,
+        }
+    }
+
+    pub fn lsb(&self) -> u16 {
+        match self {
+            DescIdx::None => 0,
+            DescIdx::Array(i) => *i,
+            DescIdx::RegBus(w, i) => i*w,
+            DescIdx::FieldBus(w, i) => i*w,
+        }
+    }
+
+    pub fn msb(&self) -> u16 {
+        match self {
+            DescIdx::None => 0,
+            DescIdx::Array(i) => *i,
+            DescIdx::RegBus(w, i) => i * w + w - 1,
+            DescIdx::FieldBus(w, i) => i * w + w - 1,
+        }
+    }
+
+    pub fn width(&self) -> u16 {
+        match self {
+            DescIdx::None => 0,
+            DescIdx::Array(_) => 0,
+            DescIdx::RegBus(w, _) => *w,
+            DescIdx::FieldBus(w, _) => *w,
+        }
+    }
+}
+
+impl From<u16> for DescIdx {
+    fn from(value: u16) -> Self {
+        DescIdx::Array(value)
+    }
+}
+
+impl From<usize> for DescIdx {
+    fn from(value: usize) -> Self {
+        DescIdx::Array(value as u16)
     }
 }

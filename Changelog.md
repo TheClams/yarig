@@ -1,9 +1,12 @@
 # Change Log
 
-## [0.16.0] - 2025-08-01
+## [0.16.0] - 2025-08-02
 
 ### Changed
   - Syntax: Support non-array field inside register array definition. This is equivalent to have multiple register with partial field.
+  - Description:
+    * New placeholder $[] to support the new partial field syntax
+    * Improved handling of placeholder $i depending on context (for example: fully removed when describing the whole array and not an element)
 
 
 ## [0.15.1] - 2025-07-27

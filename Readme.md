@@ -69,7 +69,6 @@ In term of features missing from SystemRDL, the main one I have identified are:
   - Definition of HDL path, constraint
 
 But I think RIF has a few improved featured (in no particular order) :
-  - RIF mapping: it is possible to defines the whole register map of a SoC by instantiating multiple RIFs.
   - Fine control over both the hardware register structure and its software mapping: instead of defining a whole register structure
     which is then mapped automatically on address aligned with the software bus, the definition of register must be aligned on the software bus,
     but each register can have a group name so that they appear in the same structure in hardware.
@@ -86,7 +85,9 @@ But I think RIF has a few improved featured (in no particular order) :
 
 
 ## Configuration
- A configuration file allows to specify many options of the generators like the RIF file, a list of target, the output path for each targets, ...
+A configuration file allows to specify many options of the generators like the RIF file, a list of target, the output path for each targets, ...
+
+All available options are described in the [config page](doc/config.md).
 
 Here is an example:
 ```

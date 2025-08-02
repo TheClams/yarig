@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use crate::{
     parser::{get_rif, parser_expr::{ExprValue, ParamValues}, RifGenSrc, RifGenTop},
     rifgen::{
-        order_dict::{OrderDict, OrderedDictIterV}, Access, AddressKind, ClockingInfo, CounterInfo, Description, EnumDef, EnumDefs, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, GenericRange, GenericValues, Interface, InterruptRegKind, InterruptTrigger, Limit, LogicExpr, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegPulseKind, ResetVal, ResetValOverride, Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SignalRange, SuffixInfo, Visibility
+        order_dict::{OrderDict, OrderedDictIterV}, Access, AddressKind, ClockingInfo, CounterInfo, DescIdx, Description, EnumDef, EnumDefs, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, GenericRange, GenericValues, Interface, InterruptRegKind, InterruptTrigger, Limit, LogicExpr, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegPulseKind, ResetVal, ResetValOverride, Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SignalRange, SuffixInfo, Visibility
     },
 };
 
@@ -755,7 +755,13 @@ impl RifRegInst {
             intr_info = (InterruptRegKind::None,"".to_owned());
         };
         let description = if let RegInstArgs::Arr(idx) = &args {
-            def.description.interpolate(idx.idx())
+            let Some(f0) = def.fields.first() else {return Err(format!("Register {reg_name} has no fields !"));};
+            let desc_idx = if def.fields.len() == 1 && f0.array.value(&rifs.params) == 0 {
+                DescIdx::reg_bus(f0.width(&rifs.params).into() ,idx.idx())
+            } else {
+                DescIdx::array(idx.idx())
+            };
+            def.description.interpolate(desc_idx)
         } else {
             def.description.to_owned()
         };
@@ -792,6 +798,7 @@ impl RifRegInst {
             incl
         };
         let mut next_lsb = 0;
+        let reg_array_idx = r.def_idx();
         for f in def.fields.iter() {
             let array_size = f.array.value(&rifs.params) as u16;
             let nb = array_size.max(1);
@@ -802,7 +809,7 @@ impl RifRegInst {
                         if r.array.dim()>0 && r.array.is_def() {Some(ArrayIdx::Def(i,offset))}
                         else {Some(ArrayIdx::Inst(i,offset))}
                     } else { None };
-                if let Some(fi) = RifFieldInst::new(f, intr_kind, &mut next_lsb, rifs, arr_idx)? {
+                if let Some(fi) = RifFieldInst::new(f, intr_kind, &mut next_lsb, rifs, reg_array_idx, arr_idx)? {
                     r.fields.push(fi);
                 }
             }
@@ -817,7 +824,7 @@ impl RifRegInst {
             if let Some(info) = info {
                 if !info.1.is_empty(false) {
                     r.base_description = info.1.no_dollar();
-                    r.description = info.1.interpolate(idx as u16);
+                    r.description = info.1.interpolate(idx.into());
                 }
                 if kind.is_pending() {
                     r.sw_access = Access::RO;
@@ -853,7 +860,7 @@ impl RifRegInst {
                 // Register override: Description
                 if let Some(desc) = &ovr.description {
                     r.description = if let Some(i) = idx {
-                        desc.interpolate(i)
+                        desc.interpolate(i.into())
                     } else {
                         desc.clone()
                     };
@@ -1082,7 +1089,8 @@ impl RifFieldInst {
         intr_kind: InterruptRegKind,
         next_lsb: &mut u8,
         rifs: &RifsInfo,
-        array: Option<ArrayIdx>,
+        reg_array: Option<u16>,
+        field_array: Option<ArrayIdx>,
     ) -> Result<Option<Self>,String> {
         let params = &rifs.params;
         let (mut lsb, width) = match &field.pos {
@@ -1106,8 +1114,9 @@ impl RifFieldInst {
         let s = if field.signed {'s'} else {'u'};
         let format_str = format!("{s}{}.{}", width, field.nb_frac);
         let desc: Description;
+        let desc_idx : DescIdx;
         // For array, adjust the increment when needed
-        if let Some(array) = array {
+        if let Some(array) = field_array {
             let incr = if field.array_pos_incr < width {
                 width
             } else {
@@ -1134,8 +1143,9 @@ impl RifFieldInst {
             }
             let i = array.dim() + array.idx();
             idx = ArrayIdx::Def(i,field.array.value(params).into());
+            desc_idx = i.into();
             // println!("Field array: {array:?} | rst_idx={rst_idx}, idx={idx:?} | reset = {reset:?}", );
-            desc = field.description.with_format(&format_str).interpolate(i);
+            desc = field.description.with_format(&format_str);
         } else {
             idx = ArrayIdx::Def(0,0);
             desc = if let Some(intr_desc) = &field.intr_desc {
@@ -1149,7 +1159,9 @@ impl RifFieldInst {
             } else {
                 field.description.with_format(&format_str)
             };
+            desc_idx = if let Some(i) = reg_array {DescIdx::field_bus(width as u16,i)} else {DescIdx::None};
         }
+        let desc = desc.interpolate(desc_idx);
         //
         let mut hw_kind = field.hw_kind.to_owned();
         if let Some(kind) = field.get_auto_hw_kind(params) {
