@@ -23,6 +23,9 @@ impl GeneratorAdoc {
         if let Some(gen_inc) = cfg.gen_inc {
             core.setting.gen_inc = gen_inc;
         }
+        if let Some(casing) = cfg.casing {
+            core.setting.casing = casing;
+        }
         GeneratorAdoc {
             core,
             comp_fname: "".to_owned(),
@@ -118,7 +121,11 @@ impl GeneratorDoc for GeneratorAdoc {
                     "Registers address mapping".to_owned()
                 }
             }
-            TableKind::Field => format!("Register {}.{title}", remove_rif(self.comp_name())),
+            TableKind::Field => {
+                let regname = remove_rif(self.comp_name())
+                    .to_casing(self.core.setting.casing);
+                format!("Register {regname}.{title}")
+            }
             _ => self.sanitize(title)
         };
 

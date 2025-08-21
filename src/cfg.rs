@@ -137,25 +137,44 @@ pub struct YarigCfg {
     pub svd: CfgSvd,
     pub ipxact: CfgIpXact,
     pub mif: CfgMif,
+    pub latex: CfgLatex,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct CfgHtml {
+    /// Specify a file for the CSS template
     pub css: Option<String>,
+    /// Split the HTML output in multiple files (one perf RIF)
     pub split: Option<bool>,
+    /// Casing for register and field name
+    pub casing: Option<Casing>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct CfgAdoc {
-    /// Split the AsciiDoc output in multiple files
+    /// Split the AsciiDoc output in multiple files (one perf RIF)
     pub split: Option<bool>,
     /// List of included reference to generate (use ["*"] for all): valid only if split is enabled
     pub gen_inc: Option<Vec<String>>,
     /// List of included reference which must be generated locally (use ["*"] to match all component in the gen_inc definition)
     pub local: Option<Vec<String>>,
+    /// Casing for register and field name
+    pub casing: Option<Casing>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
+#[serde(deny_unknown_fields)]
+pub struct CfgLatex {
+    /// Casing for register and field name
+    pub casing: Option<Casing>,
+    /// Split the output in multiple files (one per RIF)
+    pub split: Option<bool>,
+}
+
+#[derive(Deserialize, Debug, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct CfgC {
     /// Name of base address offset (default to PERIPH_BASE_ADDR)
     pub base_offset: Option<String>,
@@ -166,6 +185,7 @@ pub struct CfgC {
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct CfgRtl {
     /// Number of pipe level for register access (default 1 on the read value)
     pub nb_pipe: Option<u8>,
@@ -180,6 +200,7 @@ pub struct CfgRtl {
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct CfgRal {
     /// Name of the register block class (default to uvm_reg_block)
     pub class: Option<String>,
@@ -195,6 +216,7 @@ pub struct CfgRal {
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct CfgPy {
     /// Name of python class definition (Peripheral/Register/Field)
     pub class: Option<String>,
@@ -207,12 +229,14 @@ pub struct CfgPy {
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct CfgSvd {
     pub vendor: Option<String>,
     pub version: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct CfgIpXact {
     pub vendor: Option<String>,
     pub library: Option<String>,
@@ -220,6 +244,7 @@ pub struct CfgIpXact {
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
+#[serde(deny_unknown_fields)]
 pub struct CfgMif {
     /// Split the MIF output in multiple files
     pub split              : Option<bool>,
@@ -251,6 +276,8 @@ pub struct CfgMif {
     pub gen_inc: Option<Vec<String>>,
     /// List of included reference which must be generated locally (use ["*"] to match all component in the gen_inc definition)
     pub local: Option<Vec<String>>,
+    /// Casing for register and field name
+    pub casing: Option<Casing>,
 }
 
 impl FromStr for YarigCfg {
@@ -445,7 +472,8 @@ impl YarigCfg {
                     g.gen_all(&rif_obj).map_err(|e| format!("MIF generation failed: {e}"))?;
                 }
                 RifGenTarget::Latex => {
-                    // if let Some(split) = self.latex.split {setting.split = split;}
+                    if let Some(split) = self.latex.split {setting.split = split;}
+                    if let Some(casing) = self.latex.casing {setting.casing = casing;}
                     let mut g = GeneratorLatex::new(setting);
                     g.gen_all(&rif_obj).map_err(|e| format!("Latex generation failed: {e}"))?;
                 }

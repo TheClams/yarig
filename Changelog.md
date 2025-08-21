@@ -1,5 +1,12 @@
 # Change Log
 
+## [0.16.1] - 2025-08-21
+
+### Changed
+  - Configuration:
+    * All target specific configuration now forbid used of unknown field (allow to catch typo)
+    * Independent casing configuration are now possible for HTML, MIF, ADoc and LaTeX
+
 ## [0.16.0] - 2025-08-02
 
 ### Changed

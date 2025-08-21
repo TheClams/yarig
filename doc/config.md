@@ -114,16 +114,16 @@ pkg = false
 It is possible to specify the casing use in regiater/field name either globaly or for each generator (if supported by the generator).
 
 The casing options supported are :
- - `raw`: as-is, casing is not modified
- - `snake` : snake_case
- - `pascal`: PascalCase
- - `camel`: camelCase
- - `kebab`: kebab-case
- - `title`: Title Case
+ - `Raw`: as-is, casing is not modified
+ - `Snake` : snake_case
+ - `Pascal`: PascalCase
+ - `Camel`: camelCase
+ - `Kebab`: kebab-case
+ - `Title`: Title Case
 
 # Optional: Specify casing convention for generated code
 # Valid values depend on target language
-casing = "snake"
+casing = "Snake"
 
 ### Reserved keywords handling
 
@@ -155,6 +155,9 @@ css = "./custom.css"
 
 # Optional: Split output into multiple files (one file per RIF)
 split = true
+
+# Optional: casing of register/field
+casing = "Snake"
 ```
 
 ### AsciiDoctor Generation
@@ -169,6 +172,9 @@ gen_inc = ["module1", "module2"]
 
 # Optional: Override global local for this target
 local = ["*"]
+
+# Optional: casing of register/field
+casing = "Snake"
 ```
 
 ### C Header Generation
@@ -301,6 +307,9 @@ gen_inc = ["*"]
 
 # Optional: Override global local for this target
 local = ["module1"]
+
+# Optional: casing of register/field
+casing = "Snake"
 ```
 
 ## Complete Example

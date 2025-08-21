@@ -52,6 +52,9 @@ impl GeneratorMif {
         if let Some(split) = cfg.split {
             core.setting.split = split;
         }
+        if let Some(casing) = cfg.casing {
+            core.setting.casing = casing;
+        }
         GeneratorMif {
             core,
             tbl_idx: 1,

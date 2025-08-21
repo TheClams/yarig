@@ -20,8 +20,12 @@ impl GeneratorHtml {
     const DEFAULT_CSS : &'static str = include_str!("resources/style.css");
 
     pub fn new(setting: GeneratorBaseSetting, cfg: CfgHtml) -> Self {
+        let mut core = GeneratorCore::new(0,setting);
+        if let Some(casing) = cfg.casing {
+            core.setting.casing = casing;
+        }
         GeneratorHtml {
-            core: GeneratorCore::new(0,setting),
+            core,
             css: cfg.css,
             comp_fname: "".to_owned(),
         }
