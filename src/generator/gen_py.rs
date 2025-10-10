@@ -317,7 +317,7 @@ impl GeneratorSw for GeneratorPy {
     }
 
     fn write_rifmux_header(&mut self,  rifmux: &RifmuxInst, rif_list: &RifList, _rifmux_list: &[&RifmuxInst]) {
-        self.write("from typing import final\n");
+        self.write("import typing\n");
         self.write(&format!("from {} import Peripheral\n\n", self.base_module));
         for (rif_inst,_) in rif_list.iter() {
             self.write(&format!("from .{} import {}\n",
