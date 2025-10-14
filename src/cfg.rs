@@ -4,7 +4,7 @@ use toml;
 use crate::{
     cli::RifGenArgs, comp::comp_inst::Comp, generator::{
         casing::Casing, gen_adoc::GeneratorAdoc, gen_c::GeneratorC, gen_common::GeneratorBaseSetting, gen_html::GeneratorHtml, gen_ipxact::GeneratorIpXact, gen_json::GeneratorJson, gen_latex::GeneratorLatex, gen_mif::GeneratorMif, gen_py::{GeneratorPy, PyVersion}, gen_ral::GeneratorRal, gen_sv::GeneratorSv, gen_svd::GeneratorSvd, gen_vhdl::GeneratorVhdl, trait_doc::GeneratorDoc, trait_hw::GeneratorHw, trait_sw::GeneratorSw
-    }, parser::{parser_expr::ParamValues, RifGenSrc, RsvdKeywordSel}, rifgen::{Interface, SuffixInfo}
+    }, parser::{parser_expr::ParamValues, ParserCfg, RifGenSrc, RsvdKeywordSel}, rifgen::{Interface, SuffixInfo}
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -121,6 +121,8 @@ pub struct YarigCfg {
     pub parameters: HashMap<String,isize>,
     /// dictionary of path associated to each targets
     pub outputs: HashMap<String,String>,
+    /// Use legacy order for interrupts (mask before enable)
+    pub auto_legacy: bool,
     /// Use suffix only for RTL generation
     pub suffix_rtl_only: bool,
     /// optional suffix definition
@@ -355,6 +357,7 @@ impl YarigCfg {
         if !args.gen_inc.is_empty() {self.gen_inc = args.gen_inc.clone()};
         if !args.targets.is_empty() {self.targets = args.targets.to_owned()};
         if args.public {self.public = true};
+        if args.auto_legacy {self.auto_legacy = true};
         // Clear target if check is enabled and override target if at least one is defined on the command-line
         if args.check {self.targets.clear();}
         else if !args.targets.is_empty() {self.targets = args.targets.to_owned()};
@@ -492,7 +495,8 @@ impl YarigCfg {
         if !rif_path.exists() && rif_path.is_relative() && self.path.is_some() {
             rif_path = [self.path.as_ref().unwrap(), &self.filename].iter().collect();
         }
-        let rif_src = RifGenSrc::from_file(&rif_path, &self.include, self.keywords)
+        let parser_cfg = ParserCfg::new(self.keywords, self.auto_legacy);
+        let rif_src = RifGenSrc::from_file(&rif_path, &self.include, &parser_cfg)
             .map_err(|e| format!("Parsing Error : {e}"))?;
         let mut rif_obj = Comp::compile(&rif_src, &self.suffixes, &params)
             .map_err(|e| format!("Compilation failed: {e}"))?;

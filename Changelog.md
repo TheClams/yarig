@@ -1,12 +1,13 @@
 # Change Log
 
-## [0.16.3] - 2025-14-10
+## [0.17.0] - 2025-14-10
 
 ### Added
   - Configuration:
     * Support "subdir" for target which can split their output in multiple file to ssave generated sub-file in a subdirectory.
       The subdir can be provided at command-line level, at the top configuration file level or inside the target section of the configuration file
     * Support a json section with gen_inc, local and subdir settings
+    * Support option "auto-legacy" (both toml and command-line) to force the interrupt order to have mask before enable when automatic instance mode is enabled
   - Fixed:
     * JSON: escape double-quote in description
 

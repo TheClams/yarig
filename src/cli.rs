@@ -28,6 +28,9 @@ pub struct RifGenArgs{
     /// Check syntax only, generator are not called
     #[arg(long, action)]
     pub check: bool,
+    /// Use legacy order for interrupts (mask before enable)
+    #[arg(long, action)]
+    pub auto_legacy: bool,
     /// List of included component to generate. Use "*" to select all.
     #[arg(long, num_args = 0..)]
     pub gen_inc: Vec<String>,

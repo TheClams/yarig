@@ -14,7 +14,7 @@ use crate::parser::{
     reg_incl_or_decl, reg_inst_array_properties, reg_inst_properties, reg_pulse_info, rif_inst_suffix, rifmux_group, rifmux_map, signal_or_expr, val_isize, val_u16
 };
 use crate::rifgen::{
-    Access, ClockingInfo, Context, DataWidth, EnumDef, EnumKind, ExternalKind, Field, FieldHwKind, FieldSwKind, Interface, InterruptInfo, Lock, LogicExpr, OverrideIndex, RegDef, RegDefOrIncl, RegInst, RegPulseKind, ResetDef, Rif, RifPage, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility
+    Access, ClockingInfo, Context, DataWidth, EnumDef, EnumKind, ExternalKind, Field, FieldHwKind, FieldSwKind, InstMode, Interface, InterruptInfo, Lock, LogicExpr, OverrideIndex, RegDef, RegDefOrIncl, RegInst, RegPulseKind, ResetDef, Rif, RifPage, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility
 };
 
 use super::{
@@ -68,6 +68,28 @@ impl Default for RsvdKeywordSel {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ParserCfg {
+    pub rsvd_kw: Vec<&'static str>,
+    pub rsvd_err: bool,
+    pub auto_legacy: bool,
+}
+
+impl ParserCfg {
+    pub fn new(rsvd_sel: RsvdKeywordSel, auto_legacy: bool) -> Self {
+        let mut rsvd_kw = Vec::new();
+        if rsvd_sel.sv {
+            rsvd_kw.extend(["logic", "signed", "wire", "reg", "buf","event", "soft", "break", "module", "process", "type", "priority", "disable", "longint", "int", "release", "repeat", "if", "always", "default"]);
+        }
+        if rsvd_sel.vhdl {
+            rsvd_kw.extend(["array", "buffer", "map", "out", "in", "on","generic", "block", "type", "rem", "if"]);
+        }
+        Self {
+            rsvd_kw, rsvd_err: rsvd_sel.error, auto_legacy
+        }
+    }
+}
+
 fn read_lines<P>(filename: P) -> io::Result<io::Lines<BufReader<File>>>
 where
     P: AsRef<Path>,
@@ -100,21 +122,13 @@ impl RifGenSrc {
 
     /// Generate a source object from a file
     /// the includes path are used to find and parse any included/referenced RIF
-    /// The reserved_keyword selection
-    pub fn from_file<P>(filename: P, includes: &[String], rsvd_keywords_sel: RsvdKeywordSel) -> Result<RifGenSrc, RifError>
+    /// The configuration contains list of reserved keywords and how they should be handled, as well as as setting such as auto-legacy
+    pub fn from_file<P>(filename: P, includes: &[String], cfg: &ParserCfg) -> Result<RifGenSrc, RifError>
     where
         P: AsRef<Path>,
     {
         let mut src = RifGenSrc::new();
-        let mut rsvd_kw = Vec::new();
-        if rsvd_keywords_sel.sv {
-            rsvd_kw.extend(["logic", "signed", "wire", "reg", "buf","event", "soft", "break", "module", "process", "type", "priority", "disable", "longint", "int", "release", "repeat", "if", "always", "default"]);
-        }
-        if rsvd_keywords_sel.vhdl {
-            rsvd_kw.extend(["array", "buffer", "map", "out", "in", "on","generic", "block", "type", "rem", "if"]);
-        }
-        let rsvd_keywords = (rsvd_kw.as_slice(), rsvd_keywords_sel.error);
-        let mut refs = src.parse_file(&filename,rsvd_keywords)?;
+        let mut refs = src.parse_file(&filename, cfg)?;
         if !refs.is_empty() {
             // find all rifs file in current directory and import directories
             let mut inc_paths = Vec::new();
@@ -151,7 +165,7 @@ impl RifGenSrc {
                 for r in refs.iter() {
                     if let Some(rif_file) = flist.get(remove_rif(r)) {
                         // println!("  Parsing referenced {:?}", rif_file);
-                        refs_next.extend(src.parse_file(rif_file,rsvd_keywords)?);
+                        refs_next.extend(src.parse_file(rif_file, cfg)?);
                     }
                 }
                 // print!(" => New refs = {:?} ", refs_next);
@@ -162,7 +176,7 @@ impl RifGenSrc {
         Ok(src)
     }
 
-    pub fn parse_file<P>(&mut self, filename: P, rsvd_keywords: (&[&str],bool)) -> Result<HashSet<String>, RifError>
+    pub fn parse_file<P>(&mut self, filename: P, cfg: &ParserCfg) -> Result<HashSet<String>, RifError>
     where
         P: AsRef<Path>,
     {
@@ -330,7 +344,11 @@ impl RifGenSrc {
                             context_stack.push((Context::Registers, ilvl + 1));
                         }
                         Context::Instances => {
-                            self.last_page_mut().inst_auto = is_auto(l)?;
+                            let mut inst_auto = is_auto(l)?;
+                            if cfg.auto_legacy && inst_auto==InstMode::Automatic {
+                                inst_auto = InstMode::AutoLegacy;
+                            }
+                            self.last_page_mut().inst_auto = inst_auto;
                             context_stack.push((Context::Instances, ilvl + 1));
                         }
                         Context::Optional => self.last_page_mut().optional = l.to_owned(),
@@ -462,8 +480,8 @@ impl RifGenSrc {
                             if !self.last_reg().interrupt.is_empty() {
                                 f.hw_acc = Access::WO;
                             }
-                            if rsvd_keywords.0.iter().any(|&kw| f.name==kw) {
-                                if rsvd_keywords.1 {
+                            if cfg.rsvd_kw.iter().any(|&kw| f.name==kw) {
+                                if cfg.rsvd_err {
                                     return Err(RifError::keyword(&f.name));
                                 } else {
                                     f.name = format!("_{}", f.name);
@@ -1021,17 +1039,3 @@ pub fn get_rif<'a,T>(dict: &'a HashMap<String,T>, key: &'a str) -> Option<&'a T>
     // println!("[get_rif] Unable to find {} in {:?}", key, dict.keys().collect::<Vec<&String>>());
     None
 }
-
-// pub fn get_reg_from_inc(inc: &str, rifs: &HashMap<String, Rif>) -> Result<(), String> {
-//     let s: Vec<&str> = inc.split('.').collect();
-//     // println!("Include {} -> {:?}", inc, s);
-//     let Some(rif) = get_rif(rifs,s[0]) else {
-//         return Err(format!("Unable to find {} in RIF definitions ({:?})", s[0],rifs.keys()));
-//     };
-//     let Some(page) = rif.pages.iter().find(|x| x.name == s[1]) else {
-//         return Err(format!("Unable to find page {} in {})", s[1], s[0]));
-//     };
-//     // Todo: check register name : * or named
-//     Ok(())
-// }
-
