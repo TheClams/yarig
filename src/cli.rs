@@ -49,6 +49,9 @@ pub struct RifGenArgs{
     /// Output path for simulation output (RAL)
     #[arg(long)]
     pub output_sim: Option<String>,
+    /// Sub-directory name for generated file which are not the top level
+    #[arg(long)]
+    pub subdir: Option<String>,
     /// Public documentation (hide all private registers/fields)
     #[arg(long, action)]
     pub public: bool,

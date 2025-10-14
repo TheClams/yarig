@@ -128,10 +128,11 @@ pub trait GeneratorDoc : GeneratorBase {
                 }
                 self.write_table_footer(TableKind::Rifmux);
                 self.set_comp(rifmux.deref().into(), true);
-                // Split output -> save current file
+                // Split output -> save top level now
                 if self.setting().split {
                     self.write_footer(obj.get_name());
-                    self.save(&self.setting().fname.clone().unwrap_or(filename.clone()))?;
+                    let fname = self.setting().fname.clone().unwrap_or(filename.clone());
+                    self.save(&fname, true)?;
                 }
                 // Add description of all rif types
                 let rif_list = RifList::new(rifmux, true);
@@ -143,7 +144,7 @@ pub trait GeneratorDoc : GeneratorBase {
                         self.write_header(basename);
                         self.add_rif(rif, 1, &[])?;
                         self.write_footer(basename);
-                        self.save(&format!("{name}.{}", Self::EXT))?;
+                        self.save(&format!("{name}.{}", Self::EXT), false)?;
                     } else {
                         self.add_rif(rif, i+1, info)?;
                     }
@@ -161,7 +162,7 @@ pub trait GeneratorDoc : GeneratorBase {
             self.write_footer(obj.get_name());
             // Write file
             let fname = self.setting().fname.clone().unwrap_or(filename);
-            self.save(&fname)?;
+            self.save(&fname, true)?;
         }
         Ok(())
     }

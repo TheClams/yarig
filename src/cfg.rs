@@ -107,6 +107,8 @@ pub struct YarigCfg {
     pub include: Vec<String>,
     /// List of included reference to generate (use ["*"] for all)
     pub gen_inc: Vec<String>,
+    /// Sub-directory name for generated file which are not the top level
+    pub subdir: Option<String>,
     /// List of included reference which must be generated locally (use ["*"] to match all component in the gen_inc definition)
     pub local: Vec<String>,
     /// List of targets to generate
@@ -134,6 +136,7 @@ pub struct YarigCfg {
     pub ral: CfgRal,
     pub rtl: CfgRtl,
     pub py : CfgPy,
+    pub json : CfgJson,
     pub svd: CfgSvd,
     pub ipxact: CfgIpXact,
     pub mif: CfgMif,
@@ -149,6 +152,8 @@ pub struct CfgHtml {
     pub split: Option<bool>,
     /// Casing for register and field name
     pub casing: Option<Casing>,
+    /// Sub-directory name for generated file which are not the top level
+    pub subdir: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -162,6 +167,8 @@ pub struct CfgAdoc {
     pub local: Option<Vec<String>>,
     /// Casing for register and field name
     pub casing: Option<Casing>,
+    /// Sub-directory name for generated file which are not the top level
+    pub subdir: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -171,6 +178,8 @@ pub struct CfgLatex {
     pub casing: Option<Casing>,
     /// Split the output in multiple files (one per RIF)
     pub split: Option<bool>,
+    /// Sub-directory name for generated file which are not the top level
+    pub subdir: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -182,6 +191,8 @@ pub struct CfgC {
     pub gen_inc: Option<Vec<String>>,
     /// List of included reference which must be generated locally (use ["*"] to match all component in the gen_inc definition)
     pub local: Option<Vec<String>>,
+    /// Sub-directory name for generated file which are not the top level
+    pub subdir: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -197,6 +208,8 @@ pub struct CfgRtl {
     pub const_reg: Option<bool>,
     /// Generate constant for field reset/position/width
     pub const_field: Option<bool>,
+    /// Sub-directory name for generated file which are not the top level
+    pub subdir: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -212,7 +225,8 @@ pub struct CfgRal {
     pub local: Option<Vec<String>>,
     /// List of optional imports for regsiter block
     pub imports: Option<HashMap<String,String>>,
-
+    /// Sub-directory name for generated file which are not the top level
+    pub subdir: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -226,21 +240,41 @@ pub struct CfgPy {
     pub gen_inc: Option<Vec<String>>,
     /// List of included reference which must be generated locally (use ["*"] to match all component in the gen_inc definition)
     pub local: Option<Vec<String>>,
+    /// Sub-directory name for generated file which are not the top level
+    pub subdir: Option<String>,
+}
+
+#[derive(Deserialize, Debug, Clone, Default)]
+#[serde(deny_unknown_fields)]
+pub struct CfgJson {
+    /// List of included reference to generate (use ["*"] for all)
+    pub gen_inc: Option<Vec<String>>,
+    /// List of included reference which must be generated locally (use ["*"] to match all component in the gen_inc definition)
+    pub local: Option<Vec<String>>,
+    /// Sub-directory name for generated file which are not the top level
+    pub subdir: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
 #[serde(deny_unknown_fields)]
 pub struct CfgSvd {
+    /// IP vendor
     pub vendor: Option<String>,
+    /// IP version
     pub version: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
 #[serde(deny_unknown_fields)]
 pub struct CfgIpXact {
+    /// IP vendor
     pub vendor: Option<String>,
+    /// IP library
     pub library: Option<String>,
+    /// IP version
     pub version: Option<String>,
+    /// Sub-directory name for generated file which are not the top level
+    pub subdir: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Clone, Default)]
@@ -278,6 +312,8 @@ pub struct CfgMif {
     pub local: Option<Vec<String>>,
     /// Casing for register and field name
     pub casing: Option<Casing>,
+    /// Sub-directory name for generated file which are not the top level
+    pub subdir: Option<String>,
 }
 
 impl FromStr for YarigCfg {
@@ -327,6 +363,7 @@ impl YarigCfg {
         if let Some(suffix) = args.suffix {self.suffixes.insert("".to_owned(), suffix);};
         if args.py_version.is_some() {self.py.version = args.py_version};
         if args.casing.is_some() {self.casing = args.casing};
+        if args.subdir.is_some() {self.subdir = args.subdir.clone()};
         if args.interface.is_some() {self.interface = args.interface};
         if args.suffix_rtl_only {self.suffix_rtl_only = true;}
         if args.rtl_const_reg {self.rtl.const_reg = Some(true);}
@@ -408,7 +445,7 @@ impl YarigCfg {
         let local = match target {
             RifGenTarget::C    => self.c.local.as_ref(),
             RifGenTarget::Mif  => self.mif.local.as_ref(),
-            RifGenTarget::Sv   => self.rtl.local.as_ref(),
+            RifGenTarget::Sv   |
             RifGenTarget::Vhdl => self.rtl.local.as_ref(),
             RifGenTarget::Ral  => self.ral.local.as_ref(),
             RifGenTarget::Py   => self.py.local.as_ref(),
@@ -419,6 +456,28 @@ impl YarigCfg {
             Some(&self.local)
         } else {
             local
+        }
+    }
+
+    pub fn get_subdir(&self, target: &RifGenTarget) -> Option<&String> {
+        let subdir = match target {
+            RifGenTarget::Html   => self.html.subdir.as_ref(),
+            RifGenTarget::Adoc   => self.adoc.subdir.as_ref(),
+            RifGenTarget::C      => self.c.subdir.as_ref(),
+            RifGenTarget::Ral    => self.ral.subdir.as_ref(),
+            RifGenTarget::Sv     |
+            RifGenTarget::Vhdl   => self.rtl.subdir.as_ref(),
+            RifGenTarget::Py     => self.py.subdir.as_ref(),
+            RifGenTarget::Json   => self.json.subdir.as_ref(),
+            RifGenTarget::IpXact => self.ipxact.subdir.as_ref(),
+            RifGenTarget::Mif    => self.mif.subdir.as_ref(),
+            RifGenTarget::Latex  => self.latex.subdir.as_ref(),
+            _ => None
+        };
+        if subdir.is_none() {
+            self.subdir.as_ref()
+        } else {
+            subdir
         }
     }
 
@@ -449,13 +508,16 @@ impl YarigCfg {
             rif_obj.set_interface(intf);
         }
         //
-        let base_setting = GeneratorBaseSetting::new(self.casing, self.public, &self.gen_inc);
+        let base_setting = GeneratorBaseSetting::new(self.casing, self.public, &self.gen_inc, &self.subdir);
         for target in self.targets.iter() {
             let mut setting = base_setting.clone();
             let out = self.get_output_path(target);
             setting.set_output((out.0, out.1));
             if let Some(local) = self.get_local(target) {
                 setting.set_locals(target, local, &rif_src.paths, &out.2);
+            }
+            if let Some(subdir) = self.get_subdir(target) {
+                setting.subdir = Some(subdir.clone());
             }
             match target {
                 RifGenTarget::C => {

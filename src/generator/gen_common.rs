@@ -109,19 +109,22 @@ pub struct GeneratorBaseSetting {
     pub split: bool,
     /// Output directory path
     path: PathBuf,
+    /// Optional subdirectory for generated file
+    pub subdir: Option<String>,
     /// Path to the different included component when it must be generated locally to its definition rather than the top one
     locals: HashMap<String, PathBuf>,
 }
 
 impl GeneratorBaseSetting {
 
-    pub fn new(casing: Option<Casing>, public: bool, gen_inc: &[String]) -> Self {
+    pub fn new(casing: Option<Casing>, public: bool, gen_inc: &[String], subdir: &Option<String>) -> Self {
         GeneratorBaseSetting {
             path: "".into(),
             fname: None,
             casing: casing.unwrap_or(Casing::Snake),
             privacy: if public {Privacy::Public} else {Privacy::Internal},
             gen_inc: gen_inc.to_vec(),
+            subdir: subdir.clone(),
             locals: HashMap::new(),
             split: false,
         }
@@ -202,9 +205,13 @@ impl GeneratorBaseSetting {
         self.gen_inc.first().map(|c| c.as_str())==Some("*")
     }
 
-    pub fn path(&self, name: &str) -> PathBuf {
+    /// Return output path
+    /// Check for locals definition and subdir definition when not top level
+    pub fn path(&self, name: &str, is_top: bool) -> PathBuf {
         if let Some(path) = self.locals.get(remove_rif(name)) {
             path.to_owned()
+        } else if self.subdir.is_some() && !is_top {
+            self.path.join(self.subdir.as_ref().unwrap())
         } else {
             self.path.clone()
         }
@@ -335,8 +342,8 @@ impl GeneratorCore {
     }
 
     /// Save the main text to a file
-    pub fn save(&mut self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
-        let dir = self.setting.path(&self.comp.name);
+    pub fn save(&mut self, filename: &str, is_top: bool) -> Result<(), Box<dyn std::error::Error>> {
+        let dir = self.setting.path(&self.comp.name, is_top);
         // Create output directory if it does not exist
         std::fs::create_dir_all(dir.clone())?;
         let path : PathBuf = [dir, filename.into()].iter().collect();
@@ -442,8 +449,8 @@ pub trait GeneratorBase {
     }
 
     /// Save the main buffer into a file and clear buffer and stash
-    fn save(&mut self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
-        self.core_mut().save(filename)
+    fn save(&mut self, filename: &str, is_top: bool) -> Result<(), Box<dyn std::error::Error>> {
+        self.core_mut().save(filename, is_top)
     }
 
     /// Write a string in main buffer

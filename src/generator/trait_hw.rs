@@ -295,7 +295,7 @@ pub trait GeneratorHw : GeneratorBase {
 
         // Add end of package and save file
         self.write_rif_pkg_footer(rif);
-        self.save(&self.filename_rif_pkg(rif))?;
+        self.save(&self.filename_rif_pkg(rif), true)?;
         Ok(())
     }
 
@@ -1627,7 +1627,7 @@ pub trait GeneratorHw : GeneratorBase {
 
         // Save file
         let filename = self.filename_rif(rif);
-        self.save(&filename)
+        self.save(&filename, true)
     }
 
     // Add a clocking port to a module interface
@@ -1671,7 +1671,7 @@ pub trait GeneratorHw : GeneratorBase {
 
         // Write file
         let filename = self.filename_rifmux_pkg(rifmux);
-        self.save(&filename)
+        self.save(&filename, true)
     }
 
     // Hooks for RIF mux package
@@ -1819,7 +1819,7 @@ pub trait GeneratorHw : GeneratorBase {
         self.write_module_impl_footer(&rifmux_name);
 
         // Write file
-        self.save(&format!("{}.{}", rifmux_name, Self::EXT))
+        self.save(&format!("{}.{}", rifmux_name, Self::EXT), true)
     }
 
     fn write_rifmux_muxfb(&mut self, comps: &[CompInst], name: &str, len: usize, err_val: (usize,usize)) {
@@ -1965,7 +1965,7 @@ pub trait GeneratorHw : GeneratorBase {
         self.write_module_impl_footer(&riftop_name);
 
         // Write file
-        self.save(&format!("{}.{}", riftop_name, Self::EXT))
+        self.save(&format!("{}.{}", riftop_name, Self::EXT), true)
     }
 
     fn write_intf_ports(&mut self, intf: &Interface) {

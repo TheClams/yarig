@@ -198,7 +198,12 @@ impl GeneratorDoc for GeneratorHtml {
         // Add link to type cell only
         if kind.1==CellKind::Inst && (kind.0==TableKind::Rifmux || kind.0==TableKind::Page) && !id.is_empty() {
                 let ext_link = self.setting().split && kind.0==TableKind::Rifmux;
-                let root = if ext_link {format!("./{}.html", self.comp_fname)} else {"".to_owned()};
+                let subdir = if let Some(subdir) = &self.setting().subdir {
+                    format!("{subdir}/")
+                } else {
+                    "".to_owned()
+                };
+                let root = if ext_link {format!("./{subdir}{}.html", self.comp_fname)} else {"".to_owned()};
                 self.write(&format!("<a href=\"{root}#{id}\">{txt}</a>"));
         } else if kind.1 == CellKind::Desc {
             let txt_ml = desc_ml(txt);

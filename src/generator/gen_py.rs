@@ -120,7 +120,7 @@ impl GeneratorSw for GeneratorPy {
     /// Create the regmap.py containing base class if not defined in another python module
     fn create_resource(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         if self.base_module==".regmap" {
-            let dir = self.setting().path("");
+            let dir = self.setting().path("", false);
             // Create output directory if it does not exist
             std::fs::create_dir_all(dir.clone())?;
             let path : std::path::PathBuf = [dir.clone(), "regmap.py".into()].iter().collect();
@@ -318,9 +318,15 @@ impl GeneratorSw for GeneratorPy {
 
     fn write_rifmux_header(&mut self,  rifmux: &RifmuxInst, rif_list: &RifList, _rifmux_list: &[&RifmuxInst]) {
         self.write("import typing\n");
-        self.write(&format!("from {} import Peripheral\n\n", self.base_module));
+        let dir = if let Some(subdir) = &self.setting().subdir {format!(".{subdir}")} else {"".to_owned()};
+        if self.base_module==".regmap" {
+            self.write(&format!("from {dir}.regmap import Peripheral\n\n"));
+        } else {
+            self.write(&format!("from {} import Peripheral\n\n", self.base_module));
+        }
+        // Import each
         for (rif_inst,_) in rif_list.iter() {
-            self.write(&format!("from .{} import {}\n",
+            self.write(&format!("from {dir}.{} import {}\n",
                 rif_inst.name(false).to_lowercase(),
                 remove_rif(&rif_inst.type_name).to_casing(Casing::Pascal)
             ));

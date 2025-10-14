@@ -191,7 +191,7 @@ pub trait GeneratorSw : GeneratorBase {
             } else {
                 self.filename_rif(rif)
             };
-            self.save(&fname)?;
+            self.save(&fname, is_top)?;
         }
         Ok(())
     }
@@ -308,7 +308,7 @@ pub trait GeneratorSw : GeneratorBase {
         // Save file
         let fname = self.setting().fname.clone()
             .unwrap_or(self.filename_rifmux(rifmux));
-        self.save(&fname)
+        self.save(&fname, true)
     }
 
     /// Scan rifmux components

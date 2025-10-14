@@ -21,7 +21,9 @@ impl GeneratorJson {
     }
 
     fn desc_to_string(&mut self, desc: &Description) -> String {
-        desc.get(self.is_public()).replace("\n","\\n")
+        desc.get(self.is_public())
+            .replace("\n","\\n")
+            .replace('"',"\\\"")
     }
 
 }
