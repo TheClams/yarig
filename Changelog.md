@@ -1,6 +1,11 @@
 # Change Log
 
-## [0.17.0] - 2025-14-10
+## [0.17.1] - 2025-10-15
+
+### Fixed
+  - Software Generator: fix address for block inside groups
+
+## [0.17.0] - 2025-10-14
 
 ### Added
   - Configuration:

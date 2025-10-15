@@ -320,7 +320,7 @@ pub trait GeneratorSw : GeneratorBase {
         };
         let mut comps = rifmux.components.iter().filter(|c| !c.is_external()).peekable();
         while let Some(comp) = comps.next()  {
-            let addr = offset + comp.addr;
+            let addr = offset + comp.full_addr(&rifmux.groups);
             let last_comp = comps.peek().is_none() && last_scan;
             match &comp.inst {
                 Comp::Rifmux(r) => {
