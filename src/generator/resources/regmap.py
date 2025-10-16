@@ -77,6 +77,10 @@ class Register(object):
             obj = getattr(self, attr_name)
             if isinstance(obj, Field):
                 yield obj
+            elif isinstance(obj, dict):
+                for _, x in obj.items():
+                    if isinstance(x, Field):
+                        yield x
 
     def parent(self) -> None | Peripheral:
         '''Return peripheral which owns the register'''

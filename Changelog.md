@@ -4,6 +4,9 @@
 
 ### Fixed
   - Software Generator: fix address for block inside groups
+  - Python:
+    * Fix handling of fields arrays (missing position and reset value)
+    * change some spacing to be PEP8 compliant
 
 ## [0.17.0] - 2025-10-14
 

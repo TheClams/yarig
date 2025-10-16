@@ -56,7 +56,7 @@ pub struct GeneratorPy {
     /// Flag when current RIF has enum definition
     has_enum : bool,
     /// Dictionary containing the register owning a field array definition
-    field_parent : BTreeMap<String,String>,
+    field_parent : BTreeMap<String,(String,u128)>,
     /// Dictionary containing the list of field array in a register
     field_array : BTreeSet<String>,
 }
@@ -86,7 +86,7 @@ impl GeneratorPy {
         if desc_short.is_empty() {
             return None;
         }
-        let indent = "   ".repeat(lvl);
+        let indent = "    ".repeat(lvl);
         let mut s = format!("{indent}'''{desc_short}");
         if let Some(desc_details) = desc_details {
             s.push_str(&format!("\n\n{indent}"));
@@ -94,7 +94,7 @@ impl GeneratorPy {
             while let Some(l) = desc_lines.next() {
                 s.push_str(&l.replace('\\',"").replace('\'', "\\\'"));
                 if desc_lines.peek().is_some() {
-                    s.push_str("\n         ");
+                    s.push_str("\n            ");
                 }
             }
         }
@@ -128,7 +128,7 @@ impl GeneratorSw for GeneratorPy {
                 PyVersion::V3_10 => {
                     let mut file = File::create(path)?;
                     for l in Self::DEFAULT_BASECLASS.lines() {
-                        if l=="    @typing.override" { continue; }
+                        if l=="     @typing.override" { continue; }
                         file.write_all(l.as_bytes())?;
                         file.write_all(b"\n")?;
                     }
@@ -145,26 +145,24 @@ impl GeneratorSw for GeneratorPy {
         if self.has_enum {
             self.write("from enum import IntEnum\n");
         }
-        self.write(&format!("from {} import Field, Register, Peripheral\n\n", self.base_module));
+        self.write(&format!("from {} import Field, Register, Peripheral\n\n\n", self.base_module));
         self.write("@typing.final\n");
         self.write(&format!("class {rif_name}(Peripheral):\n"));
         if let Some(desc) = self.desc_to_string(&rif.description,1) {
             self.write(&desc);
         }
         self.write("\n");
-        // Cleanup field parent dictionnary
-        self.field_parent.clear();
     }
 
     /// Write enum start of declaration statement
     fn write_enum_header(&mut self, type_name: &str, def: &EnumDef) {
-        self.write(&format!("   class e_{type_name}(IntEnum):\n"));
-        self.write(&format!("      '''{}'''\n", def.description));
+        self.write(&format!("    class e_{type_name}(IntEnum):\n"));
+        self.write(&format!("        '''{}'''\n", def.description));
     }
 
     /// Write enum entry
     fn write_enum_entry(&mut self, entry: &EnumEntry , is_last: bool) {
-        self.write(&format!("      {} = {}\n", entry.name, entry.value));
+        self.write(&format!("        {} = {}\n", entry.name, entry.value));
         if let Some(desc) = self.desc_to_string(&entry.description,2) {
             self.write(&desc);
         }
@@ -178,28 +176,28 @@ impl GeneratorSw for GeneratorPy {
         let pairs : Vec<(&str,f64)>= def.values.iter().filter(|d| d.repr.is_some()).map(|d| (d.name.as_str(), d.repr.unwrap())).collect();
         if let Some(default_val) = pairs.first() {
             let rif_name = remove_rif(self.comp_name()).to_casing(Casing::Pascal);
-            self.write("      def to_float(self) -> float:\n");
+            self.write("        def to_float(self) -> float:\n");
             for (k,v) in pairs.iter() {
-                self.write(&format!("         if self == self.{k}: return {v};\n"));
+                self.write(&format!("            if self == self.{k}: return {v};\n"));
             }
-            self.write(&format!("         return {}\n\n", default_val.1));
-            self.write(         "      @classmethod\n");
-            self.write(&format!("      def from_float(cls, val: float) -> '{rif_name}.e_{type_name}' :\n"));
-            self.write(         "         min_diff = float('inf')\n");
-            self.write(&format!("         closest = cls.{}\n", default_val.0));
-            self.write(         "         for n in cls:\n");
-            self.write(         "            diff = abs(val - n.to_float())\n");
-            self.write(         "            if diff < min_diff:\n");
-            self.write(         "               min_diff = diff\n");
-            self.write(         "               closest = n\n");
-            self.write(         "         return closest\n\n");
+            self.write(&format!("            return {}\n\n", default_val.1));
+            self.write(         "        @classmethod\n");
+            self.write(&format!("        def from_float(cls, val: float) -> '{rif_name}.e_{type_name}':\n"));
+            self.write(         "            min_diff = float('inf')\n");
+            self.write(&format!("            closest = cls.{}\n", default_val.0));
+            self.write(         "            for n in cls:\n");
+            self.write(         "                diff = abs(val - n.to_float())\n");
+            self.write(         "                if diff < min_diff:\n");
+            self.write(         "                    min_diff = diff\n");
+            self.write(         "                    closest = n\n");
+            self.write(         "            return closest\n\n");
         }
     }
 
     fn write_reg_header(&mut self, _basename: &str, reg: &RifRegInst) {
         let typename = reg.reg_type.to_casing(Casing::Pascal);
-        self.write("   @typing.final\n");
-        self.write(&format!("   class {typename}(Register):\n"));
+        self.write("    @typing.final\n");
+        self.write(&format!("    class {typename}(Register):\n"));
         if let Some(desc) = self.desc_to_string(&reg.base_description,2) {
             self.write(&desc);
         }
@@ -212,17 +210,18 @@ impl GeneratorSw for GeneratorPy {
             flags.push("interrupt");
         }
         if !flags.is_empty() {
-            self.push_stash(0, &format!("         self.__reg_info__.flags = {flags:?}\n"));
+            self.push_stash(0, &format!("            self.__reg_info__.flags = {flags:?}\n"));
         }
         // Cleanup field array dictionnary
         self.field_array.clear();
+
     }
 
     // End of register declaration: add the init function with all the field instance
     fn write_reg_footer(&mut self, _basename: &str, reg: &RifRegInst, _is_last: bool) {
-        self.write("\n      def __init__(self, parent: None | Peripheral, name: str, addr: int, init: None|int = None) :\n");
+        self.write("\n        def __init__(self, parent: None | Peripheral, name: str, addr: int, init: None | int = None):\n");
         let ro = if reg.sw_access.is_writable() {"False"} else {"True"};
-        self.write(&format!("         super().__init__(parent, name, addr, {ro}, init)\n"));
+        self.write(&format!("            super().__init__(parent, name, addr, {ro}, init)\n"));
         self.pop_stash(0);
         self.write("\n");
     }
@@ -233,45 +232,50 @@ impl GeneratorSw for GeneratorPy {
         let reg_type = reg.reg_type.to_casing(Casing::Pascal);
         let name = field.name.to_casing(Casing::Snake);
         let idx = if field.array.dim() > 1 {format!("[{}]", field.array.idx())} else {"".to_owned()};
+        let rst = field.reset(reg.def_idx());
         //
+        if field.array.idx() == 0 || !self.field_parent.contains_key(&field.name) {
+            self.field_parent.insert(field.name.clone(), (reg_type.to_owned(),rst));
+        }
+        let (reg_parent,rst_base) = self.field_parent.get(&field.name).cloned().unwrap_or((reg_type.clone(),rst));
         if field.array.dim() > 0 && !self.field_array.contains(&field.name) {
             if field.array.dim() > 1 {
-                self.push_stash(0, &format!("         self.{name} : dict [int, {comp_name}.{}.{field_type}] = {{}}\n",
-                    self.field_parent.get(&field.name).unwrap_or(&reg_type),
-                ));
+                self.push_stash(0, &format!("            self.{name}: dict[int, {comp_name}.{reg_parent}.{field_type}] = {{}}\n"));
             }
             self.field_array.insert(field.name.clone());
-            if field.array.idx() == 0 { // Need to handle out-of-order field array
-                self.field_parent.insert(field.name.clone(), reg_type.to_owned());
-            }
         }
-        self.push_stash(0, &format!("         self.{name}{idx} = {comp_name}.{}.{field_type}(self, '{name}{idx}')\n",
-            self.field_parent.get(&field.name).unwrap_or(&reg_type),
-        ));
+        self.push_stash(0, &format!("            self.{name}{idx} = {comp_name}.{reg_parent}.{field_type}(self, '{name}{idx}')\n"));
         // Doc-string
         if let Some(desc) = self.desc_to_string(&field.description,3) {
             self.push_stash(0, &desc);
+        }
+        // For arrays ensure position is set
+        if field.array.dim() > 1 {
+            self.push_stash(0, &format!("            self.{name}{idx}.pos = {}\n", field.lsb));
+            if rst != rst_base {
+                self.push_stash(0, &format!("            self.{name}{idx}.value = {rst}\n"));
+            }
         }
         // Skip the Field type declaration if already defined
         if field.array.idx() > 0 {
             return;
         }
         // Class declaration
-        self.write(&format!("\n      class {field_type}(Field):\n"));
+        self.write(&format!("\n        class {field_type}(Field):\n"));
         if let Some(desc) = self.desc_to_string(&field.base_description,3) {
             self.write(&desc);
         }
         //
-        let tab = " ".repeat(9);
-        self.write(&format!("{tab}pos : int = {}\n", field.lsb));
-        self.write(&format!("{tab}width : int = {}\n", field.width));
-        self.write(&format!("{tab}value : int = {}\n", field.reset(reg.def_idx())));
-        self.write(&format!("{tab}signed : bool = {}\n",
+        let tab = " ".repeat(4*3);
+        self.write(&format!("{tab}pos: int = {}\n", field.lsb));
+        self.write(&format!("{tab}width: int = {}\n", field.width));
+        self.write(&format!("{tab}value: int = {rst}\n", ));
+        self.write(&format!("{tab}signed: bool = {}\n",
             if field.is_signed() {"True"} else {"False"}));
         if field.nb_frac != 0 {
-            self.write(&format!("{tab}nb_frac : int = {}\n", field.nb_frac));
+            self.write(&format!("{tab}nb_frac: int = {}\n", field.nb_frac));
         }
-        self.write(&format!("{tab}kind : str = {:?}\n", field.sw_kind.access_str()));
+        self.write(&format!("{tab}kind: str = {:?}\n", field.sw_kind.access_str()));
         if let Some(def) = enum_def.filter(|d| !d.name.starts_with("doc:")) {
             if self.version > PyVersion::V3_10 {
                 self.write(&format!("\n{tab}@typing.override"));
@@ -283,8 +287,8 @@ impl GeneratorSw for GeneratorPy {
     }
 
     fn write_page_footer(&mut self, _name: &str, _is_last: bool) {
-        self.write("\n   def __init__(self, name: str, addr: int):\n");
-        self.write("      super().__init__(name, addr)\n");
+        self.write("    def __init__(self, name: str, addr: int):\n");
+        self.write("        super().__init__(name, addr)\n");
         self.pop_stash(1)
     }
 
@@ -294,19 +298,19 @@ impl GeneratorSw for GeneratorPy {
         let reg_type = reg.reg_type.to_casing(Casing::Pascal);
         if reg.array.dim() > 1 {
             if reg.array.idx() == 0 {
-                self.push_stash(1, &format!("      self.{name} : list[{comp_name}.{reg_type}] = []\n"));
+                self.push_stash(1, &format!("        self.{name}: list[{comp_name}.{reg_type}] = []\n"));
                 if let Some(desc) = self.desc_to_string(&reg.base_description,2) {
                     self.push_stash(1, &desc);
                 }
             }
-            self.push_stash(1, &format!("      self.{name}.append({comp_name}.{reg_type}(self, \"{name}{}\", {}, {:#x}))\n",
+            self.push_stash(1, &format!("        self.{name}.append({comp_name}.{reg_type}(self, \"{name}{}\", {}, {:#x}))\n",
                 reg.array.idx(),
                 page.addr + reg.addr,
                 reg.reset
             ));
 
         } else {
-            self.push_stash(1, &format!("      self.{name} = {comp_name}.{reg_type}(self, \"{name}\", {}, {:#x})\n",
+            self.push_stash(1, &format!("        self.{name} = {comp_name}.{reg_type}(self, \"{name}\", {}, {:#x})\n",
                 page.addr + reg.addr,
                 reg.reset
             ));
@@ -333,18 +337,18 @@ impl GeneratorSw for GeneratorPy {
         }
         let class_name = remove_rif(&rifmux.type_name).to_casing(Casing::Pascal);
 
-        self.write("\n@typing.final\n");
+        self.write("\n\n@typing.final\n");
         self.write(&format!("class {class_name}(Peripheral):\n\n"));
         if let Some(desc) = self.desc_to_string(&rifmux.description, 1) {
             self.write(&desc);
         }
-        self.write("   def __init__(self, name: str = '', addr: int = 0):\n");
-        self.write("      super().__init__(name, addr)\n");
+        self.write("    def __init__(self, name: str = '', addr: int = 0):\n");
+        self.write("        super().__init__(name, addr)\n");
     }
 
     fn write_rif_inst(&mut self, rif_inst: &RifInst, cntxt: RifContext, _desc: &Description, _last_page: bool, _last_comp: bool) {
         let name = remove_rif(&rif_inst.inst_name).to_casing(Casing::Snake);
-        self.write(&format!("      self.{name} = {}('{name}', {:#x} + addr)\n",
+        self.write(&format!("        self.{name} = {}('{name}', {:#x} + addr)\n",
             remove_rif(&rif_inst.type_name).to_casing(Casing::Pascal),
             cntxt.addr
         ));
