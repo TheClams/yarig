@@ -203,7 +203,7 @@ nb_pipe = 2
 gen_inc = ["*"]
 
 # Optional: Override global local for this target
-local = ["module1"]
+local = ["module1", "module2"]
 
 # Generate constant for register address in the package
 const_addr = true
@@ -227,7 +227,7 @@ macro_name = "MY_RAL_MACRO"
 gen_inc = ["*"]
 
 # Optional: Override global local for this target
-local = ["module1"]
+local = ["module1=sim", "module2=../sim"]
 
 # Optional: List of package import per register block
 imports.blk0 = blk0_sim_pkg

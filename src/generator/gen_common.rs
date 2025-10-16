@@ -141,23 +141,31 @@ impl GeneratorBaseSetting {
         else {paths.get(short_name).map(|v| (short_name,v))}
     }
 
-    pub fn set_locals(&mut self, target: &RifGenTarget,  locals: &[String], paths: &HashMap<String,PathBuf>, out: &str) {
+    pub fn set_locals(&mut self, target: &RifGenTarget, locals: &[String], paths: &HashMap<String,PathBuf>, out: &str) {
         self.locals.clear();
-        let iter : Box<dyn Iterator<Item = (&str, &PathBuf)>> =
-            if locals.first().map(|c| c.as_str())==Some("*") {
+        let iter : Box<dyn Iterator<Item = ((&str, &PathBuf), Option<String>)>> =
+            if let Some(key_all) = locals.first().filter(|c| c.starts_with('*')) {
+                let out = key_all.split(&[':', '=']).skip(1).next().map(|s| s.to_owned());
                 if self.is_gen_all() {
-                    Box::new(paths.iter().map(|(k,v)| (k.as_str(), v)))
+                    Box::new(paths.iter().map(move |(k,v)| ((k.as_str(), v), out.clone())))
                 } else {
-                    Box::new(self.gen_inc.iter().filter_map(|k| Self::get_path(k,paths)))
+                    Box::new(self.gen_inc.iter()
+                        .filter_map(|k| Self::get_path(k,paths))
+                        .map(move |x| (x, out.clone())))
                 }
             } else {
-                Box::new(locals.iter().filter_map(|k| Self::get_path(k,paths)))
+                Box::new(locals.iter().filter_map(|k| {
+                    let mut ks = k.split(&[':', '=']);
+                    let name = ks.next()?;
+                    let out = ks.next().map(|s| s.to_owned());
+                    Self::get_path(name, paths).map(|x| (x,out))
+                }))
             };
-        for (k,v) in iter {
+        for ((k, toml_path), opt_out) in iter {
             let mut path : PathBuf;
             // Check for toml file in same directory as RIF: take first if only one or one with matching name
-            let Ok(files) = std::fs::read_dir(v) else {
-                eprintln!("Unable to read dir '{v:?}'");
+            let Ok(files) = std::fs::read_dir(toml_path) else {
+                eprintln!("Unable to read dir '{toml_path:?}'");
                 continue;
             };
             let toml_files : Vec<_> = files.filter(|p| {
@@ -174,7 +182,10 @@ impl GeneratorBaseSetting {
                 } else  {
                     toml_files.first()
             };
+            // Override output path by value defined in local
+            let out = opt_out.as_deref().unwrap_or(out);
             let (mut cfg_out, mut filepath) : (PathBuf, Option<String> ) = (out.into(), None);
+            // Get information from toml if it exists
             if let Some(toml) = toml {
                 if let Ok(cfg) = YarigCfg::from_file(toml) {
                     (cfg_out, filepath, _) = cfg.get_output_path(target);
@@ -183,7 +194,7 @@ impl GeneratorBaseSetting {
 
             // Apply output path
             if cfg_out.is_relative() {
-                path = v.to_owned();
+                path = toml_path.to_owned();
                 path.push(cfg_out);
             } else {
                 path = cfg_out;
