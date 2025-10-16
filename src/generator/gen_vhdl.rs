@@ -42,7 +42,7 @@ impl GeneratorVhdl {
 
     pub fn new(setting: GeneratorBaseSetting, extra: CfgRtl) -> Self {
         let mut core = GeneratorCore::new(4,setting);
-        // Override gen_inc if defined in the python settings
+        // Override gen_inc if defined in the extra settings
         if let Some(gen_inc) = extra.gen_inc {
             core.setting.gen_inc = gen_inc;
         }

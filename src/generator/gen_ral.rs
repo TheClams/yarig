@@ -4,7 +4,7 @@ use crate::{
     cfg::CfgRal,
     comp::comp_inst::{RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxInst},
     parser::{get_rif, remove_rif},
-    rifgen::{Description, EnumDef, FieldSwKind}
+    rifgen::{Description, EnumDef, FieldSwKind, InterruptRegKind}
 };
 
 use super::{
@@ -31,7 +31,7 @@ impl GeneratorRal {
 
     pub fn new(setting: GeneratorBaseSetting, extra: CfgRal) -> Self {
         let mut core = GeneratorCore::new(3,setting);
-        // Override gen_inc if defined in the python settings
+        // Override gen_inc if defined in the extra settings
         if let Some(gen_inc) = extra.gen_inc {
             core.setting.gen_inc = gen_inc;
         }
@@ -196,9 +196,6 @@ impl GeneratorSw for GeneratorRal {
         self.push_stash(2, &format!("      this.{regname}.configure(this, null, \"\");\n"));
         self.push_stash(2, &format!("      this.{regname}.build();\n"));
         self.push_stash(2, &format!("      this.{regname}.add_hdl_path_slice(\"{regname}__read_data\", 0, {});\n", self.data_width()));
-        self.push_stash(2, &format!("      this.default_map.add_reg(this.{regname}, "));
-        self.push_stash(2, &format!("`UVM_REG_ADDR_WIDTH\'h{:X}, ", page.addr + reg.addr));
-        self.push_stash(2, &format!("\"{}\", 0);\n", reg.sw_access));
         let is_public = self.setting().privacy.is_public();
         let reg_1st = &inst_dict.first_inst(page, reg);
         for (fi,field) in reg.fields.iter()
@@ -215,13 +212,23 @@ impl GeneratorSw for GeneratorRal {
             let base_field_name = self.get_field_name(reg_1st, base_field);
             self.push_stash(1, &format!("   {rand_s}uvm_reg_field {regname}_{fieldname};\n"));
             self.push_stash(2, &format!("      this.{regname}_{fieldname} = this.{regname}.{base_field_name};\n"));
+            // Override reset when different from default value
             let rst = field.reset(reg.def_idx());
             if rst != reg_1st.fields[fi].reset(reg_1st.def_idx()) {
                 self.push_stash(2,
                     &format!("      this.{regname}_{fieldname}.set_reset({});\n",
                         Self::format_u128(rst, field.width, field.is_signed())));
             }
+            // Override access for auto-interrupt register
+            if reg.is_intr_derived() {
+                let acc = if reg.intr_info.0 == InterruptRegKind::Pending {"RO"} else {"RW"};
+                self.push_stash(2, &format!("      void'(this.{regname}_{fieldname}.set_access(\"{acc}\"));\n"));
+
+            }
         }
+        self.push_stash(2, &format!("      this.default_map.add_reg(this.{regname}, "));
+        self.push_stash(2, &format!("`UVM_REG_ADDR_WIDTH\'h{:X}, ", page.addr + reg.addr));
+        self.push_stash(2, &format!("\"{}\", 0);\n", reg.sw_access));
     }
 
     fn write_rifmux_header(&mut self, rifmux: &RifmuxInst, rif_list: &RifList, rifmux_list: &[&RifmuxInst]) {

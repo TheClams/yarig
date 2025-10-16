@@ -502,7 +502,6 @@ impl YarigCfg {
             .map_err(|e| format!("Parsing Error : {e}"))?;
         let mut rif_obj = Comp::compile(&rif_src, &self.suffixes, &params)
             .map_err(|e| format!("Compilation failed: {e}"))?;
-        // println!("{:#?}", rif_src.paths);
         // Handle case where suffixes are enabled only for RTL targets
         // Force to None by default and will set it properly only in the appropriate target
         let no_suffixes = HashMap::new();

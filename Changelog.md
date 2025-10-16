@@ -1,5 +1,17 @@
 # Change Log
 
+## [0.17.2] - 2025-10-17
+
+### Added
+  - Python: option to add `__init__.py` file in the output directory
+  - Configuration: option to over-ride default output path of locals. For example: local = ["module1*=../sim"]
+
+### Changed
+  - Python: use triple double-quote instead of single quote for docstring
+
+### Fixed
+  - RAL: fix interrupt enable/mask/pending access
+
 ## [0.17.1] - 2025-10-15
 
 ### Fixed
