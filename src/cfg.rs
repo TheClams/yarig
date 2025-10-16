@@ -238,6 +238,8 @@ pub struct CfgPy {
     pub class: Option<String>,
     /// Python version
     pub version: Option<PyVersion>,
+    /// Create an __init__.py file at the RIF output location
+    pub init_file: Option<bool>,
     /// List of included reference to generate (use ["*"] for all)
     pub gen_inc: Option<Vec<String>>,
     /// List of included reference which must be generated locally (use ["*"] to match all component in the gen_inc definition)

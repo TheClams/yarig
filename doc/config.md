@@ -245,6 +245,9 @@ class = "MyPeripheral"
 # Valid values: "3.8", "3.9", "3.10", "3.11", "3.12"
 version = "3.10"
 
+# Optional: Create an __init__.py file in the output path
+init_file = false
+
 # Optional: Override global gen_inc for this target
 gen_inc = ["*"]
 

@@ -55,6 +55,8 @@ pub struct GeneratorPy {
     version : PyVersion,
     /// Flag when current RIF has enum definition
     has_enum : bool,
+    /// Indicate that an __init__.py file should be created
+    init_file : bool,
     /// Dictionary containing the register owning a field array definition
     field_parent : BTreeMap<String,(String,u128)>,
     /// Dictionary containing the list of field array in a register
@@ -75,6 +77,7 @@ impl GeneratorPy {
             core,
             version: extra.version.unwrap_or(PyVersion::V3_11),
             has_enum: false,
+            init_file: extra.init_file.unwrap_or(false),
             base_module: extra.class.unwrap_or(".regmap".to_owned()),
             field_parent: BTreeMap::new(),
             field_array: BTreeSet::new(),
@@ -87,7 +90,7 @@ impl GeneratorPy {
             return None;
         }
         let indent = "    ".repeat(lvl);
-        let mut s = format!("{indent}'''{desc_short}");
+        let mut s = format!("{indent}\"\"\"{desc_short}");
         if let Some(desc_details) = desc_details {
             s.push_str(&format!("\n\n{indent}"));
             let mut desc_lines = desc_details.lines().peekable();
@@ -98,7 +101,7 @@ impl GeneratorPy {
                 }
             }
         }
-        s.push_str("'''\n");
+        s.push_str("\"\"\"\n");
         Some(s)
     }
 
@@ -119,8 +122,8 @@ impl GeneratorSw for GeneratorPy {
 
     /// Create the regmap.py containing base class if not defined in another python module
     fn create_resource(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let dir = self.setting().path("", false);
         if self.base_module==".regmap" {
-            let dir = self.setting().path("", false);
             // Create output directory if it does not exist
             std::fs::create_dir_all(dir.clone())?;
             let path : std::path::PathBuf = [dir.clone(), "regmap.py".into()].iter().collect();
@@ -128,13 +131,17 @@ impl GeneratorSw for GeneratorPy {
                 PyVersion::V3_10 => {
                     let mut file = File::create(path)?;
                     for l in Self::DEFAULT_BASECLASS.lines() {
-                        if l=="     @typing.override" { continue; }
+                        if l=="    @typing.override" { continue; }
                         file.write_all(l.as_bytes())?;
                         file.write_all(b"\n")?;
                     }
                 }
                 _ => std::fs::write(path, Self::DEFAULT_BASECLASS.as_bytes())?,
             }
+        }
+        if self.init_file {
+            let path : std::path::PathBuf = [dir.clone(), "__init__.py".into()].iter().collect();
+            File::create(path)?;
         }
         Ok(())
     }
@@ -157,7 +164,7 @@ impl GeneratorSw for GeneratorPy {
     /// Write enum start of declaration statement
     fn write_enum_header(&mut self, type_name: &str, def: &EnumDef) {
         self.write(&format!("    class e_{type_name}(IntEnum):\n"));
-        self.write(&format!("        '''{}'''\n", def.description));
+        self.write(&format!("        \"\"\"{}\"\"\"\n", def.description));
     }
 
     /// Write enum entry
