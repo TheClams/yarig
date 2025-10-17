@@ -96,6 +96,7 @@ impl RifGenTarget {
     }
 }
 
+/// Top Configuration
 #[derive(Deserialize, Debug, Default)]
 #[serde(default)]
 pub struct YarigCfg {
@@ -145,6 +146,7 @@ pub struct YarigCfg {
     pub latex: CfgLatex,
 }
 
+/// Configuration specific to HTML target
 #[derive(Deserialize, Debug, Clone, Default)]
 #[serde(deny_unknown_fields)]
 pub struct CfgHtml {
@@ -158,6 +160,7 @@ pub struct CfgHtml {
     pub subdir: Option<String>,
 }
 
+/// Configuration specific to ASCII Doc target
 #[derive(Deserialize, Debug, Clone, Default)]
 #[serde(deny_unknown_fields)]
 pub struct CfgAdoc {
@@ -173,6 +176,7 @@ pub struct CfgAdoc {
     pub subdir: Option<String>,
 }
 
+/// Configuration specific to LaTeX target
 #[derive(Deserialize, Debug, Clone, Default)]
 #[serde(deny_unknown_fields)]
 pub struct CfgLatex {
@@ -184,6 +188,7 @@ pub struct CfgLatex {
     pub subdir: Option<String>,
 }
 
+/// Configuration specific to C target
 #[derive(Deserialize, Debug, Clone, Default)]
 #[serde(deny_unknown_fields)]
 pub struct CfgC {
@@ -197,6 +202,7 @@ pub struct CfgC {
     pub subdir: Option<String>,
 }
 
+/// Configuration specific to RTL target
 #[derive(Deserialize, Debug, Clone, Default)]
 #[serde(deny_unknown_fields)]
 pub struct CfgRtl {
@@ -214,6 +220,7 @@ pub struct CfgRtl {
     pub subdir: Option<String>,
 }
 
+/// Configuration specific to RAL target
 #[derive(Deserialize, Debug, Clone, Default)]
 #[serde(deny_unknown_fields)]
 pub struct CfgRal {
@@ -231,6 +238,7 @@ pub struct CfgRal {
     pub subdir: Option<String>,
 }
 
+/// Configuration specific to python target
 #[derive(Deserialize, Debug, Clone, Default)]
 #[serde(deny_unknown_fields)]
 pub struct CfgPy {
@@ -246,8 +254,11 @@ pub struct CfgPy {
     pub local: Option<Vec<String>>,
     /// Sub-directory name for generated file which are not the top level
     pub subdir: Option<String>,
+    /// Directory where regmap.py file is generated
+    pub regmap_dir: Option<String>,
 }
 
+/// Configuration specific to JSON target
 #[derive(Deserialize, Debug, Clone, Default)]
 #[serde(deny_unknown_fields)]
 pub struct CfgJson {
@@ -259,6 +270,7 @@ pub struct CfgJson {
     pub subdir: Option<String>,
 }
 
+/// Configuration specific to SVD target
 #[derive(Deserialize, Debug, Clone, Default)]
 #[serde(deny_unknown_fields)]
 pub struct CfgSvd {
@@ -268,6 +280,7 @@ pub struct CfgSvd {
     pub version: Option<String>,
 }
 
+/// Configuration specific to IP Xact target
 #[derive(Deserialize, Debug, Clone, Default)]
 #[serde(deny_unknown_fields)]
 pub struct CfgIpXact {
@@ -281,6 +294,7 @@ pub struct CfgIpXact {
     pub subdir: Option<String>,
 }
 
+/// Configuration specific to MIF target
 #[derive(Deserialize, Debug, Clone, Default)]
 #[serde(deny_unknown_fields)]
 pub struct CfgMif {

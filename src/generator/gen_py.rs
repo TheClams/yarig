@@ -1,4 +1,4 @@
-use std::{collections::{BTreeMap, BTreeSet}, fs::File, io::Write, str::FromStr};
+use std::{collections::{BTreeMap, BTreeSet}, fs::File, io::Write, path::PathBuf, str::FromStr};
 
 use crate::{
     cfg::CfgPy,
@@ -57,6 +57,8 @@ pub struct GeneratorPy {
     has_enum : bool,
     /// Indicate that an __init__.py file should be created
     init_file : bool,
+    /// Path where regmap.py is generated
+    regmap_dir : Option<String>,
     /// Dictionary containing the register owning a field array definition
     field_parent : BTreeMap<String,(String,u128)>,
     /// Dictionary containing the list of field array in a register
@@ -79,6 +81,7 @@ impl GeneratorPy {
             has_enum: false,
             init_file: extra.init_file.unwrap_or(false),
             base_module: extra.class.unwrap_or(".regmap".to_owned()),
+            regmap_dir: extra.regmap_dir,
             field_parent: BTreeMap::new(),
             field_array: BTreeSet::new(),
         }
@@ -123,10 +126,18 @@ impl GeneratorSw for GeneratorPy {
     /// Create the regmap.py containing base class if not defined in another python module
     fn create_resource(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let dir = self.setting().path("", false);
-        if self.base_module==".regmap" {
-            // Create output directory if it does not exist
+        // Create output directory if it does not exist
+        if !dir.exists() {
             std::fs::create_dir_all(dir.clone())?;
-            let path : std::path::PathBuf = [dir.clone(), "regmap.py".into()].iter().collect();
+        }
+        if self.base_module==".regmap" || self.regmap_dir.is_some() {
+            let n = self.base_module.split('.').next_back().unwrap_or("regmap");
+            let d = self.regmap_dir.as_ref().map(|d| d.into()).unwrap_or(dir.clone());
+            // Create output directory if it does not exist
+            if !d.exists() {
+                std::fs::create_dir_all(d.clone())?;
+            }
+            let path : PathBuf = [d, format!("{n}.py").into()].iter().collect();
             match self.version {
                 PyVersion::V3_10 => {
                     let mut file = File::create(path)?;
@@ -136,11 +147,13 @@ impl GeneratorSw for GeneratorPy {
                         file.write_all(b"\n")?;
                     }
                 }
-                _ => std::fs::write(path, Self::DEFAULT_BASECLASS.as_bytes())?,
+                _ => {
+                    std::fs::write(path, Self::DEFAULT_BASECLASS.as_bytes())?;
+                }
             }
         }
         if self.init_file {
-            let path : std::path::PathBuf = [dir.clone(), "__init__.py".into()].iter().collect();
+            let path : PathBuf = [dir, "__init__.py".into()].iter().collect();
             File::create(path)?;
         }
         Ok(())

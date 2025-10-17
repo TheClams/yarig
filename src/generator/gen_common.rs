@@ -143,25 +143,25 @@ impl GeneratorBaseSetting {
 
     pub fn set_locals(&mut self, target: &RifGenTarget, locals: &[String], paths: &HashMap<String,PathBuf>, out: &str) {
         self.locals.clear();
-        let iter : Box<dyn Iterator<Item = ((&str, &PathBuf), Option<String>)>> =
+        let iter : Box<dyn Iterator<Item = (&str, &PathBuf, Option<String>)>> =
             if let Some(key_all) = locals.first().filter(|c| c.starts_with('*')) {
-                let out = key_all.split(&[':', '=']).skip(1).next().map(|s| s.to_owned());
+                let out = key_all.split_once([':', '=']).map(|(_,s)| s.to_owned());
                 if self.is_gen_all() {
-                    Box::new(paths.iter().map(move |(k,v)| ((k.as_str(), v), out.clone())))
+                    Box::new(paths.iter().map(move |(k,v)| (k.as_str(), v, out.clone())))
                 } else {
                     Box::new(self.gen_inc.iter()
                         .filter_map(|k| Self::get_path(k,paths))
-                        .map(move |x| (x, out.clone())))
+                        .map(move |x| (x.0, x.1, out.clone())))
                 }
             } else {
                 Box::new(locals.iter().filter_map(|k| {
                     let mut ks = k.split(&[':', '=']);
                     let name = ks.next()?;
                     let out = ks.next().map(|s| s.to_owned());
-                    Self::get_path(name, paths).map(|x| (x,out))
+                    Self::get_path(name, paths).map(|x| (x.0, x.1, out))
                 }))
             };
-        for ((k, toml_path), opt_out) in iter {
+        for (k, toml_path, opt_out) in iter {
             let mut path : PathBuf;
             // Check for toml file in same directory as RIF: take first if only one or one with matching name
             let Ok(files) = std::fs::read_dir(toml_path) else {

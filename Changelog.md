@@ -3,7 +3,9 @@
 ## [0.17.2] - 2025-10-17
 
 ### Added
-  - Python: option to add `__init__.py` file in the output directory
+  - Python:
+    * option to add `__init__.py` file in the output directory
+    * option to set path for the regmap.py file (containing base python class)
   - Configuration: option to over-ride default output path of locals. For example: local = ["module1*=../sim"]
 
 ### Changed
