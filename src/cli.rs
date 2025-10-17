@@ -11,7 +11,7 @@ use crate::{
 
 #[derive(Parser)]
 #[command(version, rename_all="snake_case")]
-/// Register Interface Generator
+/// Command-line arguments for Yarig
 pub struct RifGenArgs{
     /// path to the RIF file to parse
     #[arg(short, long)]

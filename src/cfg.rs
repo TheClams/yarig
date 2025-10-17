@@ -1,3 +1,58 @@
+//! Configuration management for YARIG code generation.
+//!
+//! This module provides the configuration structures used to control the parsing and generation
+//! of register interface files (RIF). The configuration can be loaded from a TOML file and/or
+//! built from command-line arguments.
+//!
+//! # Overview
+//!
+//! The main entry point is the [`YarigCfg`] structure, which contains:
+//! - Input file specification and search paths
+//! - List of target formats to generate (SystemVerilog, C, Python, HTML, etc.)
+//! - Global settings (visibility, casing, parameters, etc.)
+//! - Target-specific configuration options
+//!
+//! # Usage
+//!
+//! ## Loading from TOML file and generate all targets
+//!
+//! ```no_run
+//! use yarig::cfg::YarigCfg;
+//! let cfg = YarigCfg::from_file("config.toml")
+//!     .expect("Failed to load configuration");
+//! cfg.gen_all()
+//!     .expect("Generation failed");
+//! ```
+//!
+//! # Configuration File Format
+//!
+//! The configuration file uses TOML format. Here's a minimal example:
+//!
+//! ```toml
+//! filename = "my_chip.rif"
+//! targets = ["sv", "c", "html"]
+//!
+//! [outputs]
+//! rtl = "./generated/rtl"
+//! c = "./generated/include"
+//! html = "./docs"
+//! ```
+//!
+//! For detailed configuration options, see the
+//! [configuration documentation](https://github.com/TheClams/rifgen/blob/dev/doc/config.md).
+//!
+//! # Supported Targets
+//!
+//! The [`RifGenTarget`] enum defines all available generation targets:
+//!
+//! - **Hardware**: SystemVerilog (`sv`), VHDL (`vhdl`)
+//! - **Software**: C headers (`c`), Python classes (`py`), UVM RAL (`ral`)
+//! - **Documentation**: HTML (`html`), LaTeX (`latex`), AsciiDoc (`adoc`), Framemaker (`mif`)
+//! - **Data formats**: JSON (`json`), SVD (`svd`), IP-XACT (`ipxact`)
+//!
+//! Each target has its own configuration structure (e.g., [`CfgHtml`], [`CfgC`], [`CfgRtl`])
+//! that allows fine-tuning the output for that specific target.
+
 use serde_derive::Deserialize;
 use std::{collections::HashMap, fs, path::PathBuf, str::FromStr};
 use toml;
@@ -96,7 +151,57 @@ impl RifGenTarget {
     }
 }
 
-/// Top Configuration
+/// Main configuration structure for YARIG code generation.
+///
+/// This structure holds all configuration options for parsing RIF files and generating
+/// various output targets. It can be created from a TOML configuration file using
+/// [`YarigCfg::from_file`], from command-line arguments using [`YarigCfg::from_cli`],
+/// or constructed manually.
+///
+/// # Fields
+///
+/// ## Input Configuration
+/// - `filename`: Path to the main RIF file to compile
+/// - `path`: Reference path for resolving relative paths (auto-detected from config file)
+/// - `include`: List of directories to search for included RIF files
+///
+/// ## Generation Control
+/// - `targets`: List of output formats to generate (e.g., sv, c, html)
+/// - `gen_inc`: List of included components to generate (use `["*"]` for all)
+/// - `local`: Components to generate locally (relative to their RIF file location)
+/// - `subdir`: Subdirectory name for non-top-level generated files
+///
+/// ## Global Settings
+/// - `public`: Generate only public registers/fields (hide private ones)
+/// - `interface`: Override the HDL interface type (e.g., APB, AXI)
+/// - `parameters`: Parameter values to override defaults in RIF files
+/// - `casing`: Default casing convention for identifiers
+/// - `keywords`: Reserved keyword handling configuration
+/// - `suffixes`: Suffix definitions for parameterized components
+/// - `suffix_rtl_only`: Apply suffixes only to RTL targets
+/// - `auto_legacy`: Use legacy order for interrupt registers
+///
+/// ## Output Configuration
+/// - `outputs`: Map of target names to output directories
+///
+/// ## Target-Specific Settings
+/// - `html`, `adoc`, `latex`, `mif`: Documentation generator settings
+/// - `c`: C header generator settings
+/// - `py`: Python class generator settings
+/// - `rtl`: RTL (SystemVerilog/VHDL) generator settings
+/// - `ral`: UVM RAL generator settings
+/// - `json`, `svd`, `ipxact`: Data format generator settings
+///
+/// # Example
+///
+/// ```no_run
+/// # use yarig::cfg::YarigCfg;
+/// // Load from TOML file
+/// let cfg = YarigCfg::from_file("config.toml").unwrap();
+///
+/// // Parse RIF and generate all configured targets
+/// let (component, paths) = cfg.gen_all().unwrap();
+/// ```
 #[derive(Deserialize, Debug, Default)]
 #[serde(default)]
 pub struct YarigCfg {
@@ -344,6 +449,20 @@ impl FromStr for YarigCfg {
 
 impl YarigCfg {
 
+    /// Creates a configuration from a TOML file.
+    ///
+    /// This method reads the TOML configuration file, parses it, and automatically sets
+    /// the `path` field to the directory containing the configuration file. This path
+    /// is used to resolve relative paths in the configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path to the TOML configuration file
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(YarigCfg)` on success, or `Err(String)` with an error message on failure.
+    ///
     pub fn from_file<T : Into<PathBuf>>(path: T) -> Result<YarigCfg,String> {
         let path: PathBuf = path.into();
         let s = fs::read_to_string(&path)
@@ -357,6 +476,20 @@ impl YarigCfg {
         Ok(cfg)
     }
 
+    /// Creates a configuration from command-line arguments.
+    ///
+    /// If a configuration file is specified in the arguments, it is loaded first, then
+    /// any command-line options override the file settings. If no configuration file
+    /// is specified, starts with default settings.
+    ///
+    /// # Arguments
+    ///
+    /// * `args` - Command-line arguments structure
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(YarigCfg)` on success, or `Err(String)` with an error message on failure.
+    ///
     pub fn from_cli(args: RifGenArgs) -> Result<YarigCfg,String> {
         let mut cfg = if let Some(cfg_path) = &args.cfg {
             YarigCfg::from_file(cfg_path)?
@@ -500,6 +633,29 @@ impl YarigCfg {
         }
     }
 
+    /// Parses the RIF file and generates all configured output targets.
+    ///
+    /// This is the main method that orchestrates the entire generation process:
+    /// 1. Resolves the RIF file path (using configured paths and includes)
+    /// 2. Parses the RIF file and any included files
+    /// 3. Compiles the RIF into an internal representation
+    /// 4. Applies parameter overrides and suffix settings
+    /// 5. Generates output for each configured target
+    ///
+    /// # Returns
+    ///
+    /// Returns a tuple containing:
+    /// - `Comp`: The compiled component structure (RIF or RifMux)
+    /// - `HashMap<String, PathBuf>`: Map of component names to their file paths
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The RIF file cannot be found or read
+    /// - Parsing fails (syntax errors in the RIF file)
+    /// - Compilation fails (semantic errors, type mismatches, etc.)
+    /// - Any target generator fails to produce output
+    ///
     pub fn gen_all(&self) -> Result<(Comp, HashMap<String, PathBuf>), String> {
 
         let mut params = ParamValues::new();

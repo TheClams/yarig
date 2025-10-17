@@ -98,7 +98,7 @@ The LaTeX output is similar to HTML
 It has labels for each register and field register.
 To easily reference them, here is an example of command that add hyperlink and proper formatting.
 
-```
+```latex
 \makeatletter
 \DeclareRobustCommand*{\escapeus}[1]{%
   \begingroup\@activeus\scantokens{#1\endinput}\endgroup}

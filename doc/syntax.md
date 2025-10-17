@@ -59,9 +59,9 @@ The possible properties, indented by one level compare to the RIF declaration, a
  - `interface : <ifname>` : Define the type of interface used for the RIF. Possible value are default, apb, uaux.
   By default uses a memory like interface (with a done signal asserted when access is complete).
  - `description : <blabla>` : Provides some high level information.  Mainly for documentation (e.g. HTML output).
-    Quotation mark are optional and removed for the first line.
-    Description can be on multiple lines as long as it is indented by at least one level compare to the keyword description. For example:
-```
+   Quotation mark are optional and removed for the first line.
+   Description can be on multiple lines as long as it is indented by at least one level compare to the keyword description. For example:
+```yaml
   description:
     First line of description
     Second line of description

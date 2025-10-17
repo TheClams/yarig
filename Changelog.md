@@ -5,6 +5,8 @@
 ### Fixed
   - Python: Add missing escape in description for double-quote
 
+### Added
+  - Add Rust documentation, embedding the already existing markdown
 
 ## [0.17.2] - 2025-10-17
 

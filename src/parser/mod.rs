@@ -1,3 +1,4 @@
+//! Parser logic using the Winnow crate
 pub mod parser_common;
 pub mod parser_field;
 pub mod parser_reg;

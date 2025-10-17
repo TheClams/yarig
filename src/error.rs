@@ -39,7 +39,6 @@ macro_rules! err_set_name {
 }
 
 
-#[allow(dead_code)]
 #[derive(PartialEq, Clone, Debug)]
 pub enum RifErrorKind {
     /// File IO error
@@ -140,7 +139,6 @@ impl From<String> for RifError {
     }
 }
 
-#[allow(dead_code)]
 impl RifError {
 
     pub fn missing_def(name: &str) -> Self {
