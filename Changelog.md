@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.17.3] - 2025-10-17
+
+### Fixed
+  - Python: Add missing escape in description for double-quote
+
+
 ## [0.17.2] - 2025-10-17
 
 ### Added

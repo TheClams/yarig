@@ -98,7 +98,7 @@ impl GeneratorPy {
             s.push_str(&format!("\n\n{indent}"));
             let mut desc_lines = desc_details.lines().peekable();
             while let Some(l) = desc_lines.next() {
-                s.push_str(&l.replace('\\',"").replace('\'', "\\\'"));
+                s.push_str(&l.replace('\\',"").replace('"', "\\\""));
                 if desc_lines.peek().is_some() {
                     s.push_str("\n            ");
                 }

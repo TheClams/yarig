@@ -238,12 +238,16 @@ imports.blk1 = blk1_sim_pkg
 
 ```toml
 [py]
-# Optional: Python class naming convention
-class = "MyPeripheral"
-
 # Optional: Target Python version
 # Valid values: "3.8", "3.9", "3.10", "3.11", "3.12"
 version = "3.10"
+
+# Optional: Python class naming convention
+class = "MyPeripheral"
+
+# Optional: path where regmap.py should be created
+# If a class is define, the class name is used as filename
+regmap_dir = ../my_lib
 
 # Optional: Create an __init__.py file in the output path
 init_file = false
