@@ -35,7 +35,7 @@ pub fn page_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
 //--------------------------------
 // Instances properties
 
-pub fn is_auto(input: &str) -> ResF<InstMode> {
+pub fn is_auto(input: &str) -> ResF<'_, InstMode> {
     alt((
         ws("auto-legacy").value(InstMode::AutoLegacy),
         ws("auto").value(InstMode::Automatic),
@@ -44,7 +44,7 @@ pub fn is_auto(input: &str) -> ResF<InstMode> {
 }
 
 // - reg_name[[array_size]] [= regType] [(groupName)] [@ regAddr]
-pub fn reg_inst(input: &str) -> ResF<RegInst> {
+pub fn reg_inst(input: &str) -> ResF<'_, RegInst> {
     (
         preceded(ws("-"), ws(identifier)),
         opt(

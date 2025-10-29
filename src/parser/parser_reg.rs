@@ -22,7 +22,7 @@ fn reg_decl_l<'a>(input: &mut &'a str) -> Res<'a, RegDef> {
     )
 }
 
-pub fn reg_decl(input: &str) -> ResF<RegDef> {
+pub fn reg_decl(input: &str) -> ResF<'_, RegDef> {
     reg_decl_l.parse(input)
 }
 

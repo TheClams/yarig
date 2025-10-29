@@ -54,14 +54,14 @@ impl<K,V> OrderDict<K,V>
         self.values.last_mut()
     }
 
-    pub fn values(&self) -> OrderedDictIterV<V> {
+    pub fn values(&self) -> OrderedDictIterV<'_, V> {
         OrderedDictIterV {
             values: &self.values,
             index: 0
         }
     }
 
-    pub fn items(&self) -> OrderedDictIterKv<K,V> {
+    pub fn items(&self) -> OrderedDictIterKv<'_, K,V> {
         OrderedDictIterKv {
             dict: self,
             index: 0

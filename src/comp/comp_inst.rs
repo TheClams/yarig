@@ -549,7 +549,7 @@ impl RifPageInst {
     }
 
     /// Iterator on register type
-    pub fn iter_reg_type(&self) -> RegInstTypeIter {
+    pub fn iter_reg_type(&self) -> RegInstTypeIter<'_> {
         RegInstTypeIter {
             regs: &self.regs,
             lut_iter: self.reg_lut.values(),

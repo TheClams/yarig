@@ -67,7 +67,7 @@ pub fn val_intf<'a>(input: &mut &'a str) -> Res<'a, Interface> {
 
 // Format is name [[active]Low|High] [async|sync]
 // Default is activeLow async
-pub fn reset_def(input: &str) -> ResF<ResetDef> {
+pub fn reset_def(input: &str) -> ResF<'_, ResetDef> {
   (
     ws(identifier),
     opt(
@@ -98,7 +98,7 @@ pub fn generic_range<'a>(input: &mut &'a str) -> Res<'a, GenericRange> {
 }
 
 
-pub fn generic_def(input: &str) -> ResF<(&str, GenericRange)> {
+pub fn generic_def(input: &str) -> ResF<'_, (&str, GenericRange)> {
     preceded(
         "-",
         separated_pair(

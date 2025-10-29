@@ -172,7 +172,7 @@ pub fn enum_kind<'a>(input: &mut &'a str) -> Res<'a, &'a str> {
     .parse_next(input)
 }
 
-pub fn clk_en(input: &str) -> ResF<ClkEn> {
+pub fn clk_en(input: &str) -> ResF<'_, ClkEn> {
     let name = identifier.context(StrContext::Label("clock enable")).parse(input)?;
     if name.to_lowercase() == "false" {
         Ok(ClkEn::None)
@@ -183,7 +183,7 @@ pub fn clk_en(input: &str) -> ResF<ClkEn> {
 
 // Format for an enum entry is :
 // - name = value "description"
-pub fn enum_entry(input: &str) -> ResF<EnumEntry> {
+pub fn enum_entry(input: &str) -> ResF<'_, EnumEntry> {
     let info = (
         preceded(ws("-"), identifier),
         preceded(ws("="), val_u8),
@@ -221,7 +221,7 @@ pub fn field_interrupt<'a>(input: &mut &'a str) -> Res<'a, InterruptInfoField> {
 }
 
 /// Pulse kind can be 'reg' or 'comb'. Default to 'reg'.
-pub fn pulse_kind(input: &str) -> ResF<bool> {
+pub fn pulse_kind(input: &str) -> ResF<'_, bool> {
     alt((
         ws("reg").value(true),
         ws("comb").value(false),
@@ -295,12 +295,12 @@ pub fn counter_def_<'a>(input: &mut &'a str) -> Res<'a, CounterInfo> {
     Ok(c)
 }
 
-pub fn counter_def(input: &str) -> ResF<CounterInfo> {
+pub fn counter_def(input: &str) -> ResF<'_, CounterInfo> {
     counter_def_.parse(input)
 }
 
 // limit ([min:max]|{v0,v1,..}|enum) [bypass_signal]
-pub fn limit_def(input: &str) -> ResF<LimitP> {
+pub fn limit_def(input: &str) -> ResF<'_, LimitP> {
     (
         alt((
             // Min/Max/MinMax
@@ -342,7 +342,7 @@ fn password_info_l<'a>(input: &mut &'a str) -> Res<'a,PasswordInfo> {
     Ok(info)
 }
 
-pub fn password_info(input: &str) -> ResF<PasswordInfo> {
+pub fn password_info(input: &str) -> ResF<'_, PasswordInfo> {
     password_info_l.parse(input)
 }
 

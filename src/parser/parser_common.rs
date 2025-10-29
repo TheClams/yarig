@@ -35,7 +35,7 @@ pub fn identifier<'a>(input: &mut &'a str) -> Res<'a, &'a str> {
         .parse_next(input)
 }
 
-pub fn identifier_last(input: &str) -> ResF<&str> {
+pub fn identifier_last(input: &str) -> ResF<'_, &str> {
     ws(identifier).parse(input)
 }
 
@@ -63,7 +63,7 @@ pub fn path_name<'a>(input: &mut &'a str) -> Res<'a, &'a str> {
 }
 
 #[allow(dead_code)]
-pub fn signal_name_last(input: &str) -> ResF<&str> {
+pub fn signal_name_last(input: &str) -> ResF<'_, &str> {
     signal_name.parse(input)
 }
 
@@ -167,7 +167,7 @@ pub fn parse_range<'a>(input: &mut &'a str) -> Res<'a, Vec<u8>> {
     .parse_next(input)
 }
 
-pub fn bool_or_default(input: &str, def: bool) -> ResF<bool> {
+pub fn bool_or_default(input: &str, def: bool) -> ResF<'_, bool> {
     alt((
         parse_bool,
         space0.value(def),
@@ -186,7 +186,7 @@ pub fn unquoted_string<'a>(input: &mut &'a str) -> Res<'a, &'a str> {
         .parse_next(input)
 }
 
-pub fn desc(input: &str) -> ResF<&str> {
+pub fn desc(input: &str) -> ResF<'_, &str> {
     alt((quoted_string, unquoted_string))
         .context(StrContext::Label("description"))
         .parse(input)
@@ -200,7 +200,7 @@ pub fn is_hidden<'a>(input: &mut &'a str) -> Res<'a, bool> {
 }
 
 /// parse a comment starting by // or # or just spaces
-pub fn comment(input: &str) -> ResF<()> {
+pub fn comment(input: &str) -> ResF<'_, ()> {
     alt((
        (alt((ws("//"), ws("#"))), repeat_till::<_, _, Vec<char>, _, _, _, _>(0..,any,eof)).take(),
         space0,
@@ -215,7 +215,7 @@ pub fn item<'a>(input: &mut &'a str) -> Res<'a, &'a str> {
         .parse_next(input)
 }
 
-pub fn vec_id(input: &str) -> ResF<Vec<&str>> {
+pub fn vec_id(input: &str) -> ResF<'_, Vec<&str>> {
     repeat(1.., ws(identifier)).parse(input)
 }
 
@@ -230,7 +230,7 @@ pub fn item_start<'a>(input: &mut &'a str) -> Res<'a, Context> {
         .parse_next(input)
 }
 
-pub fn key_val(input: &str) -> ResF<(&str, &str)> {
+pub fn key_val(input: &str) -> ResF<'_, (&str, &str)> {
     preceded(
         "-",
         separated_pair(ws(identifier), opt(alt(("=", ":"))), unquoted_string),
@@ -239,7 +239,7 @@ pub fn key_val(input: &str) -> ResF<(&str, &str)> {
     .parse(input)
 }
 
-pub fn path_val(input: &str) -> ResF<(&str, &str)> {
+pub fn path_val(input: &str) -> ResF<'_, (&str, &str)> {
     preceded(
         "-",
         separated_pair(ws(path_name), opt(alt(("=", ":"))), unquoted_string),

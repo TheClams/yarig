@@ -302,11 +302,11 @@ impl OverrideIndex {
         self.2 = field_list;
     }
 
-    pub fn iter_reg(&self) -> OverrideIndexIter {
+    pub fn iter_reg(&self) -> OverrideIndexIter<'_> {
         OverrideIndexIter {data: &self.0, idx: 0}
     }
 
-    pub fn iter_field(&self) -> OverrideIndexIter {
+    pub fn iter_field(&self) -> OverrideIndexIter<'_> {
         OverrideIndexIter {data: &self.2, idx: 0}
     }
 }

@@ -311,7 +311,7 @@ impl RegImplDict {
         self.0.insert(key, value)
     }
 
-    pub fn values(&self) -> OrderedDictIterV<RegImpl>{
+    pub fn values(&self) -> OrderedDictIterV<'_, RegImpl>{
         self.0.values()
     }
 

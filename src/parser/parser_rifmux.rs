@@ -102,18 +102,18 @@ pub fn suffix_info_l<'a>(input: &mut &'a str) -> Res<'a, SuffixInfo> {
   )
 }
 
-pub fn suffix_info(input: &str) -> ResF<SuffixInfo> {
+pub fn suffix_info(input: &str) -> ResF<'_, SuffixInfo> {
     suffix_info_l.parse(input)
 }
 
-pub fn rif_inst_suffix(input: &str) -> ResF<(Option<&str>, SuffixInfo)> {
+pub fn rif_inst_suffix(input: &str) -> ResF<'_, (Option<&str>, SuffixInfo)> {
   (
     opt(terminated(path_name,"=")),
     suffix_info_l
   ).parse(input)
 }
 
-pub fn rifmux_group(input: &str) -> ResF<RifmuxGroup> {
+pub fn rifmux_group(input: &str) -> ResF<'_, RifmuxGroup> {
   (
     ws(identifier),
     alt((
