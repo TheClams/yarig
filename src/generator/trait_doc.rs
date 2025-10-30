@@ -517,14 +517,13 @@ pub trait GeneratorDoc : GeneratorBase {
                             desc.push_str(&self.sanitize(&format!(" \nNote: Disabled in register {dis:?}")));
                         }
                         // Check for field array not exisiing in some register instances
-                        if !reg.array.is_inst() && reg.array.dim() > 1 && f.array.dim() > 0 {
-                            if let Ok(field_impl) = reg_impl.get_field(&f.name) {
+                        if !reg.array.is_inst() && reg.array.dim() > 1 && f.array.dim() > 0
+                            && let Ok(field_impl) = reg_impl.get_field(&f.name) {
                                 let reg_idx = reg.array.dim() - 1;
                                 let last_field_idx = reg_idx * f.array.dim() + f.array.idx();
                                 if last_field_idx >= field_impl.array {
                                     desc.push_str(&self.sanitize(&format!(" \nNote: Disabled in register {}[{reg_idx}]", reg_impl.name)));
                                 }
-                            }
                         }
                         self.write_table_cell((TableKind::Field, CellKind::Desc), 0, &desc, "", None);
                         self.write_table_row_footer();

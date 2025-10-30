@@ -209,10 +209,8 @@ impl RifGenSrc {
             // Check indentation level To update the context
             let ilvl = indentation(&mut l)?;
             while ilvl < context_stack.last().expect("Context Stack Empty").1 {
-                if let Some(cntxt) = context_stack.pop() {
-                    if cntxt.0 == Context::RifmuxGroup {
-                        self.last_group = "".to_string();
-                    }
+                if let Some(cntxt) = context_stack.pop() && cntxt.0 == Context::RifmuxGroup {
+                    self.last_group = "".to_string();
                 }
             }
             let cntxt = context_stack.last().expect("Context Stack Empty !");

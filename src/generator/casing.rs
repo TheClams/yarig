@@ -47,10 +47,8 @@ impl Casing {
             //
             if word_start & !prev_start {
                 // Insert Word separator
-                if !str_start {
-                    if let Some(sep) = sep {
-                        out.push(sep);
-                    }
+                if !str_start && let Some(sep) = sep {
+                    out.push(sep);
                 }
                 // Change casing of word start
                 match self {

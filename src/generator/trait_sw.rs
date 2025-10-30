@@ -150,13 +150,9 @@ pub trait GeneratorSw : GeneratorBase {
                     overlap = false;
                 }
                 // Detect start of overlap
-                if !overlap {
-                    if let Some(reg_next) = regs.peek() {
-                        if reg.addr == reg_next.addr && !overlap {
-                            self.write_reginst_overlap_header();
-                            overlap = true;
-                        }
-                    }
+                if !overlap && let Some(reg_next) = regs.peek() && reg.addr == reg_next.addr {
+                    self.write_reginst_overlap_header();
+                    overlap = true;
                 }
                 // Detect non-contiguous register: TODO add field overlap to register
                 if reg.addr > addr {

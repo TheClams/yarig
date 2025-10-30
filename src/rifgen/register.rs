@@ -186,7 +186,7 @@ impl RegDef {
 
     /// High when register instance is deactivated
     pub fn ignored(&self, params: &ParamValues) -> bool {
-        !self.optional.is_empty() && params.get(&self.optional).map_or(false, |&x| x == 0)
+        !self.optional.is_empty() && params.get(&self.optional).is_some_and(|&x| x == 0)
     }
 
     /// Get the register group name

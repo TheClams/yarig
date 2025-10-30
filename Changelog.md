@@ -5,6 +5,9 @@
 ### Added
   - Syntax: support for optional component instance in a rifmux with parameter or generic
 
+### Internals
+  - Increase MSRV to 1.88 and refactor code using let chains
+
 ## [0.17.3] - 2025-10-17
 
 ### Fixed

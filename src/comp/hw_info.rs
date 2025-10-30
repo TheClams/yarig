@@ -437,29 +437,21 @@ impl PortList {
         }
         // Collect Clock enable and controls signals from register implementation
         for r in regs_impls.values() {
-            if let ClkEn::Signal(en) = &r.clk_en {
-                if !clk_ens.iter().any(|p| p.name()==en) {
-                    clk_ens.push(PortInfo::new_in(en.to_owned(), "Clock enable".to_owned()));
-                }
+            if let ClkEn::Signal(en) = &r.clk_en && !clk_ens.iter().any(|p| p.name()==en) {
+                clk_ens.push(PortInfo::new_in(en.to_owned(), "Clock enable".to_owned()));
             }
             for f in r.fields.iter() {
-                if let ClkEn::Signal(en) = &f.clk_en {
-                    if !clk_ens.iter().any(|p| p.name()==en) {
-                        clk_ens.push(PortInfo::new_in(en.to_owned(), "Clock enable".to_owned()));
-                    }
+                if let ClkEn::Signal(en) = &f.clk_en && !clk_ens.iter().any(|p| p.name()==en) {
+                    clk_ens.push(PortInfo::new_in(en.to_owned(), "Clock enable".to_owned()));
                 }
-                if let Some(lock) = f.lock.port_name() {
-                    if !ctrls.iter().any(|p| p.name()==lock) {
-                        ctrls.push(PortInfo::new_in(lock.to_owned(), "Lock signal".to_owned()));
-                    }
+                if let Some(lock) = f.lock.port_name() && !ctrls.iter().any(|p| p.name()==lock) {
+                    ctrls.push(PortInfo::new_in(lock.to_owned(), "Lock signal".to_owned()));
                 }
                 for k in f.hw_kind.iter() {
-                    if let Some(sig) = k.get_signal() {
-                        if let Some(sig) = sig.port_name() {
-                            if !ctrls.iter().any(|p| p.name()==sig) {
-                                ctrls.push(PortInfo::new_in(sig.to_owned(), "Control signal".to_owned()));
-                            }
-                        }
+                    if let Some(sig) = k.get_signal()
+                        && let Some(port) = sig.port_name()
+                        && !ctrls.iter().any(|p| p.name()==port) {
+                            ctrls.push(PortInfo::new_in(port.to_owned(), "Control signal".to_owned()));
                     }
                 }
             }

@@ -159,7 +159,7 @@ impl RifmuxItem {
 
     /// High when register instance is deactivated
     pub fn is_disabled(&self, params: &ParamValues) -> bool {
-        !self.optional.is_empty() && self.optional.eval(params).map_or(false, |x| x == 0)
+        !self.optional.is_empty() && (self.optional.eval(params) == Ok(0))
     }
 
 }

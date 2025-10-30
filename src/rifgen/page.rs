@@ -84,14 +84,10 @@ impl RifPage {
             match r {
                 RegDefOrIncl::Include(inc) => {
                     let s: Vec<&str> = inc.split('.').collect();
-                    if s.len()<3 || s.get(2)==Some(&name) || s.get(2)==Some(&"*") {
-                        if let Some(rif_def) = get_rif(rifs,s[0]) {
-                            for inc_page in rif_def.pages.iter() {
-                                if s.len()==1 || s.get(1)==Some(&inc_page.name.as_str()) {
-                                    if let Some(d) = inc_page.find_regdef(name, rifs){
-                                        return Some(d.with_inc(s[0]));
-                                    }
-                                }
+                    if (s.len()<3 || s.get(2)==Some(&name) || s.get(2)==Some(&"*")) && let Some(rif_def) = get_rif(rifs,s[0]) {
+                        for inc_page in rif_def.pages.iter() {
+                            if (s.len()==1 || s.get(1)==Some(&inc_page.name.as_str())) && let Some(d) = inc_page.find_regdef(name, rifs) {
+                                    return Some(d.with_inc(s[0]));
                             }
                         }
                     }

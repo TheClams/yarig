@@ -204,13 +204,20 @@ impl CounterInfo {
     pub fn is_up(&self) -> bool {
         matches!(self.kind, CounterKind::Up | CounterKind::UpDown)
     }
+
     /// True when counter can decrement
     pub fn is_down(&self) -> bool {
         matches!(self.kind, CounterKind::Down | CounterKind::UpDown)
     }
+
     /// True when counter can saturate and incr/decr are not single bit
     pub fn has_satn(&self) -> bool {
-        self.sat && (self.incr_val > 1 || self.decr_val > 1)
+        self.sat && !self.is_single_bit()
+    }
+
+    /// True when counter incr/decr are single bit
+    pub fn is_single_bit(&self) -> bool {
+        self.incr_val <= 1 && self.decr_val <= 1
     }
 }
 

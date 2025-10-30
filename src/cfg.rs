@@ -468,10 +468,8 @@ impl YarigCfg {
         let s = fs::read_to_string(&path)
             .map_err(|e| format!("Error opening {path:?} : {e:?}"))?;
         let mut cfg = Self::from_str(&s)?;
-        if let Some(d) = path.parent() {
-            if let Ok(d) = fs::canonicalize(d) {
-                cfg.path = d.to_str().map(str::to_string);
-            }
+        if let Some(d) = path.parent() && let Ok(d) = fs::canonicalize(d) {
+            cfg.path = d.to_str().map(str::to_string);
         }
         Ok(cfg)
     }

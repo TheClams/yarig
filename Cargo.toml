@@ -2,7 +2,7 @@
 name = "yarig"
 version = "0.18.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 license = "MIT"
 description = "A register interface generator"
 repository = "https://github.com/TheClams/yarig"

@@ -129,13 +129,11 @@ pub trait GeneratorHw : GeneratorBase {
                 // Add special fields
                 for kind in f.hw_kind.iter() {
                     // Write modifiers: Write Enable, clr/set/tgl
-                    if kind.has_write_mod() {
-                        if let Some(d) = SignalDecl::from_hw_kind(kind, &hw_reg.name, &name) {
-                            if !names.iter().rev().any(|n| n==d.name()) {
-                                names.push(d.name().to_owned());
-                                hw_fields.push(d);
-                            }
-                        }
+                    if kind.has_write_mod()
+                        && let Some(d) = SignalDecl::from_hw_kind(kind, &hw_reg.name, &name)
+                        && !names.iter().rev().any(|n| n==d.name()) {
+                            names.push(d.name().to_owned());
+                            hw_fields.push(d);
                     }
                     // Counter need multiple extra fields
                     else if let FieldHwKind::Counter(info) = kind {
@@ -171,31 +169,29 @@ pub trait GeneratorHw : GeneratorBase {
                         }
                     }
                 }
-                if let FieldSwKind::Password(info) = &f.sw_kind {
-                    if info.has_hold() {
-                        sw_fields.push(SignalDecl::new_bit(
-                            format!("{name}_hold"),
-                            format!("High when {name}_locked is not changed by register access")));
-                    }
+                if let FieldSwKind::Password(info) = &f.sw_kind && info.has_hold() {
+                    sw_fields.push(SignalDecl::new_bit(
+                        format!("{name}_hold"),
+                        format!("High when {name}_locked is not changed by register access")
+                    ));
                 }
                 // Clear
                 if let Some(clr_expr) = &f.clear {
                     let kind = FieldHwKind::Clear(Some(clr_expr.to_owned()));
-                    if let Some(d) = SignalDecl::from_hw_kind(&kind, &hw_reg.name, &name) {
-                        if names.iter().rev().any(|n| n==d.name()) {
+                    if let Some(d) = SignalDecl::from_hw_kind(&kind, &hw_reg.name, &name)
+                        && names.iter().rev().any(|n| n==d.name()) {
                             names.push(d.name().to_owned());
                             hw_fields.push(d);
-                        }
                     }
                 }
                 // Lock signal from hardware
-                if let Some(lock) = f.lock.local_field(&hw_reg.name) {
-                    if !lock.is_empty() && !names.iter().rev().any(|n| n==lock) {
+                if let Some(lock) = f.lock.local_field(&hw_reg.name)
+                    && !lock.is_empty() && !names.iter().rev().any(|n| n==lock) {
                         names.push(lock.to_owned());
                         hw_fields.push(SignalDecl::new_bit(
                             lock.to_owned(),
-                            "High to lock some field write access".to_owned()));
-                    }
+                            "High to lock some field write access".to_owned()
+                        ));
                 }
             }
             // Add fields for register pulse and external access
@@ -511,22 +507,18 @@ pub trait GeneratorHw : GeneratorBase {
                         // Add optional enable/mask register
                         if intr_info.enable.is_some() {
                             let n = format!("{inst_name}_en");
-                            if let Some(hw_reg_en) = rif.hw_regs.get(&n) {
-                                if !hw_reg_en.port.is_out() {
-                                    self.write_signal_decl(&SignalDef::new_ud(
-                                        format!("rif_{name}{idx}_en"),
-                                        pkg_name.clone(), group_type_hw.clone()).into());
-                                }
+                            if let Some(hw_reg_en) = rif.hw_regs.get(&n) && !hw_reg_en.port.is_out() {
+                                self.write_signal_decl(&SignalDef::new_ud(
+                                    format!("rif_{name}{idx}_en"),
+                                    pkg_name.clone(), group_type_hw.clone()).into());
                             }
                         }
                         if intr_info.mask.is_some() {
                             let n = format!("{inst_name}_mask");
-                            if let Some(hw_reg_mask) = rif.hw_regs.get(&n) {
-                                if !hw_reg_mask.port.is_out() {
-                                    self.write_signal_decl(&SignalDef::new_ud(
-                                        format!("rif_{name}{idx}_mask"),
-                                        pkg_name.clone(), group_type_hw.clone()).into());
-                                }
+                            if let Some(hw_reg_mask) = rif.hw_regs.get(&n) && !hw_reg_mask.port.is_out() {
+                                self.write_signal_decl(&SignalDef::new_ud(
+                                    format!("rif_{name}{idx}_mask"),
+                                    pkg_name.clone(), group_type_hw.clone()).into());
                             }
                         }
                         // Internal pending signal is always present (used to generate the irq output)
@@ -895,54 +887,52 @@ pub trait GeneratorHw : GeneratorBase {
                     }
 
                     // Counter event
-                    if let Some(info) = field.counter_info() {
-                        if info.sat || info.event {
-                            let name = field_id.with_fsuffix("_event");
-                            let next_msb = ExprId::new_idx(format!("{reg_field_name}__next"), (field.width-1) as u16);
-                            let event = if field.is_signed() {
-                                let ovfl = next_msb.with_idx(field.width as u16);
-                                LogicExpr::neq(ovfl.into(), next_msb.clone().into())
-                            } else {
-                                let curr_msb : LogicExpr = field_id.with_range(SignalRange::new_bit(field.width-1)).into();
+                    if let Some(info) = field.counter_info() && (info.sat || info.event) {
+                        let name = field_id.with_fsuffix("_event");
+                        let next_msb = ExprId::new_idx(format!("{reg_field_name}__next"), (field.width-1) as u16);
+                        let event = if field.is_signed() {
+                            let ovfl = next_msb.with_idx(field.width as u16);
+                            LogicExpr::neq(ovfl.into(), next_msb.clone().into())
+                        } else {
+                            let curr_msb : LogicExpr = field_id.with_range(SignalRange::new_bit(field.width-1)).into();
 
-                                let incr = if info.incr_val == 0 {None} else {
-                                    Some(LogicExpr::And([
-                                        LogicExpr::not(next_msb.clone().into()),
-                                        curr_msb.clone(),
-                                        field_id.with_fsuffix("_incr_en").into()
-                                    ].to_vec()))
-                                };
-                                let decr = if info.decr_val == 0 {None} else {
-                                    Some(LogicExpr::And([
-                                        next_msb.clone().into(),
-                                        LogicExpr::not(curr_msb),
-                                        field_id.with_fsuffix("_decr_en").into()
-                                    ].to_vec()))
-                                };
-                                match (incr,decr) {
-                                    (None   ,Some(d)) => d,
-                                    (Some(i),None   ) => i,
-                                    (Some(i),Some(d)) => LogicExpr::or(i,d),
-                                    _ => unreachable!("A counter is either up or down"),
-                                }
+                            let incr = if info.incr_val == 0 {None} else {
+                                Some(LogicExpr::And([
+                                    LogicExpr::not(next_msb.clone().into()),
+                                    curr_msb.clone(),
+                                    field_id.with_fsuffix("_incr_en").into()
+                                ].to_vec()))
                             };
-                            // When counter is writable by software, mask event when the access occurs
-                            let rhs = if field.is_sw_write() {
-                                let acc_kind = if field.sw_kind==FieldSwKind::ReadClr {
-                                    LogicExpr::not(rd_wrn.clone())
-                                } else {
-                                    rd_wrn.clone()
-                                };
-                                let acc_bar = LogicExpr::Or([
-                                    LogicExpr::not(decode.clone()),
-                                    LogicExpr::not(rif_en.clone()),
-                                    rd_wrn.clone()].to_vec());
-                                LogicExpr::and(acc_bar,event)
+                            let decr = if info.decr_val == 0 {None} else {
+                                Some(LogicExpr::And([
+                                    next_msb.clone().into(),
+                                    LogicExpr::not(curr_msb),
+                                    field_id.with_fsuffix("_decr_en").into()
+                                ].to_vec()))
+                            };
+                            match (incr,decr) {
+                                (None   ,Some(d)) => d,
+                                (Some(i),None   ) => i,
+                                (Some(i),Some(d)) => LogicExpr::or(i,d),
+                                _ => unreachable!("A counter is either up or down"),
+                            }
+                        };
+                        // When counter is writable by software, mask event when the access occurs
+                        let rhs = if field.is_sw_write() {
+                            let acc_kind = if field.sw_kind==FieldSwKind::ReadClr {
+                                LogicExpr::not(rd_wrn.clone())
                             } else {
-                                event
+                                rd_wrn.clone()
                             };
-                            self.write_assign(name, rhs);
-                        }
+                            let acc_bar = LogicExpr::Or([
+                                LogicExpr::not(decode.clone()),
+                                LogicExpr::not(rif_en.clone()),
+                                rd_wrn.clone()].to_vec());
+                            LogicExpr::and(acc_bar,event)
+                        } else {
+                            event
+                        };
+                        self.write_assign(name, rhs);
                     }
 
                     // Generate intermediate signal for interrupt
@@ -1158,16 +1148,13 @@ pub trait GeneratorHw : GeneratorBase {
                             };
                             if_then.push((cond, val));
                             // If Once password, reset value on any register write
-                            if let Some(pw) = field.password_info() {
-                                if pw.once.is_some() {
-                                    let mut cond_once = LogicExpr::and(rif_en.clone(), LogicExpr::not(rd_wrn.clone()));
-                                    if pw.hold.is_some() {
-                                        cond_once.push(LogicExpr::not(field_id.with_fsuffix("_hold").into()));
-                                    }
-                                    if_then.push((cond_once, LogicExpr::ValueU(1, 2)));
+                            if let Some(pw) = field.password_info() && pw.once.is_some() {
+                                let mut cond_once = LogicExpr::and(rif_en.clone(), LogicExpr::not(rd_wrn.clone()));
+                                if pw.hold.is_some() {
+                                    cond_once.push(LogicExpr::not(field_id.with_fsuffix("_hold").into()));
                                 }
+                                if_then.push((cond_once, LogicExpr::ValueU(1, 2)));
                             }
-
                         }
 
                         // Handle Counter
@@ -1320,15 +1307,13 @@ pub trait GeneratorHw : GeneratorBase {
                         };
                         let mut enable_expr : Option<LogicExpr> = if enable.is_empty() {None} else {Some(enable.clone().into())};
                         // Prevent counter update on saturation when increment/decrement is 1
-                        if let Some(cnt_info) = field.counter_info() {
-                            if cnt_info.sat && cnt_info.incr_val <= 1 && cnt_info.decr_val <= 1 {
-                                let sat = group_id.with_path(format!("{field_name}_event"), field_idx);
-                                let not_sat = LogicExpr::not(sat.into());
-                                if let Some(e) = &mut enable_expr {
-                                    *e = LogicExpr::and((*e).clone(), not_sat);
-                                } else {
-                                    enable_expr = Some(not_sat);
-                                }
+                        if let Some(cnt_info) = field.counter_info() && cnt_info.sat && cnt_info.is_single_bit() {
+                            let sat = group_id.with_path(format!("{field_name}_event"), field_idx);
+                            let not_sat = LogicExpr::not(sat.into());
+                            if let Some(e) = &mut enable_expr {
+                                *e = LogicExpr::and((*e).clone(), not_sat);
+                            } else {
+                                enable_expr = Some(not_sat);
                             }
                         }
                         // Use the local enable (or-ed with interface enable) if register can be modifed by firmware access
@@ -1395,15 +1380,13 @@ pub trait GeneratorHw : GeneratorBase {
                             }
                         }
                         // For interrupt on edge, add delay version of the interrupt event
-                        else if let Some(FieldHwKind::Interrupt(info)) = field.hw_kind.first() {
-                            if !info.is_level() {
-                                field_entry.push(SignalInfo::new_with_en_clr(
-                                    field_id.with_name(format!("{group_name}{intr_suffix}_d1")),
-                                    LogicExpr::ValueU(0, 1),
-                                    field_id.with_name(format!("{group_name}{intr_suffix}_l")).into(),
-                                    enable_expr, clear)
-                                );
-                            }
+                        else if let Some(FieldHwKind::Interrupt(info)) = field.hw_kind.first() && !info.is_level() {
+                            field_entry.push(SignalInfo::new_with_en_clr(
+                                field_id.with_name(format!("{group_name}{intr_suffix}_d1")),
+                                LogicExpr::ValueU(0, 1),
+                                field_id.with_name(format!("{group_name}{intr_suffix}_l")).into(),
+                                enable_expr, clear)
+                            );
                         }
                     }
                     // Create one process for each pair of clock/reset found in the register field

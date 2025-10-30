@@ -186,10 +186,8 @@ impl GeneratorBaseSetting {
             let out = opt_out.as_deref().unwrap_or(out);
             let (mut cfg_out, mut filepath) : (PathBuf, Option<String> ) = (out.into(), None);
             // Get information from toml if it exists
-            if let Some(toml) = toml {
-                if let Ok(cfg) = YarigCfg::from_file(toml) {
-                    (cfg_out, filepath, _) = cfg.get_output_path(target);
-                }
+            if let Some(toml) = toml && let Ok(cfg) = YarigCfg::from_file(toml) {
+                (cfg_out, filepath, _) = cfg.get_output_path(target);
             }
 
             // Apply output path

@@ -451,10 +451,10 @@ impl RifPageInst {
         else {
             let mut inst_addr = InstAddr::new(addr_incr);
             for reg in page.instances.iter() {
-                if let Some(ovr) = reg.reg_override.get(&None) {
-                    if !ovr.optional.is_empty() && ovr.optional.eval_with_gen(&rifs.params,&rifs.generics)? == ExprValue::Value(0) {
+                if let Some(ovr) = reg.reg_override.get(&None)
+                    && !ovr.optional.is_empty()
+                    && ovr.optional.eval_with_gen(&rifs.params,&rifs.generics)? == ExprValue::Value(0) {
                         continue;
-                    }
                 }
                 if let Some(regdef) = page.find_regdef(&reg.type_name,rifs.rifs ) {
                     let addr = inst_addr.updt(reg.addr, reg.addr_kind);
@@ -944,10 +944,8 @@ impl RifRegInst {
             }
 
             let mut reset = f.reset.to_u128(f.width);
-            if f.array.dim() == 0 {
-                if let Some(idx) = r.def_idx() {
-                    reset = (reset >> (idx * f.width as u16)) & ((1<<f.width)-1);
-                }
+            if f.array.dim() == 0 && let Some(idx) = r.def_idx() {
+                reset = (reset >> (idx * f.width as u16)) & ((1<<f.width)-1);
             }
             r.reset |= reset << f.lsb;
         }
@@ -1338,10 +1336,9 @@ impl RifFieldInst {
         if let (Some(lsb),_) = &self.partial {
             let lsb = *lsb as u8;
             Some(SignalRange::new(lsb, self.width - 1 + lsb))
-        } else if self.array.dim() == 0 && reg_idx.is_some() {
-            let reg_idx = reg_idx.unwrap() as u8;
-            let lsb = self.width * reg_idx;
-            let msb = self.width * (reg_idx+1) - 1;
+        } else if self.array.dim() == 0 && let Some(idx) = reg_idx {
+            let lsb = self.width * idx as u8;
+            let msb = self.width * (idx as u8+1) - 1;
             Some(SignalRange::new(lsb, msb))
         } else if array_en {
             // if let ArrayIdx::Inst(idx,_) = self.array {
