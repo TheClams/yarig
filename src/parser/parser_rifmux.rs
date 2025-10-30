@@ -21,6 +21,7 @@ pub fn rifmux_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
       ws("addrWidth"  ).value(Context::AddrWidth  ),
       ws("dataWidth"  ).value(Context::DataWidth  ),
       ws("parameters" ).value(Context::Parameters ),
+      ws("generics"   ).value(Context::Generics   ),
       ws("map"        ).value(Context::RifmuxMap  ),
       ws("top"        ).value(Context::RifmuxTop  ),
     )),
@@ -74,6 +75,7 @@ pub fn rif_inst_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
       ws("desc"       ).value(Context::Description),
       ws("parameters" ).value(Context::Parameters ),
       ws("suffix"     ).value(Context::Suffix     ),
+      ws("optional").value(Context::Optional),
     )),
     ws(":")
   ).context(StrContext::Label("rifinstance property"))

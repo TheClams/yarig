@@ -10,7 +10,7 @@ use super::{identifier, scoped_identifier, item_start, quoted_string, reset_val,
 
 // Register declaration format is the following
 // - reg_name : (group_name) "register description"
-// where the (group_name) and description are optionnal
+// where the (group_name) and description are optional
 fn reg_decl_l<'a>(input: &mut &'a str) -> Res<'a, RegDef> {
     let name = identifier(input)?;
     let array_size = opt(delimited("[", val_u8_or_param, "]")).parse_next(input)?;

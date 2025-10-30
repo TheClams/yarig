@@ -437,6 +437,12 @@ impl ExprValue {
     }
 }
 
+impl Default for ExprValue {
+    fn default() -> Self {
+        ExprValue::Value(0)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExprError {
     Malformed,

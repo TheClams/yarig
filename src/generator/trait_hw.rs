@@ -1743,6 +1743,10 @@ pub trait GeneratorHw : GeneratorBase {
                 LogicExpr::ValueU((comp.addr >> width) as u128, (msb-width+1) as usize)
             );
             self.write_comment(1, &name.to_casing(Casing::Title));
+            // Add generate if needed
+            if let Some(opt) = &comp.optional {
+                self.write_generate_if(opt.to_owned(), format!("gen_{name}"));
+            }
             let pad = name_len + 7 - name.len();
             // Enable: rif_en & addr_v
             let en : ExprId = (format!("if_{name}"),"en".to_owned()).into();
@@ -1765,6 +1769,15 @@ pub trait GeneratorHw : GeneratorBase {
             self.write_assign(
                 en.with_path(format!("{:<pad$}","rd_wrn"), None),
                 ("if_rif","rd_wrn").into());
+            // Close generic
+            if comp.optional.is_some() {
+                self.write_generate_else(format!("gen_no_{name}"));
+                self.write_assign(en.with_path("en     ".to_owned(), None), LogicExpr::ValueU(0, 1));
+                self.write_assign(en.with_path("addr   ".to_owned(), None), LogicExpr::ValueU(0, width.into()));
+                self.write_assign(en.with_path("wr_data".to_owned(), None), LogicExpr::ValueU(0, rifmux.data_width.into()));
+                self.write_assign(en.with_path("rd_wrn ".to_owned(), None), LogicExpr::ValueU(0, 1));
+                self.write_generate_end(format!("gen_{name}"));
+            }
             // Save enable list for later
             en_names.push(en.into());
         }

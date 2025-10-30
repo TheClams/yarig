@@ -186,15 +186,7 @@ impl RegDef {
 
     /// High when register instance is deactivated
     pub fn ignored(&self, params: &ParamValues) -> bool {
-        if !self.optional.is_empty() {
-            if let Some(&x) = params.get(&self.optional) {
-                x==0
-            } else {
-                false
-            }
-        } else {
-            false
-        }
+        !self.optional.is_empty() && params.get(&self.optional).map_or(false, |&x| x == 0)
     }
 
     /// Get the register group name

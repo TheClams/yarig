@@ -98,22 +98,38 @@ pub struct CompInst {
     pub inst: Comp,
     pub addr: u64,
     pub group: String,
+    pub optional: Option<LogicExpr>,
 }
 
 impl CompInst {
     /// Create a RifMux component
-    pub fn new_mux(inst: RifmuxInst, addr: u64, group: String) -> Self {
-        CompInst { inst: Comp::Rifmux(inst.into()), addr, group}
+    pub fn new_mux(inst: RifmuxInst, addr: u64, group: &str, optional: Option<LogicExpr>) -> Self {
+        CompInst {
+            inst: Comp::Rifmux(inst.into()),
+            addr,
+            group: group.to_owned(),
+            optional
+        }
     }
 
     /// Create a Rif component
-    pub fn new_rif(inst: RifInst, addr: u64, group: String) -> Self {
-        CompInst { inst: Comp::Rif(inst.into()), addr, group}
+    pub fn new_rif(inst: RifInst, addr: u64, group: &str, optional: Option<LogicExpr>) -> Self {
+        CompInst {
+            inst: Comp::Rif(inst.into()),
+            addr,
+            group: group.to_owned(),
+            optional
+        }
     }
 
     /// Create an external component
-    pub fn new_ext(inst: RifExt, addr: u64, group: String) -> Self {
-        CompInst { inst: Comp::External(inst.into()), addr, group}
+    pub fn new_ext(inst: RifExt, addr: u64, group: &str, optional: Option<LogicExpr>) -> Self {
+        CompInst {
+            inst: Comp::External(inst.into()),
+            addr,
+            group: group.to_owned(),
+            optional
+        }
     }
 
     pub fn get_name(&self) -> &str {
@@ -441,7 +457,6 @@ impl RifPageInst {
                     }
                 }
                 if let Some(regdef) = page.find_regdef(&reg.type_name,rifs.rifs ) {
-                    // (regdef.def,regdef.intr_kind, regdef.intr_idx)
                     let addr = inst_addr.updt(reg.addr, reg.addr_kind);
                     // println!("Reg {} with {:?}({:04x}) -> {:04x}", reg.inst_name, reg.addr_kind, reg.addr, addr);
                     let array_size = reg.array.eval_with_gen(&rifs.params, &rifs.generics)?;
@@ -1521,6 +1536,19 @@ impl RifmuxInst {
         let mut rm = RifmuxInst::new(inst_name.to_owned(), rifmux, groups);
         let mut inst_addr = InstAddr::new(0);
         for i in &rifmux.items {
+            let mut optional = None;
+            if !i.optional.is_empty() {
+                match i.optional.eval_with_gen(&params, &rifmux.generics)? {
+                    ExprValue::Value(v) => if v==0 {continue;}
+                    ExprValue::Range(name, _) => {
+                        optional = Some(LogicExpr::eq(name.into(),LogicExpr::ValueU(1, 1)));
+                    }
+                }
+            }
+            // Check if instance is disabled by parameters
+            if i.is_disabled(&params) {
+                continue;
+            }
             let addr = inst_addr.updt(i.addr.value(&params) /*+ group_offset*/, i.addr_kind);
             if addr >= (1 << rifmux.addr_width) {
                 return Err(format!("Address of {inst_name} = 0x{:0x} out of range ({}b)", addr, rifmux.addr_width));
@@ -1541,18 +1569,18 @@ impl RifmuxInst {
                         // if rif_suffix.is_some() {println!("Found Suffix {:?} for {}", rif_suffix, i.name);}
                         // if !i_params.is_empty() {println!("Parameter in sub-rif {}.{} = {}", rifmux.name, i.name, i_params);}
                         let inst = RifInst::new(&i.name, rif_def, &i_params, &src.rifs, i.description.clone(), rif_suffix)?;
-                        rm.components.push(CompInst::new_rif(inst, addr, i.group.clone()));
+                        rm.components.push(CompInst::new_rif(inst, addr, &i.group, optional));
                     } else if let Some(rifmux) = src.get_rifmux(typename) {
                         // if !i_params.is_empty() {println!("Parameter in sub-rifmux {}.{} = {:?}", rifmux.name, i.name, i_params);}
                         let inst = RifmuxInst::build(src, &i.name, rifmux, &i_params, &i.suffixes)?;
-                        rm.components.push(CompInst::new_mux(inst, addr, i.group.clone()));
+                        rm.components.push(CompInst::new_mux(inst, addr, &i.group, optional));
                     } else {
                         return Err(format!("No RIF definition found for {typename} in {inst_name} ! Available RIFs are: {:?}", src.rifs.keys().collect::<Vec<&String>>()));
                     }
                 }
                 RifType::Ext(w) => {
                     let ext = RifExt { inst_name: i.name.clone(), addr_width: *w, data_width: rifmux.data_width.value(), description: i.description.clone() };
-                    rm.components.push(CompInst::new_ext(ext, addr, i.group.clone()));
+                    rm.components.push(CompInst::new_ext(ext, addr, &i.group, optional));
                 }
             }
             rm.components.sort_unstable_by_key(|k| k.full_addr(&rm.groups));

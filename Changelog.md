@@ -1,5 +1,10 @@
 # Change Log
 
+## [0.18.0] - 2025-10-30
+
+### Added
+  - Syntax: support for optional component instance in a rifmux with parameter or generic
+
 ## [0.17.3] - 2025-10-17
 
 ### Fixed

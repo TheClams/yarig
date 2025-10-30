@@ -4,7 +4,7 @@ use serde_derive::Deserialize;
 
 use crate::parser::{parser_expr::{ExprTokens, ParamValues}, suffix_info};
 
-use super::{order_dict::OrderDict, AddressKind, ClockingInfo, DataWidth, Description, Interface};
+use super::{order_dict::OrderDict, AddressKind, ClockingInfo, DataWidth, Description, GenericRange, GenericValues, Interface};
 
 #[derive(Clone, Debug)]
 pub struct Rifmux {
@@ -22,6 +22,8 @@ pub struct Rifmux {
     pub items: Vec<RifmuxItem>,
     /// Parameter definition
     pub parameters: OrderDict<String,ExprTokens>,
+    /// Generics definition
+    pub generics: GenericValues,
     /// Top description
     pub description: Description,
     /// List of component group
@@ -33,6 +35,7 @@ pub struct Rifmux {
 }
 
 impl Rifmux {
+    /// Initialize a rifmux
     pub fn new<S>(name: S) -> Self where S: Into<String> {
         Rifmux {
             name: name.into(),
@@ -44,6 +47,7 @@ impl Rifmux {
             groups: vec![],
             description: "".into(),
             parameters: OrderDict::new(),
+            generics: OrderDict::new(),
             info: HashMap::new(),
             top: None,
         }
@@ -55,6 +59,10 @@ impl Rifmux {
 
     pub fn add_param(&mut self, key: &str, expr: ExprTokens) {
         self.parameters.insert(key.to_owned(), expr);
+    }
+
+    pub fn add_generic(&mut self, key_val:(&str, GenericRange)) {
+        self.generics.insert(key_val.0.to_owned(), key_val.1);
     }
 
     pub fn add_top_suffix(&mut self, key: &str, val: &str) {
@@ -111,13 +119,16 @@ pub struct RifmuxItem {
     /// Description
     pub description: Description,
     /// Parameters override for this instance
-    pub parameters: OrderDict<String,ExprTokens>,
+    pub parameters: OrderDict<String, ExprTokens>,
     /// Suffix to add to the name of the generated files
     pub suffixes: HashMap<String,SuffixInfo>,
+    /// Indicates the page instance is controlled by a parameter or generic
+    pub optional: ExprTokens,
 
 }
 
 impl RifmuxItem {
+    /// Create a rifmux item from parsed tupple
     pub fn new(info:RifmuxItemTuple, group: &str) -> RifmuxItem {
         let addr_info = info.2.unwrap_or_default();
         RifmuxItem {
@@ -126,22 +137,31 @@ impl RifmuxItem {
             rif_type: info.1,
             addr_kind: addr_info.0,
             addr: addr_info.1,
+            optional: ExprTokens::new(0),
             description: info.3.unwrap_or("").into(),
             parameters: OrderDict::new(),
             suffixes: HashMap::new(),
         }
     }
 
+    /// Add parameter over-ride
     pub fn add_param(&mut self, key: &str, expr: ExprTokens) {
         self.parameters.insert(key.to_owned(), expr);
     }
 
+    /// Add Suffix definition
     pub fn add_suffix(&mut self, key_val: (Option<&str>, SuffixInfo)) {
         self.suffixes.insert(
             key_val.0.unwrap_or_default().to_owned(),
             key_val.1
         );
     }
+
+    /// High when register instance is deactivated
+    pub fn is_disabled(&self, params: &ParamValues) -> bool {
+        !self.optional.is_empty() && self.optional.eval(params).map_or(false, |x| x == 0)
+    }
+
 }
 
 #[derive(Clone, Debug, PartialEq)]

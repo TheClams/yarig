@@ -180,14 +180,17 @@ impl Rif {
         }
     }
 
+    /// Add a parameter definition
     pub fn add_param(&mut self, key: &str, expr: ExprTokens) {
         self.parameters.insert(key.to_owned(), expr);
     }
 
+    /// Add a generic definition
     pub fn add_generic(&mut self, key_val:(&str, GenericRange)) {
         self.generics.insert(key_val.0.to_owned(), key_val.1);
     }
 
+    /// Add an information entry
     pub fn add_info(&mut self, key_val:(&str, &str)) {
         self.info.insert(key_val.0.to_owned(), key_val.1.to_owned());
     }

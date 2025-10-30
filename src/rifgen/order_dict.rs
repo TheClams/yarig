@@ -18,7 +18,9 @@ impl<K,V> OrderDict<K,V>
         OrderDict { keys: HashMap::with_capacity(n), values: Vec::with_capacity(n) }
     }
 
-    pub fn contains_key(&self, k: &K) -> bool{
+    pub fn contains_key<Q>(&self, k: &Q) -> bool
+    where K: Borrow<Q>, Q: Hash + Eq + ?Sized
+    {
         self.keys.contains_key(k)
     }
 
@@ -45,7 +47,9 @@ impl<K,V> OrderDict<K,V>
         self.values.is_empty()
     }
 
-    pub fn get(&self, k: &K) -> Option<&V> {
+    pub fn get<Q>(&self, k: &Q) -> Option<&V>
+    where K: Borrow<Q>, Q: Hash + Eq + ?Sized
+    {
         let i = self.keys.get(k)?;
         Some(&self.values[*i])
     }

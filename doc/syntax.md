@@ -98,7 +98,7 @@ Parameters value can be overridden by a command-line argument `--parameters <nam
 A generic is defined as `- <name> = [<min>:]<default>:<max> "description"`.
 
 This generate an RTL with input parameter.
-The generic value can only be used for register instances array size.
+The generic value can be used for register instances array size, control of optional register or optional component in a RifMux.
 If no minimum value is provided, it is set to 1.
 
 
@@ -112,7 +112,7 @@ The available options, indented by one level compare to the page, are:
  - `clkEn : <clock_enable_name>` : Define a clock enable signal for all register in the page
  - `external` : Indicates that the page logic is external. The only logic provided will be the address decoding.
  - `optional : <condition>` : Indicate that the register of a page are instantiated only if the _condition_ is true.
-  The condition should be a valid python arithemtic expression where parameters can be used.
+  The condition should be a valid arithemtic expression where parameters can be used: this supports standard math operation (+,-,\*,\%,<<,>>) or comparison operator (==,!=,>,<,...).
  - `registers:` : Start the register declaration entry. See [below](#Register) for detail.
  - `instances:` : Start the register instances entry. See [below](#Registerinstance) for detail.
  - `include <rifName>.<pageName>` : Include a page from another RIF, both register definition and instance. This cannot be mixed with manual registers/instances entry !
@@ -362,6 +362,8 @@ The possible properties, indented by one level compare to the rifmux declaration
  - `addrWidth <addr_width>` : Number of bits of the address bus (byte aligned). Should be large enough to address all instantiated register (i.e. ceil(log2(nb_reg * data_width/4)))
  - `interface : <ifname>` : Define the type of interface used to control the RIF Mux. Possible value are default, apb, uaux.
   By default uses a memory like interface (with a done signal asserted when access is complete).
+ - `parameters : `: Start a parameter list. See [paragraph Parameters](#Parameters).
+ - `generics : `: Start a generic list. See [paragraph Generics](#Generics).
  - `map:` : start the mapping of RIFs in the memory space
 
 
@@ -374,7 +376,9 @@ For each RIF instance it is possible to override :
  - the description using `description : ...`.
  - parameters value with a `parameters:` section using the same syntax as the RIF (cf. [Parameters](#Parameters)).
  - suffix name using `suffix : <suffix_info>` to add a suffix to the file generated (useful when using parameters different from default)
-
+ - `optional : <condition>` : Indicate that the component is instantiated only if the _condition_ is true.
+  The condition should be a valid arithemtic expression where parameters can be used: this supports standard math operation (+,-,\*,\%,<<,>>) or comparison operator (==,!=,>,<,...).
+  The condition can also simply the name of a generic.
 
 
 You can also use external RIF (to access memory-like block) with the syntax:

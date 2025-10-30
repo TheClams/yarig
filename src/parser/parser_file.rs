@@ -325,7 +325,15 @@ impl RifGenSrc {
                         _ => unreachable!(), // Should never fail
                     }
                 }
-                Context::Generics => self.last_rif().add_generic(generic_def(l)?),
+                Context::Generics => {
+                    let gen_def = generic_def(l)?;
+                    let prev_cntxt = context_stack.get(context_stack.len() - 2);
+                    match prev_cntxt {
+                        Some((Context::Rifmux, _)) => self.last_rifmux().add_generic(gen_def),
+                        Some((Context::Rif, _)) => self.last_rif().add_generic(gen_def),
+                        _ => unreachable!(), // Should never fail
+                    }
+                },
                 // Parse page properties: register definition or instance
                 Context::Page => {
                     let info = page_properties(&mut l)?;
@@ -702,6 +710,7 @@ impl RifGenSrc {
                             self.last_data_width = w;
                         }
                         Context::Parameters => context_stack.push((Context::Parameters, ilvl + 1)),
+                        Context::Generics => context_stack.push((Context::Generics, ilvl + 1)),
                         Context::SwClock => {
                             sw_clk_defined.0 = true;
                             self.last_rifmux().sw_clocking.clk = identifier_last(l)?.to_owned()
@@ -849,6 +858,10 @@ impl RifGenSrc {
                             self.last_rif_inst().add_suffix(rif_inst_suffix(l)?);
                         }
                         Context::Parameters => context_stack.push((Context::Parameters, ilvl + 1)),
+                        Context::Optional => {
+                            let expr = parse_expr(l)?;
+                            self.last_rif_inst().optional = expr;
+                        }
                         _ => {
                             return Err(RifError::unsupported(info, l));
                         }
