@@ -30,6 +30,8 @@ pub struct RifmuxInst {
     pub components: Vec<CompInst>,
     /// List of component group
     pub groups: Vec<RifmuxGroupInst>,
+    /// Generic values
+    pub generics: GenericValues,
     /// Optional top to instantiate rifmux and all referenced RIFs
     pub top: Option<RifmuxTop>,
 }
@@ -1520,6 +1522,7 @@ impl RifmuxInst {
             sw_clocking: rifmux.sw_clocking.clone(),
             interface: rifmux.interface.clone(),
             description: rifmux.description.clone(),
+            generics: rifmux.generics.clone(),
             components: Vec::new(),
             top: rifmux.top.clone(),
             groups

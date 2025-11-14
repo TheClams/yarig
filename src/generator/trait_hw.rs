@@ -1673,6 +1673,14 @@ pub trait GeneratorHw : GeneratorBase {
         self.set_rifmux_info(rifmux);
         self.write_file_header();
         self.write_module_decl_header(&rifmux_name);
+        // println!("rifmux generics  = {:?}", rifmux.generics);
+        if !rifmux.generics.is_empty() {
+            self.write_module_generic_header();
+            let mut generics = rifmux.generics.items().peekable();
+            while let Some((name,range)) = generics.next() {
+                self.write_module_generic_decl(name, range, generics.peek().is_none());
+            }
+        }
         self.write_module_port_header();
         // Add port/reset port if not default interface
         if !rifmux.interface.is_default() {
