@@ -72,6 +72,7 @@ The possible properties, indented by one level compare to the RIF declaration, a
  - `swClkEn|hwClkEn : <clk_en_name> `: Specify default clock enable signal for software/hardware clocks. This can be overriden on a register basis
  - `swClear : <clear_name>` : Declare a global clear _clear_name_ active high to clear all software register (no clear by default)
  - `hwClear : <clear_name0> <clear_name1> ...` : Declare global hardware clears _clear_name_ active high to clear all hardware register (no clear by default). There should be as many signal declared as there are hwClock: same name can be repeated and the minus character `-` can be used indicate that there is no clear for the corresponding hwClock.
+ - `suffixPkg : <boolean>` : Apply suffix to the generated package file as well (default: false)
  - `parameters : `: Start a parameter list. See [paragraph Parameters](#Parameters).
  - `generics : `: Start a generic list. See [paragraph Generics](#Generics).
  - `- pageName : [description]` : Start a page named pageName. See [below](#Page). The name is used only inside the documentation.
@@ -109,6 +110,7 @@ The available options, indented by one level compare to the page, are:
 
  - `baseAddress <offset>` : Address offset of all register inside the page. Format can be decimal (64) or hexadecimal (0x20)
  - `addrWidth <nb_bit>` : Define the page range in Number of bits. Format can be decimal (64) or hexadecimal (0x20). This is only required for external pages
+ - `description` : Page description. Mainly for documentation (e.g. HTML output).
  - `clkEn : <clock_enable_name>` : Define a clock enable signal for all register in the page
  - `external` : Indicates that the page logic is external. The only logic provided will be the address decoding.
  - `optional : <condition>` : Indicate that the register of a page are instantiated only if the _condition_ is true.
@@ -155,6 +157,10 @@ The register properties, indented by one level compare to the register declarati
  - `alt <name> [en[=<val_enable>]] [mask[=<val_mask>]]  [pending]  ["<description>"]`: only valid for interrupt register.
     Allows to define an alternative interrupt register with a different enable/mask/pending settings and a secondary interrupt request output.
     This is useful when needing two configurable interrupt lines with different priority using the same set of interrupt event
+ - `clear` : Synchronous clear signal for the register, setting all fields to their reset values
+ - `hidden` : Hide the register in any documentation (HTML, MIF, C Header) when the visibility is set to public (generator setting)
+ - `disabled` : Force the register to its reset value. Used typically when overloading included register.
+ - `reserved` : Rename register in any documentation to `rsvd` when the visibility is set to public (generator setting). Also remove description.
  - `optional : <condition>` : Indicate that the register is defined only if the _condition_ is true or different from 0.
     The condition should be a valid arithmetic expression where parameters can be used (e.g. `$REG1_EN==1`): this supports standard math operation (+,-,\*,\%,<<,>>) or comparison operator (==,!=,>,<,...).
  - `- <fieldName> ...` : Define a fields named _fieldName_ inside the register. See [below](#Field) for detail.
@@ -308,7 +314,9 @@ This second example shows the use of a register array definition. The total size
 
 
 ## RegisterInstance
-If all the register declared have to be instantiated just once, in order, the simplest way is to simply use `instance: auto`.
+If all the register declared have to be instantiated just once, in order, the simplest way is to simply use `instances: auto` or `instances: auto-legacy`.
+
+The `auto-legacy` mode uses legacy order for interrupts (mask before enable), while `auto` uses the standard order (enable before mask).
 
 If the auto keyword is not used, then all instance of register are added with the following syntax,
 indented by one level compare to the instances keyword:
@@ -364,6 +372,7 @@ The possible properties, indented by one level compare to the rifmux declaration
   By default uses a memory like interface (with a done signal asserted when access is complete).
  - `parameters : `: Start a parameter list. See [paragraph Parameters](#Parameters).
  - `generics : `: Start a generic list. See [paragraph Generics](#Generics).
+ - `top` : Specify the top-level RIF component name
  - `map:` : start the mapping of RIFs in the memory space
 
 

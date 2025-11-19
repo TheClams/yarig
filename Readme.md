@@ -245,10 +245,10 @@ This trait is used by the generators for AsciiDoc, HTML, Latex and Mif (FrameMak
     - [x] Documentation
   - [x] Why Yarig vs other existing solution (mostly SystemRDL)
   - [ ] List of syntax example for typical use-cases
-  - [ ] Improve targets.md
-    - [ ] Detail tag naming in AsciiDoc
-    - [ ] Detail CSS property for HTML
-    - [ ] Detail styling for Framemaker
+  - [x] Improve targets.md
+    - [x] Detail tag naming in AsciiDoc
+    - [x] Detail CSS property for HTML
+    - [x] Detail styling for Framemaker
 
 ## Known Bugs / Edge cases
  - [ ] Support partial fields arrays

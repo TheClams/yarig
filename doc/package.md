@@ -84,7 +84,7 @@ The default interface to access the register is using a simple interface similar
 The interface, named rif_if, has two parameters automatically set by the RIF property:
 
  - W_ADDR: Number of bits of the address bus, set by the property addrWidth in the RIF.
- - W_DATA: Number of bits of the data bus, set by the property register.size in the RIF.
+ - W_DATA: Number of bits of the data bus, set by the property dataWidth in the RIF.
 
 
 The following fields are driven by the CPU:

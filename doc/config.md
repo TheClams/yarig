@@ -158,6 +158,9 @@ split = true
 
 # Optional: casing of register/field
 casing = "Snake"
+
+# Optional: Sub-directory name for generated file which are not the top level
+subdir = "subdir_name"
 ```
 
 ### AsciiDoctor Generation
@@ -172,6 +175,9 @@ gen_inc = ["module1", "module2"]
 
 # Optional: Override global local for this target
 local = ["*"]
+
+# Optional: Sub-directory name for generated file which are not the top level
+subdir = "subdir_name"
 
 # Optional: casing of register/field
 casing = "Snake"
@@ -189,6 +195,9 @@ gen_inc = ["*"]
 
 # Optional: Override global local for this target
 local = ["module1"]
+
+# Optional: Sub-directory name for generated file which are not the top level
+subdir = "subdir_name"
 ```
 
 ### RTL Generation (SystemVerilog/VHDL)
@@ -205,12 +214,14 @@ gen_inc = ["*"]
 # Optional: Override global local for this target
 local = ["module1", "module2"]
 
+# Optional: Sub-directory name for generated file which are not the top level
+subdir = "subdir_name"
+
 # Generate constant for register address in the package
-const_addr = true
+const_reg = true
 
 # Generate constant for field reset/position/width
 const_field = true
-
 ```
 
 ### Register Abstraction Layer (RAL)
@@ -229,9 +240,12 @@ gen_inc = ["*"]
 # Optional: Override global local for this target
 local = ["module1=sim", "module2=../sim"]
 
+# Optional: Sub-directory name for generated file which are not the top level
+subdir = "subdir_name"
+
 # Optional: List of package import per register block
-imports.blk0 = blk0_sim_pkg
-imports.blk1 = blk1_sim_pkg
+imports.blk0 = "blk0_sim_pkg"
+imports.blk1 = "blk1_sim_pkg"
 ```
 
 ### Python Generation
@@ -257,6 +271,23 @@ gen_inc = ["*"]
 
 # Optional: Override global local for this target
 local = ["module1"]
+
+# Optional: Sub-directory name for generated file which are not the top level
+subdir = "subdir_name"
+```
+
+### JSON Generation
+
+```toml
+[json]
+# Optional: Override global gen_inc for this target
+gen_inc = ["*"]
+
+# Optional: Override global local for this target
+local = ["module1"]
+
+# Optional: Sub-directory name for generated file which are not the top level
+subdir = "subdir_name"
 ```
 
 ### SVD (System View Description)
@@ -282,6 +313,23 @@ library = "peripherals"
 
 # Optional: Version string
 version = "2.1.0"
+
+# Optional: Sub-directory name for generated file which are not the top level
+subdir = "subdir_name"
+```
+
+### LaTeX Generation
+
+```toml
+[latex]
+# Optional: Split output into multiple files (one file per RIF)
+split = true
+
+# Optional: Sub-directory name for generated file which are not the top level
+subdir = "subdir_name"
+
+# Optional: casing of register/field
+casing = "Snake"
 ```
 
 ### MIF (Framemaker) Generation
@@ -314,6 +362,9 @@ gen_inc = ["*"]
 
 # Optional: Override global local for this target
 local = ["module1"]
+
+# Optional: Sub-directory name for generated file which are not the top level
+subdir = "subdir_name"
 
 # Optional: casing of register/field
 casing = "Snake"
