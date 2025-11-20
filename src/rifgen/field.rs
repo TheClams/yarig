@@ -59,6 +59,12 @@ impl Access {
     pub fn is_na(&self) -> bool {
         matches!(self, Access::NA)
     }
+
+    /// True if access is NA
+    pub fn exclusive(&self, other: Access) -> bool {
+        (*self==Access::RO && other==Access::WO) ||
+        (*self==Access::WO && other==Access::RO)
+    }
 }
 
 impl From<&FieldSwKind> for Access {

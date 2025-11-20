@@ -483,9 +483,20 @@ impl RifPageInst {
             }
         }
         p.regs.sort_by_key(|r| r.addr);
-        // Create LUT regrouping register by type
-        for (i,r) in p.regs.iter().enumerate() {
-            p.reg_lut.entry(&r.reg_type).push(i);
+        if !p.regs.is_empty() {
+            let mut prev_reg = p.regs.first().expect("Page should not be empty !");
+            // Create LUT regrouping register by type
+            // And check for register overlap
+            for (i,r) in p.regs.iter().enumerate() {
+                if i > 0 && prev_reg.addr == r.addr {
+                    if !prev_reg.sw_access.exclusive(r.sw_access) {
+                        return Err(format!("[WARNING] Register {} overlapping with {} @ {}", r.reg_name, prev_reg.reg_name, r.addr));
+                    }
+                    // TODO: flag overlap somewhere so that it can handled properly in the generators
+                }
+                p.reg_lut.entry(&r.reg_type).push(i);
+                prev_reg = r;
+            }
         }
         Ok(p)
     }
