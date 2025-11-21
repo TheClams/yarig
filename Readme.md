@@ -244,15 +244,16 @@ This trait is used by the generators for AsciiDoc, HTML, Latex and Mif (FrameMak
     - [x] Software
     - [x] Documentation
   - [x] Why Yarig vs other existing solution (mostly SystemRDL)
-  - [ ] List of syntax example for typical use-cases
+  - [x] List of syntax example for typical use-cases
   - [x] Improve targets.md
     - [x] Detail tag naming in AsciiDoc
     - [x] Detail CSS property for HTML
     - [x] Detail styling for Framemaker
 
 ## Known Bugs / Edge cases
- - [ ] Support partial fields arrays
- - [ ] Support partial counter (for counter larger than register size)
- - [x] Add parsing of LogicExpr (currently logic expression works only for SystemVerilog)
- - [x] Add check on password not being partial fields
- - [ ] Add check that reset value fit the field width
+  - [ ] Support partial fields arrays
+  - [ ] Support partial counter (for counter larger than register size)
+  - [x] Add parsing of LogicExpr (currently logic expression works only for SystemVerilog)
+  - [x] Add check on password not being partial fields
+  - [ ] Add check that reset value fit the field width
+  - [ ] Add check on software/hardware access compatibility (simultaneous write): automatically add write control mecanism on hardware (we or hwset depending on bit width)
