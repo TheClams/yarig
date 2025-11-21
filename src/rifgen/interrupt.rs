@@ -19,6 +19,10 @@ impl InterruptRegKind {
         self==&InterruptRegKind::Pending
     }
 
+    pub fn is_none(&self) -> bool {
+        self==&InterruptRegKind::None
+    }
+
     pub fn is_base(&self) -> bool {
         self==&InterruptRegKind::Base
     }

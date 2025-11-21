@@ -1132,6 +1132,7 @@ impl RifFieldInst {
                 return Err(format!("Field {} has a width of {width} bits but enum {} has a max value of {max_value}", field.name, def.name));
             }
         }
+        // Get reset value (could be defined as a param, a float or an enum)
         let mut reset = field.reset.first()
             .unwrap_or_default()
             .compile(field.signed, field.nb_frac, params, enum_def)?;
@@ -1188,7 +1189,7 @@ impl RifFieldInst {
             desc_idx = if let Some(i) = reg_array {DescIdx::field_bus(width as u16,i)} else {DescIdx::None};
         }
         let desc = desc.interpolate(desc_idx);
-        //
+        // Ensure SW/HW access are compatible (i.e. write control mechanism if both access are write)
         let mut hw_kind = field.hw_kind.to_owned();
         if let Some(kind) = field.get_auto_hw_kind(params) {
             hw_kind.push(kind);

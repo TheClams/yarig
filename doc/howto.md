@@ -198,8 +198,9 @@ A: Use the `hw` property with `r`, `w`, `rw`, or `na`:
     hw r    # Hardware can only read
   - control = 0 11:8 rw "Control bits"
     hw w    # Hardware can only write
-    we      # Must define a write enable signal for hardware to allow multiple write access
 ```
+
+Note that the field `control` is automatically updated to have a write-enable signal to allow the simultaneous write access from hardware and software.
 
 ---
 

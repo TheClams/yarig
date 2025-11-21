@@ -934,7 +934,7 @@ impl RifGenSrc {
             .expect("No Registers instance")
     }
 
-    fn last_field(&mut self) -> &Field {
+    fn last_field(&self) -> &Field {
         self.last_reg().fields.last().expect("No Fields")
     }
 

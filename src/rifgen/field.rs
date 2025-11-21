@@ -1108,15 +1108,14 @@ impl Field {
 
     /// Return an optional HwKind when unset and write access limited to clear or set
     pub fn get_auto_hw_kind(&self, params: &ParamValues) -> Option<FieldHwKind> {
-        if self.hw_kind.is_empty() {
-            if self.sw_kind.is_clr() {
-                if self.width(params) > 1 {
-                    Some(FieldHwKind::WriteEn(None))
-                } else {
-                    Some(FieldHwKind::Set(None))
-                }
-            } else if self.sw_kind.is_set() {
+        if self.hw_kind.is_empty() && self.hw_acc.is_writable() && self.sw_kind!=FieldSwKind::ReadOnly {
+            let w = self.width(params);
+            if self.sw_kind.is_set() {
                 Some(FieldHwKind::Clear(None))
+            } else if w > 1 || (w==1 && !self.sw_kind.is_clr()) {
+                Some(FieldHwKind::WriteEn(None))
+            } else if self.sw_kind.is_clr() {
+                Some(FieldHwKind::Set(None))
             } else {
                 None
             }
