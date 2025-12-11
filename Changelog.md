@@ -1,5 +1,18 @@
 # Change Log
 
+
+## [0.19.0] - 2025-12-11
+
+### Added
+  - Syntax: add `optional_acc` to register and register instance to control access on disabled register
+
+
+## [0.18.1] - 2025-11-19
+
+### Fixed
+  - RTL: missing generic declaration in rifmux
+
+
 ## [0.18.0] - 2025-10-30
 
 ### Added

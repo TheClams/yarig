@@ -16,7 +16,7 @@ pub enum PulseLogic {
 }
 
 /// Generic access
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub enum Access {
 	/// Read/Write
     RW,
@@ -25,7 +25,7 @@ pub enum Access {
     /// Write-Only
     WO,
     /// Not Available
-    NA,
+    #[default] NA,
 }
 
 impl Access {

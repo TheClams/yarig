@@ -479,6 +479,7 @@ impl RifGenSrc {
                             self.last_reg_mut().interrupt.push(InterruptInfo::new(name, info));
                         },
                         Context::Optional => self.last_reg_mut().optional = l.to_owned(),
+                        Context::OptionalAcc => self.last_reg_mut().optional_acc = field_acc(&mut l)?,
                         Context::Hidden => self.last_reg_mut().hidden(),
                         Context::Reserved => self.last_reg_mut().reserved(),
                         Context::Item(_) => {
@@ -769,6 +770,9 @@ impl RifGenSrc {
                         }
                         Context::Optional => {
                             self.last_reg_inst().set_optional(&ovr_idx, parse_expr(l)?);
+                        }
+                        Context::OptionalAcc => {
+                            self.last_reg_inst().set_optional_acc(&ovr_idx, field_acc(&mut l)?);
                         }
                         Context::HwAccess => self
                             .last_reg_inst()

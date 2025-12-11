@@ -234,6 +234,7 @@ This trait is used by the generators for AsciiDoc, HTML, Latex and Mif (FrameMak
   - [ ] SV Generator: use SV interface for non-default case with option to control the interface type name
   - [x] Add some information in generated documentation for disabled field inside an array
   - [x] Hardware generator: support option to add some constants in the package such as address, field reset/position
+  - [ ] Add option to hardware generator to generate limit either as hardware error or simulation assert
   - [ ] Support byte mask on interface (TBD if really needed)
 
 ## Documentation
@@ -255,5 +256,6 @@ This trait is used by the generators for AsciiDoc, HTML, Latex and Mif (FrameMak
   - [ ] Support partial counter (for counter larger than register size)
   - [x] Add parsing of LogicExpr (currently logic expression works only for SystemVerilog)
   - [x] Add check on password not being partial fields
+  - [ ] Add check that address is well aligned with bus size
   - [ ] Add check that reset value fit the field width
   - [ ] Add check on software/hardware access compatibility (simultaneous write): automatically add write control mecanism on hardware (we or hwset depending on bit width)

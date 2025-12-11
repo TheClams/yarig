@@ -75,6 +75,7 @@ pub fn reg_inst_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
             alt((ws("description"),ws("desc"))).value(Context::Description),
             ws("parameters").value(Context::Parameters),
             ws("info").value(Context::Info),
+            ws("optional_acc").value(Context::OptionalAcc),
             ws("optional").value(Context::Optional),
             ws("hidden").value(Context::Hidden),
             alt((ws("disabled"),ws("disable"))).value(Context::Disabled),

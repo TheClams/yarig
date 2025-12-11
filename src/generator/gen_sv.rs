@@ -476,7 +476,7 @@ impl GeneratorHw for GeneratorSv {
     }
 
     fn write_match_footer(&mut self) {
-        self.write("   endcase\n");
+        self.write("      endcase\n");
     }
 
     fn write_match_case_header(&mut self, value: LogicExpr) {

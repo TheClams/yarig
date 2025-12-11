@@ -681,7 +681,7 @@ pub trait GeneratorHw : GeneratorBase {
                     let name = self.casing(&format!("{}__decode", reg.name()));
                     let value =
                         if field_limit.is_empty() {
-                            reg.optional.as_ref().unwrap_or(&LogicExpr::ValueU(1, 1)).to_owned()
+                            reg.optional.as_ref().map(|r| &r.0).unwrap_or(&LogicExpr::ValueU(1, 1)).to_owned()
                         } else {
                             let checks : Vec<LogicExpr> = field_limit.iter().map(|(n,bypass)| {
                                 let idx = reg.array.idx_str(false);
@@ -690,7 +690,7 @@ pub trait GeneratorHw : GeneratorBase {
                                 else {LogicExpr::or(check, bypass.as_str().into())}
                             }).collect();
                             let expr = LogicExpr::or(rd_wrn.clone(), LogicExpr::And(checks));
-                            if let Some(opt) = &reg.optional {
+                            if let Some((opt,_)) = &reg.optional {
                                 LogicExpr::and(opt.clone(), expr)
                             } else {
                                 expr
@@ -702,7 +702,7 @@ pub trait GeneratorHw : GeneratorBase {
                 // Copy corresponding read_data signal
                 self.write_assign_comb(4, "rif_read_data_l ".into(), format!("{name_flat}__read_data").into());
                 // Address is valid if register is not optional
-                let err_addr = if let Some(opt) = &reg.optional {
+                let err_addr = if let Some((opt,Access::NA)) = &reg.optional {
                     LogicExpr::ite(opt.to_owned(), LogicExpr::ValueU(0, 1), LogicExpr::ValueU(1, 1))
                 } else {
                     LogicExpr::ValueU(0, 1)
@@ -710,18 +710,33 @@ pub trait GeneratorHw : GeneratorBase {
                 self.write_assign_comb(4, "rif_err_addr_l  ".into(), err_addr);
                 // Access error when writing a read-only field, reading a write only field,
                 //  or writing one field outside its set value (when limits are defined)
-                let err_val : LogicExpr = match reg.sw_access {
-                    Access::RO => LogicExpr::not(rd_wrn.clone()),
-                    Access::WO => rd_wrn.clone(),
-                    Access::NA => LogicExpr::ValueU(1, 1),
-                    Access::RW =>
-                        if field_limit.is_empty() {
-                            LogicExpr::ValueU(0, 1)
-                        } else {
-                            LogicExpr::not(format!("{name_flat}__decode").into())
+                let err_acc : LogicExpr = if let Some((opt, acc)) = &reg.optional {
+                        match acc {
+                            Access::RO => {
+                                let cond = LogicExpr::or(rd_wrn.clone(), opt.to_owned());
+                                LogicExpr::ite(cond, LogicExpr::ValueU(0, 1), LogicExpr::ValueU(1, 1))
+                            }
+                            Access::WO => {
+                                let cond = LogicExpr::or(LogicExpr::not(rd_wrn.clone()), opt.to_owned());
+                                LogicExpr::ite(cond, LogicExpr::ValueU(0, 1), LogicExpr::ValueU(1, 1))
+                            }
+                            _ =>  LogicExpr::ValueU(0, 1)
                         }
-                };
-                self.write_assign_comb(4, "rif_err_access_l".into(), err_val);
+                    } else {
+                        match reg.sw_access {
+                            Access::RO => LogicExpr::not(rd_wrn.clone()),
+                            Access::WO => rd_wrn.clone(),
+                            Access::NA => LogicExpr::ValueU(1, 1),
+                            Access::RW => {
+                                if field_limit.is_empty() {
+                                    LogicExpr::ValueU(0, 1)
+                                } else {
+                                    LogicExpr::not(format!("{name_flat}__decode").into())
+                                }
+                            }
+                        }
+                    };
+                self.write_assign_comb(4, "rif_err_access_l".into(), err_acc);
                 // Override done_next for external registers
                 if reg.external!=ExternalKind::None {
                     let hw_reg_def = rif.get_hw_reg(&reg.group_type);
@@ -731,6 +746,23 @@ pub trait GeneratorHw : GeneratorBase {
                     self.write_assign_comb(4, "rif_done_next".into(), next.into());
                 }
                 self.write_match_case_footer();
+            }
+            if !page.nulls.is_empty() {
+                self.write_comment(3, "Disabled registers");
+                for (reg_addr, reg_acc) in page.nulls.iter() {
+                    let addr = (reg_addr + page.addr) as u128 >> addr_shift;
+                    self.write_match_case_header(LogicExpr::ValueU(addr, addr_l_w));
+                    self.write_assign_comb(4, "rif_read_data_l ".into(), LogicExpr::ValueU(0, rif.data_width.into()));
+                    let err_addr = if *reg_acc==Access::NA {LogicExpr::ValueU(1, 1)} else {LogicExpr::ValueU(0, 1)};
+                    self.write_assign_comb(4, "rif_err_addr_l  ".into(), err_addr);
+                    let err_acc = match reg_acc {
+                        Access::RO => LogicExpr::not(rd_wrn.clone()),
+                        Access::WO => rd_wrn.clone(),
+                        _          => LogicExpr::ValueU(0, 1),
+                    };
+                    self.write_assign_comb(4, "rif_err_access_l".into(), err_acc);
+                    self.write_match_case_footer();
+                }
             }
         }
         // Default case with optional
@@ -788,7 +820,7 @@ pub trait GeneratorHw : GeneratorBase {
                 self.write("\n");
                 self.write_comment(1, &format!("Register {reg_name_i}"));
                 // Assign field
-                if let Some(opt) = &reg.optional {
+                if let Some((opt,_)) = &reg.optional {
                     self.write_generate_if(opt.to_owned(), format!("gen_reg_{reg_name}"));
                 }
                 for field in reg.fields.iter() {

@@ -187,10 +187,13 @@ struct InstAddr{
 
 impl InstAddr {
 
+    /// Create InstAddr with default increment value
+    /// Base is initialized to -incr to avoid edge effect at beginning
     pub fn new(incr: u8) -> Self {
         InstAddr{base: 0 - incr as i64, incr: incr as u64}
     }
 
+    /// Update with new address
     pub fn updt(&mut self, offset: u64, kind: AddressKind) -> u64 {
         match kind {
             AddressKind::Absolute => {
@@ -207,13 +210,20 @@ impl InstAddr {
         }
     }
 
+    /// Increment address from base increment
     pub fn incr(&mut self) -> u64 {
         self.base += self.incr as i64;
         self.base as u64
     }
 
+    /// Decrement address from base increment
     pub fn decr(&mut self) -> u64 {
         self.base -= self.incr as i64;
+        self.base as u64
+    }
+
+    /// Return previous address
+    pub fn base(&self) -> u64 {
         self.base as u64
     }
 }
@@ -274,6 +284,7 @@ impl<'a> RifsInfo<'a>  {
     }
 }
 
+/// Register Interface instance: collection of pages containing register, with clock/reset/interface type, ...
 #[derive(Clone, Debug)]
 pub struct RifInst {
     /// Instance name
@@ -411,6 +422,7 @@ impl RifInst {
         }
     }
 
+    /// Iterate over all register instance accross all pages
     pub fn iter_reg(&self) -> impl Iterator<Item=&RifRegInst> {
         self.pages.iter()
             .filter(|p| p.external.is_none())
@@ -419,13 +431,22 @@ impl RifInst {
 
 }
 
+/// Page instance: collection of register at a given offset
 #[derive(Clone, Debug)]
 pub struct RifPageInst {
+    /// Page Name
     pub name: String,
+    /// List of register instances
     pub regs: Vec<RifRegInst>,
+    /// Page address
     pub addr: u64,
+    /// Width of the page when register implementation is external
     pub external: Option<u8>,
+    /// Page description
     pub description: Description,
+    /// List of address returning 0 when read (typically corresponding to disabled register)
+    pub nulls: Vec<(u64,Access)>,
+    /// Look-up table returning list of register index (regs) for a given register type
     reg_lut: OrderDict<String,Vec<usize>>
 }
 
@@ -440,6 +461,7 @@ impl RifPageInst {
             addr: page.addr,
             description: page.description.clone(),
             regs: Vec::new(),
+            nulls: Vec::new(),
             reg_lut: OrderDict::new(),
             external: if page.external {Some(page.addr_width)} else {None}
         };
@@ -456,6 +478,13 @@ impl RifPageInst {
                 if let Some(ovr) = reg.reg_override.get(&None)
                     && !ovr.optional.is_empty()
                     && ovr.optional.eval_with_gen(&rifs.params,&rifs.generics)? == ExprValue::Value(0) {
+                        // Add relative register disabled to the null list
+                        // These registers should typically not generate address error
+                        if (reg.addr_kind == AddressKind::Relative && reg.addr!=0) || reg.addr_kind==AddressKind::Absolute {
+                            let addr = inst_addr.base().wrapping_add(reg.addr);
+                            let acc = ovr.optional_acc.unwrap_or(Access::NA);
+                            p.nulls.push((addr, acc));
+                        }
                         continue;
                 }
                 if let Some(regdef) = page.find_regdef(&reg.type_name,rifs.rifs ) {
@@ -491,8 +520,9 @@ impl RifPageInst {
                 if i > 0 && prev_reg.addr == r.addr {
                     if !prev_reg.sw_access.exclusive(r.sw_access) {
                         return Err(format!("[WARNING] Register {} overlapping with {} @ {}", r.reg_name, prev_reg.reg_name, r.addr));
+                    } else {
+                        // TODO: flag overlap somewhere so that it can handled properly in the generators
                     }
-                    // TODO: flag overlap somewhere so that it can handled properly in the generators
                 }
                 p.reg_lut.entry(&r.reg_type).push(i);
                 prev_reg = r;
@@ -722,24 +752,43 @@ impl RegInstArgs {
 /// Register instance
 #[derive(Clone, Debug)]
 pub struct RifRegInst {
+    /// Register type
     pub reg_type: String,
+    /// Register instance name
     pub reg_name: String,
+    /// Register group instance name
     pub group_name: String,
+    /// Register group type
     pub group_type: String,
+    /// Defines which part of the register logic is external
     pub external: ExternalKind,
+    /// Defines hardware pulse generated on access (read/write/both)
     pub pulse: Vec<RegPulseKind>,
+    /// Register instance description
     pub description: Description,
+    /// Register definition description (common to all instances )
     pub base_description: Description,
+    /// Interrupt configuration
     pub intr_info: (InterruptRegKind, String),
+    /// Instance address inside a page
     pub addr: u64,
+    /// reset value
     pub reset: u128,
+    /// List of fields
     pub fields: Vec<RifFieldInst>,
+    /// Software access
     pub sw_access: Access,
+    /// Hardware access
     pub hw_access: Access,
+    /// Pair index/dimension of the instance in a register array.
     pub array: ArrayIdx,
+    /// Index used for partial field
     pub group_idx: usize,
+    /// Visibility of register: hidden removes register from doc, reserved force name to rsvd_xx in doc and disabled force register to read-only
     pub visibility: Visibility,
-    pub optional: Option<LogicExpr>,
+    /// Indicates if the register instance is controlled by a parameter
+    pub optional: Option<(LogicExpr, Access)>,
+    /// RIF name containing the register definition if it comes from an include
     pub incl: Option<String>,
 }
 
@@ -796,7 +845,7 @@ impl RifRegInst {
         let array =  if let RegInstArgs::Arr(idx) = &args {idx} else {&ArrayIdx::Def(0,0)};
         let optional = if let ArrayIdx::Gen(_,range,gen_name) = &array {
             if array.idx() > range.min.into() {
-                Some(LogicExpr::gte(gen_name.to_owned().into(), (array.idx(), range.max as u16).into() ))
+                Some((LogicExpr::gte(gen_name.to_owned().into(), (array.idx(), range.max as u16).into()), def.optional_acc))
             } else {
                 None
             }
@@ -897,7 +946,8 @@ impl RifRegInst {
                     match ovr.optional.eval_with_gen(&rifs.params, &rifs.generics)? {
                         ExprValue::Value(i) => if i==0 {return Ok(None);}
                         ExprValue::Range(name, _) => {
-                            r.optional = Some(LogicExpr::eq(name.into(),LogicExpr::ValueU(1, 1)));
+                            let acc = ovr.optional_acc.unwrap_or(def.optional_acc);
+                            r.optional = Some((LogicExpr::eq(name.into(),LogicExpr::ValueU(1, 1)), acc));
                         }
                     }
                 }

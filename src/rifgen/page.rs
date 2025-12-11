@@ -227,6 +227,8 @@ pub struct RegOverride {
     pub description: Option<Description>,
     /// Indicates the register instance is controlled by a parameter
     pub optional: ExprTokens,
+    /// Access when register is optional and disabled
+    pub optional_acc: Option<Access>,
     /// Change the register visibility
     pub visibility: Option<Visibility>,
     /// Override the hardware access to the register
@@ -259,6 +261,7 @@ impl RegOverride {
                     v.merge(def_v);
                 }
             }
+            merged.optional_acc = d.optional_acc;
             d.fields.iter()
                 .filter(|(k,_)| !self.fields.contains_key(*k))
                 .for_each(|(k,v)| { merged.fields.insert(k.clone(), v.clone());});
@@ -371,6 +374,7 @@ impl From<RegInstTuple<'_>> for RegInst {
 
 impl RegInst {
 
+    /// Return mutable access to a field override setting
     fn get_field_ovr<'a>(reg: &'a mut RegOverride, name: &str, idx: OptArrayIndex) -> &'a mut FieldOverride{
         let mut field_name = name.to_owned();
         if let Some(field_idx) = idx {
@@ -379,6 +383,7 @@ impl RegInst {
         reg.fields.entry(field_name).or_default()
     }
 
+    /// Override description of a register/field
     pub fn desc_updt(&mut self, idx: &OverrideIndex, desc: &str, is_private: bool) {
         for reg_idx in idx.iter_reg() {
             let reg = self.reg_override.entry(reg_idx).or_default();
@@ -404,6 +409,7 @@ impl RegInst {
         }
     }
 
+    /// Set optional condition in override settings
     pub fn set_optional(&mut self, idx: &OverrideIndex, v: ExprTokens) {
         for reg_idx in idx.iter_reg() {
             let reg = self.reg_override.entry(reg_idx).or_default();
@@ -419,6 +425,15 @@ impl RegInst {
         }
     }
 
+    /// Set optional access in override settings
+    pub fn set_optional_acc(&mut self, idx: &OverrideIndex, acc: Access) {
+        for reg_idx in idx.iter_reg() {
+            let reg = self.reg_override.entry(reg_idx).or_default();
+            reg.optional_acc = Some(acc);
+        }
+    }
+
+    /// Override a register/field visibility
     pub fn set_visibility(&mut self, idx: &OverrideIndex, v: Visibility) {
         for reg_idx in idx.iter_reg() {
             let reg = self.reg_override.entry(reg_idx).or_default();
@@ -434,6 +449,7 @@ impl RegInst {
         }
     }
 
+    /// Override register hardware access
     pub fn set_hw_acc(&mut self, idx: &OverrideIndex, v: Access) {
         for reg_idx in idx.iter_reg() {
             let reg = self.reg_override.entry(reg_idx).or_default();
@@ -441,6 +457,7 @@ impl RegInst {
         }
     }
 
+    /// Override reset valye of register/field
     pub fn set_reset(&mut self, idx: &OverrideIndex, v: ResetValP) {
         for reg_idx in idx.iter_reg() {
             let reg = self.reg_override.entry(reg_idx).or_default();
@@ -453,6 +470,7 @@ impl RegInst {
         }
     }
 
+    /// Override limit of a field
     pub fn set_limit(&mut self, idx: &OverrideIndex, limit: LimitP) {
         for reg_idx in idx.iter_reg() {
             let reg = self.reg_override.entry(reg_idx).or_default();
@@ -465,6 +483,7 @@ impl RegInst {
         }
     }
 
+    /// Override info (key/value pair) for a register/field
     pub fn add_info(&mut self, idx: &OverrideIndex, key_val:(&str, &str)) {
         for reg_idx in idx.iter_reg() {
             let reg = self.reg_override.entry(reg_idx).or_default();

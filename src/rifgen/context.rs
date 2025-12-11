@@ -65,6 +65,8 @@ pub enum Context { #[default]
 	Hidden, Disabled, Reserved, ArrayPosIncr, ArrayPartial,
     /// Flag a page/register/field/instance as optional. Followed by a paramter
 	Optional,
+    /// Define access of optional register when disabled
+    OptionalAcc,
     /// Set limit of field write value (started by keyword `limit`)
     Limit,
     /// Set number fo fractional bits of field

@@ -81,25 +81,41 @@ impl From<(Option<&str>, &str)> for RegGroup {
     }
 }
 
+/// Register deifnition: name, description, clk/reset, list of fields, ...
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct RegDef {
+    /// Register type name
     pub name: String,
+    /// Register group name: all register in a group are merged together at hardware level
     pub group: RegGroup,
+    /// Register description
     pub description: Description,
+    /// Defines hardware pulse generated on access (read/write/both)
     pub pulse: Vec<RegPulseKind>,
+    /// List of fields
     pub fields: Vec<Field>,
+    /// Interrupt definition
     pub interrupt: Vec<InterruptInfo>,
+    /// Visibility of register: hidden removes register from doc, reserved force name to rsvd_xx in doc and disabled force register to read-only
     pub visibility: Visibility,
+    /// Optional clock (automatically chosen between software  and first hardware if not define)
     pub clk: Option<String>,
+    /// Optional reset (default to page/rif if not defined)
     pub rst: Option<String>,
+    /// Clock Enable definition
     pub clk_en: ClkEn,
+    /// Optional clear logic expression
     pub clear: Option<LogicExpr>,
+    /// Generic key/value pair to provide extra information to generators
     pub info: HashMap<String, String>,
+    /// Width of the array (fixed or from parameter). Null when register is not an array
     pub array: Width,
     /// Indicates if the register logic is internal, fully external or just for the register access done
     pub external: ExternalKind,
     /// Indicates the register instance is controlled by a parameter
     pub optional: String,
+    /// Register access when optional and disabled: controls if an error is raised when a disabled register is accessed
+    pub optional_acc: Access,
 }
 
 impl RegDef {
@@ -113,6 +129,7 @@ impl RegDef {
             group,
             array: array.unwrap_or_default(),
             description: desc.into(),
+            optional_acc: Access::NA,
             ..Default::default()
         }
     }
