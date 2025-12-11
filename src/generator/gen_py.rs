@@ -266,7 +266,8 @@ impl GeneratorSw for GeneratorPy {
         }
         self.push_stash(0, &format!("            self.{name}{idx} = {comp_name}.{reg_parent}.{field_type}(self, '{name}{idx}')\n"));
         // Doc-string
-        if let Some(desc) = self.desc_to_string(&field.description,3) {
+        let field_desc = if field.array.dim() <= 1 && reg.array.dim() > 1 {&field.base_description} else {&field.description};
+        if let Some(desc) = self.desc_to_string(field_desc,3) {
             self.push_stash(0, &desc);
         }
         // For arrays ensure position is set

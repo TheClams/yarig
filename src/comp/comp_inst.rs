@@ -967,7 +967,11 @@ impl RifRegInst {
                             );
                         };
                     if let Some(desc) = &ovr_f.description {
-                        reg_field.description = desc.clone();//interpolate(idx);
+                        let desc_idx =
+                            if reg_field.array.dim() > 1 {DescIdx::Array(reg_field.array.idx())}
+                            else if r.array.dim() > 1 {DescIdx::Array(r.array.idx())}
+                            else {DescIdx::None};
+                        reg_field.description = desc.interpolate(desc_idx);
                     }
                     if let Some(visibility) = ovr_f.visibility {
                         reg_field.visibility = visibility;
@@ -1221,7 +1225,6 @@ impl RifFieldInst {
             let i = array.dim() + array.idx();
             idx = ArrayIdx::Def(i,field.array.value(params).into());
             desc_idx = i.into();
-            // println!("Field array: {array:?} | rst_idx={rst_idx}, idx={idx:?} | reset = {reset:?}", );
             desc = field.description.with_format(&format_str);
         } else {
             idx = ArrayIdx::Def(0,0);

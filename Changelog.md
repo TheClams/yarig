@@ -6,6 +6,11 @@
 ### Added
   - Syntax: add `optional_acc` to register and register instance to control access on disabled register
 
+### Fixed
+  - Field Description:
+    * Add missing interpolation on single field part of register array
+    * Python : Use field base description when part of register array
+
 
 ## [0.18.1] - 2025-11-19
 

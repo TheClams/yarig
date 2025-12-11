@@ -153,7 +153,7 @@ impl DescIdx {
     }
 
     pub fn field_bus(width: u16, idx: u16) -> Self {
-        DescIdx::RegBus(width, idx)
+        DescIdx::FieldBus(width, idx)
     }
 
     pub fn val(&self) -> u16 {
