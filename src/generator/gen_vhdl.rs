@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
 use crate::{
-    cfg::CfgRtl, comp::{
+    cfg::{CfgRtl, RtlLimitCfg}, comp::{
         comp_inst::{RifInst, RifmuxInst},
         hw_info::{PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalDim, SignalInfo, SignalKind}
-    }, rifgen::{order_dict::OrderDict, CastInfo, EnumEntry, ExprId, GenericRange, Interface, LogicExpr, ResetDef}
+    }, rifgen::{CastInfo, EnumEntry, ExprId, GenericRange, Interface, LogicExpr, ResetDef, order_dict::OrderDict}
 };
 
 use super::{
@@ -24,6 +24,8 @@ pub struct GeneratorVhdl {
     const_field: bool,
     /// Current enumerated type width
     enum_width : u8,
+    /// Controls how field limits are used
+    limit: RtlLimitCfg,
     /// True when current module instance is a bridge
     is_bridge : bool,
     /// Component interface
@@ -32,6 +34,7 @@ pub struct GeneratorVhdl {
     generics : HashMap<String, u8>,
     /// List of outputs port (needed to add intermediate signals)
     outputs : OrderDict<String,String>,
+    /// Internal state variable to track when output port have been handled
     outputs_locked: bool,
 }
 
@@ -46,12 +49,14 @@ impl GeneratorVhdl {
         if let Some(gen_inc) = extra.gen_inc {
             core.setting.gen_inc = gen_inc;
         }
+        let limit = RtlLimitCfg::new(extra.limit, extra.force_limit);
         GeneratorVhdl {
             core,
             enum_width: 0,
             nb_pipe: extra.nb_pipe.unwrap_or(1),
             const_reg: extra.const_reg.unwrap_or(false),
             const_field: extra.const_field.unwrap_or(false),
+            limit,
             is_bridge: false,
             generics: HashMap::new(),
             outputs: OrderDict::new(),
@@ -308,6 +313,11 @@ impl GeneratorHw for GeneratorVhdl {
 
     /// Flag when field constants (mask, lsb, msb, reset) should be generated
     fn has_const_field(&self) -> bool {self.const_field}
+
+    /// Flag when field constants (mask, lsb, msb, reset) should be generated
+    fn limit_cfg(&self) -> RtlLimitCfg {
+        self.limit
+    }
 
     /// Write generic header for a file
     fn write_file_header(&mut self) {
@@ -796,6 +806,14 @@ impl GeneratorHw for GeneratorVhdl {
             self.write("\n");
         }
         self.write("-------------------------------------------------------------------------------\n");
+    }
+
+    fn write_assert(&mut self, _name: &str, cond: LogicExpr, msg: String, _is_uvm: bool) {
+        self.write("-- pragma translate_off\n");
+        self.write("assert (");
+        self.add_logic_expr(&cond, 1, LogicExprKind::Bool, false);
+        self.write(&format!(") report \"{msg}\" severity Error;\n"));
+        self.write("-- pragma translate_on\n");
     }
 
     fn write_process_seq(&mut self, clk: &str, rst: &ResetDef, name: &str, signals: &[SignalInfo]) {

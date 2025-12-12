@@ -3,7 +3,7 @@ use std::error::Error;
 use clap::Parser;
 
 use crate::{
-    cfg::RifGenTarget,
+    cfg::{RifGenTarget, RtlLimit},
     generator::{casing::Casing, gen_py::PyVersion},
     rifgen::{Interface, SuffixInfo}
 };
@@ -100,6 +100,12 @@ pub struct RifGenArgs{
     /// Add constant in RTL package for fields (mask/position/reset)
     #[arg(long, action)]
     pub rtl_const_field: bool,
+    /// Controls how field limits are used
+    #[arg(long, action)]
+    pub rtl_limit: Option<RtlLimit>,
+    /// Force generation of limits on all enums
+    #[arg(long, action)]
+    pub rtl_force_limit: Option<RtlLimit>,
 }
 
 /// Parse a single key-value pair

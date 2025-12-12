@@ -1,5 +1,5 @@
 use crate::{
-    cfg::CfgRtl, comp::hw_info::{PortDir, PortInfo, SignalDecl, SignalDef, SignalInfo, SignalKind}, rifgen::{CastInfo, EnumEntry, ExprId, GenericRange, LogicExpr, ResetDef}
+    cfg::{CfgRtl, RtlLimitCfg}, comp::{comp_inst::RifInst, hw_info::{PortDir, PortInfo, SignalDecl, SignalDef, SignalInfo, SignalKind}}, rifgen::{CastInfo, EnumEntry, ExprId, GenericRange, LogicExpr, ResetDef}
 };
 
 use super::{
@@ -19,6 +19,9 @@ pub struct GeneratorSv {
     const_field: bool,
     /// True when current module instance is a bridge
     is_bridge : bool,
+    /// Controls how field limits are used
+    limit: RtlLimitCfg,
+    sw_clk: String,
 }
 
 impl GeneratorSv {
@@ -29,11 +32,14 @@ impl GeneratorSv {
         if let Some(gen_inc) = extra.gen_inc {
             core.setting.gen_inc = gen_inc;
         }
+        let limit = RtlLimitCfg::new(extra.limit, extra.force_limit);
         GeneratorSv {
             core,
             nb_pipe: extra.nb_pipe.unwrap_or(1),
             const_reg: extra.const_reg.unwrap_or(false),
             const_field: extra.const_field.unwrap_or(false),
+            limit,
+            sw_clk: "clk".to_owned(),
             is_bridge: false
         }
     }
@@ -99,7 +105,11 @@ impl GeneratorSv {
                     self.core.write(")");
                 }
             }
-            LogicExpr::CastFrom(_,_, e) => self.add_logic_expr(e, lvl, is_part),
+            LogicExpr::CastFrom(_,w, e) => {
+                self.core.write(&format!("{w}'("));
+                self.add_logic_expr(e, 0, is_part);
+                self.core.write(")");
+            }
             LogicExpr::ValueU(v, w) => {
                 let n = (w+3)>>2;
                 match w {
@@ -227,11 +237,20 @@ impl GeneratorHw for GeneratorSv {
     /// Flag when field constants (mask, lsb, msb, reset) should be generated
     fn has_const_field(&self) -> bool {self.const_field}
 
+    /// Flag when field constants (mask, lsb, msb, reset) should be generated
+    fn limit_cfg(&self) -> RtlLimitCfg {
+        self.limit
+    }
+
     /// Write generic header for a file
     fn write_file_header(&mut self) {
         // Add header : TODO: configurable header
         self.write_comment(0, "File generated automatically: DO NOT EDIT.");
         self.write("\n");
+    }
+
+    fn set_rif_info(&mut self, rif: &RifInst) {
+        self.sw_clk = rif.sw_clocking.clk.clone();
     }
 
     fn write_pkg_header(&mut self, name: &str) {
@@ -554,6 +573,21 @@ impl GeneratorHw for GeneratorSv {
         self.write("//-----------------------------------------------------------------------------\n");
     }
 
+    fn write_assert(&mut self, name: &str, cond: LogicExpr, msg: String, _is_uvm: bool) {
+        self.write("\n`ifndef SYNTHESIS\n");
+        self.write(&format!("   always @ (posedge {}) begin : proc_assert_{name}\n", self.sw_clk));
+        self.write("      if(");
+        self.add_logic_expr(&cond, 0, false);
+        self.write(")\n         ");
+        // if is_uvm {
+        //     self.write(&format!("uvm_report_error(\"RIF\", \"{msg}\", UVM_NONE)\n"));
+        // } else {
+        //     self.write(&format!("$error(\"{msg}\")\n"));
+        // }
+        self.write(&format!("$error(\"{msg}\");\n"));
+        self.write("   end\n");
+        self.write("`endif // SYNTHESIS\n\n");
+    }
 
     fn write_process_seq(&mut self, clk: &str, rst: &ResetDef, name: &str, signals: &[SignalInfo]) {
         // Check all signals clear/enable o see if all signals share a condition or not

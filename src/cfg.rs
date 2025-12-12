@@ -57,9 +57,9 @@ use serde_derive::Deserialize;
 use std::{collections::HashMap, fs, path::PathBuf, str::FromStr};
 use toml;
 use crate::{
-    cli::RifGenArgs, comp::comp_inst::Comp, generator::{
+    cli::RifGenArgs, comp::comp_inst::{Comp, RifFieldInst}, generator::{
         casing::Casing, gen_adoc::GeneratorAdoc, gen_c::GeneratorC, gen_common::GeneratorBaseSetting, gen_html::GeneratorHtml, gen_ipxact::GeneratorIpXact, gen_json::GeneratorJson, gen_latex::GeneratorLatex, gen_mif::GeneratorMif, gen_py::{GeneratorPy, PyVersion}, gen_ral::GeneratorRal, gen_sv::GeneratorSv, gen_svd::GeneratorSvd, gen_vhdl::GeneratorVhdl, trait_doc::GeneratorDoc, trait_hw::GeneratorHw, trait_sw::GeneratorSw
-    }, parser::{parser_expr::ParamValues, ParserCfg, RifGenSrc, RsvdKeywordSel}, rifgen::{Interface, SuffixInfo}
+    }, parser::{ParserCfg, RifGenSrc, RsvdKeywordSel, parser_expr::ParamValues}, rifgen::{Interface, SuffixInfo}
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -148,6 +148,61 @@ impl RifGenTarget {
         } else {
             None
         }
+    }
+}
+
+/// Controls how field limits are used
+#[derive(Deserialize, Clone, Copy, Debug, PartialEq)]
+pub enum RtlLimit {
+    /// Limit is ignored
+    Disabled,
+    /// Limit is check at hardware level and generate a bus error
+    Hardware,
+    /// Limit is checked only in simulation with standard assert
+    Assert,
+    /// Limit is checked only in simulation and use uvm_report_error()
+    UvmError,
+}
+
+impl FromStr for RtlLimit {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s_lc = s.to_lowercase();
+        match s_lc.as_ref() {
+            "hw" | "hardware" => Ok(RtlLimit::Hardware),
+            "sim" | "assert" => Ok(RtlLimit::Assert),
+            "uvm" | "uvmerror" | "uvm_error" => Ok(RtlLimit::UvmError),
+            _ => Err(format!("Illegal rtl_limit '{s}': expecting hw, sim or uvm"))
+        }
+    }
+}
+
+/// RTL Limit configuration: pair of limit,
+/// first one configuring how defined limits are egenrated in hardware (hardware check or simulation assert/error)
+/// and the second one is optional and force adding limit to all enum fields
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RtlLimitCfg(pub RtlLimit, pub RtlLimit);
+
+impl RtlLimitCfg {
+
+    /// True when second limit has been defined
+    pub fn new(base: Option<RtlLimit>, force: Option<RtlLimit>) -> Self {
+        RtlLimitCfg(
+            base.unwrap_or(RtlLimit::Hardware),
+            force.unwrap_or(RtlLimit::Disabled),
+        )
+    }
+
+    /// True when second limit has been defined
+    pub fn has_force(&self) -> bool {
+        self.1 != RtlLimit::Disabled
+    }
+
+    /// Return the appropriate limit based on the field definition
+    pub fn get(&self, field: &RifFieldInst) -> RtlLimit {
+        if field.has_limit() {self.0}
+        else {self.1}
     }
 }
 
@@ -323,6 +378,10 @@ pub struct CfgRtl {
     pub const_field: Option<bool>,
     /// Sub-directory name for generated file which are not the top level
     pub subdir: Option<String>,
+    /// Specify how RTL limits are generated
+    pub limit: Option<RtlLimit>,
+    /// Option to automatically add limits on all enums
+    pub force_limit: Option<RtlLimit>,
 }
 
 /// Configuration specific to RAL target
@@ -518,6 +577,8 @@ impl YarigCfg {
         if args.suffix_rtl_only {self.suffix_rtl_only = true;}
         if args.rtl_const_reg {self.rtl.const_reg = Some(true);}
         if args.rtl_const_field {self.rtl.const_field = Some(true);}
+        if let Some(l) = args.rtl_limit {self.rtl.limit = Some(l);}
+        if let Some(l) = args.rtl_force_limit {self.rtl.force_limit = Some(l);}
         if args.keyword_rename {self.keywords.error = false;}
         if args.targets.contains(&RifGenTarget::Sv) {self.keywords.sv = true;}
         if args.targets.contains(&RifGenTarget::Vhdl) {self.keywords.vhdl = true;}

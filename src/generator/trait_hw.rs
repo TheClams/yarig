@@ -1,13 +1,11 @@
 use std::{collections::HashSet, ops::Deref};
 
 use crate::{
-    comp::{
+    cfg::{RtlLimit, RtlLimitCfg}, comp::{
         comp_inst::{Comp, CompInst, RifInst, RifmuxInst},
         hw_info::{PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalInfo, SignalKind}
-    },
-    parser::parser_expr::ParamValues,
-    rifgen::{
-        order_dict::OrderDict, Access, CastInfo, ClkEn, ClockingInfo, EnumEntry, EnumKind, ExprId, ExternalKind, FieldHwKind, FieldSwKind, GenericRange, Interface, InterruptClr, InterruptRegKind, InterruptTrigger, LimitValue, LogicExpr, RegPulseKind, ResetDef, SignalRange}
+    }, parser::parser_expr::ParamValues, rifgen::{
+        Access, CastInfo, ClkEn, ClockingInfo, EnumEntry, EnumKind, ExprId, ExternalKind, FieldHwKind, FieldSwKind, GenericRange, Interface, InterruptClr, InterruptRegKind, InterruptTrigger, LimitValue, LogicExpr, RegPulseKind, ResetDef, SignalRange, order_dict::OrderDict}
 };
 
 use super::{
@@ -458,6 +456,8 @@ pub trait GeneratorHw : GeneratorBase {
         }
         self.write("\n");
 
+        let limit_cfg = self.limit_cfg();
+
         // Declare local signal per register group
         for (inst_name, hw_reg) in rif.hw_regs.items().filter(|(_,r)| !r.intr_derived) {
             let group_name = self.casing(inst_name);
@@ -474,8 +474,10 @@ pub trait GeneratorHw : GeneratorBase {
                     pkg_name.clone(), group_type_sw.clone(), hw_reg.dim.clone()).into());
             }
             // Add signal to handle out-of-limit check
-            for limit in hw_reg.limits.iter() {
-                self.write_signal_decl(&SignalDef::new_bit(format!("{limit}__check")).into());
+            if limit_cfg.0 == RtlLimit::Hardware {
+                for limit in hw_reg.limits.iter() {
+                    self.write_signal_decl(&SignalDef::new_bit(format!("{limit}__check")).into());
+                }
             }
             for idx_u16 in 0..reg_dim.max(1) {
                 let idx = if reg_dim > 0 {format!("{idx_u16}")} else {"".to_owned()};
@@ -566,7 +568,14 @@ pub trait GeneratorHw : GeneratorBase {
                     if f.is_counter() {
                         sig_kind.set_width(f.width+1);
                     }
+                    // Check if force limit is enabled and the register did not have yet a limit
+                    let has_forced_limit = limit_cfg.1 == RtlLimit::Hardware && f.enum_kind.is_type() && f.limit.is_none() && f.is_sw_write();
                     if f.array > 0 {
+                        if has_forced_limit {
+                            for i in 0..f.array {
+                                self.write_signal_decl(&SignalDef::new_bit(format!("{f_name}{i}__check")).into());
+                            }
+                        }
                         for i in 0..f.array {
                             self.write_signal_decl(&SignalDef::new(
                                 format!("{f_name}{i}__next"), sig_kind.clone()).into());
@@ -574,6 +583,10 @@ pub trait GeneratorHw : GeneratorBase {
                     } else {
                         self.write_signal_decl(&SignalDef::new(
                             format!("{f_name}__next"), sig_kind.clone()).into());
+                        // Check if force limit is enabled
+                        if has_forced_limit {
+                            self.write_signal_decl(&SignalDef::new_bit(format!("{f_name}__check")).into());
+                        }
                     }
                     // Add register to store local value when register is not visible at the output
                     if f.is_local() {
@@ -674,7 +687,7 @@ pub trait GeneratorHw : GeneratorBase {
                 let field_limit: Vec<(String, String)> = reg
                     .fields
                     .iter()
-                    .filter(|field| field.limit.value != LimitValue::None)
+                    .filter(|field| field.has_hw_limit(limit_cfg))
                     .map(|field| (field.name.to_owned(), field.limit.bypass.to_owned()))
                     .collect();
                 if reg.has_decode() {
@@ -866,9 +879,10 @@ pub trait GeneratorHw : GeneratorBase {
                         Box::new(wr_data_raw));
 
                     // Add logic for field with limit
-                    if field.has_limit() {
+                    if field.has_limit() || (field.enum_kind.is_type() && limit_cfg.has_force() && field.is_sw_write()) {
                         let check_sig : ExprId = format!("{reg_field_name}__check").into();
-                        let check_expr = match &field.limit.value {
+                        let limit_value = if field.has_limit() {&field.limit.value} else {&LimitValue::Enum};
+                        let check_expr = match limit_value {
                             LimitValue::Min(v) => LogicExpr::gte(wr_data_l.clone(), LogicExpr::reset(v, field.width)),
                             LimitValue::Max(v) => LogicExpr::lte(wr_data_l.clone(), LogicExpr::reset(v, field.width)),
                             LimitValue::MinMax(min, max) => {
@@ -900,7 +914,13 @@ pub trait GeneratorHw : GeneratorBase {
                             }
                             LimitValue::None => unreachable!(),
                         };
-                        self.write_assign(check_sig, check_expr);
+                        if field.has_hw_limit(limit_cfg) {
+                            self.write_assign(check_sig, check_expr);
+                        } else {
+                            let l = limit_cfg.get(field);
+                            let check_expr_assert = LogicExpr::And(vec![rif_en.clone(), decode.clone(), LogicExpr::not(rd_wrn.clone()), LogicExpr::not(check_expr)]);
+                            self.write_assert(&reg_field_name, check_expr_assert, format!("Value out-of-range for {reg_name_i}.{field_name}"), l==RtlLimit::UvmError);
+                        }
                     }
 
                     // For external register combinatorial assign from the interface bus
@@ -2081,6 +2101,8 @@ pub trait GeneratorHw : GeneratorBase {
     fn write_assign_comb(&mut self, lvl: usize, lhs: ExprId, rhs: LogicExpr) {}
     fn write_process_comb_footer(&mut self, name: &str) {}
 
+    fn write_assert(&mut self, name: &str, cond: LogicExpr, msg: String, is_uvm: bool);
+
     /// Write a comment
     fn write_comment(&mut self, lvl: usize, txt: &str);
 
@@ -2095,9 +2117,13 @@ pub trait GeneratorHw : GeneratorBase {
         format!("{}_pkg.{}", rif.name(true).to_lowercase(), Self::EXT)
     }
 
+    /// Filename for RIF mux package
     fn filename_rifmux_pkg(&self, rifmux: &RifmuxInst) -> String {
         format!("{}_pkg.{}", &rifmux.inst_name.to_lowercase(), Self::EXT)
     }
+
+    /// Return the RTL limit configuration (default and force)
+    fn limit_cfg(&self) -> RtlLimitCfg;
 
 }
 

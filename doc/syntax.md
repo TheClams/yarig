@@ -163,6 +163,7 @@ The register properties, indented by one level compare to the register declarati
  - `reserved` : Rename register in any documentation to `rsvd` when the visibility is set to public (generator setting). Also remove description.
  - `optional : <condition>` : Indicate that the register is defined only if the _condition_ is true or different from 0.
     The condition should be a valid arithmetic expression where parameters can be used (e.g. `$REG1_EN==1`): this supports standard math operation (+,-,\*,\%,<<,>>) or comparison operator (==,!=,>,<,...).
+ - `optional_acc: [na|ro|rw]`: Control the software access (ro) of register which are due to parameters value. Default is `na` (any access will generate a bus access error).
  - `- <fieldName> ...` : Define a fields named _fieldName_ inside the register. See [below](#Field) for detail.
 
 It is also possible to include the definition from another rif file using the following syntax:
@@ -334,6 +335,8 @@ It is possible to override some properties at the instance level. Here the synta
  - `<field_name>.description <bla bla>` : change a field description
  - `<field_name>.reset = <rst_val>` : change a field reset value
  - `<field_name>.disable [= <disable_val>]` : disable a field (i.e. value is fixed). If no value is provided, it default to the reset value.
+ - `optional : <condition>` : Indicate that the register is created only if the _condition_ is true or different from 0.
+ - `optional_acc: [na|ro|rw]`: Control the software access (ro) of register which are due to parameters value. Default is `na` (any access will generate a bus access error).
 
 It is also possible to create an array of register by specifying `- <regname>[<arraysize>]`.
 The address is auto-incremented for each register instance.

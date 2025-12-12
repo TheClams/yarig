@@ -81,11 +81,15 @@ pub enum RifType {Rif(String), Ext(u8)}
 /// Values are: instance name, array size, type name, group name, addressing scheme and address
 pub type RifmuxItemTuple<'a> = (&'a str, RifType, Option<(AddressKind, AddressOffset)>, Option<&'a str>);
 
+/// Suffix Information: name, position and if used for RTL package
 #[derive(Deserialize, Clone, Debug, PartialEq, Default)]
 #[serde(default)]
 pub struct SuffixInfo {
+    /// Suffix name
     pub name: String,
+    /// When true place suffix just before _rif (if name ends in _rif)
     pub alt_pos: bool,
+    /// Enable suffix on package name
     pub pkg: bool,
 }
 

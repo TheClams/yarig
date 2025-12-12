@@ -1,10 +1,9 @@
 use std::collections::{BTreeMap, HashMap};
 
 use crate::{
-    parser::{get_rif, parser_expr::{ExprValue, ParamValues}, RifGenSrc, RifGenTop},
-    rifgen::{
-        order_dict::{OrderDict, OrderedDictIterV}, Access, AddressKind, ClockingInfo, CounterInfo, DescIdx, Description, EnumDef, EnumDefs, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, GenericRange, GenericValues, Interface, InterruptRegKind, InterruptTrigger, Limit, LogicExpr, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegPulseKind, ResetVal, ResetValOverride, Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SignalRange, SuffixInfo, Visibility
-    },
+    cfg::{RtlLimit, RtlLimitCfg}, parser::{RifGenSrc, RifGenTop, get_rif, parser_expr::{ExprValue, ParamValues}}, rifgen::{
+        Access, AddressKind, ClockingInfo, CounterInfo, DescIdx, Description, EnumDef, EnumDefs, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, GenericRange, GenericValues, Interface, InterruptRegKind, InterruptTrigger, Limit, LogicExpr, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegPulseKind, ResetVal, ResetValOverride, Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SignalRange, SuffixInfo, Visibility, order_dict::{OrderDict, OrderedDictIterV}
+    }
 };
 
 use super::{hw_info::PortList, reg_impl::{HwRegs, RegImpl, RegImplDict}};
@@ -1344,6 +1343,12 @@ impl RifFieldInst {
     /// Flag when a field has a limit constraint
     pub fn has_limit(&self) -> bool {
         !self.limit.is_none()
+    }
+
+    /// Flag when a field has a limit constraint
+    pub fn has_hw_limit(&self, limit_cfg: RtlLimitCfg) -> bool {
+        (limit_cfg.0==RtlLimit::Hardware && !self.limit.is_none()) ||
+        (limit_cfg.1==RtlLimit::Hardware && self.enum_kind.is_type()) && self.is_sw_write()
     }
 
     /// Flag when a field is a counter
