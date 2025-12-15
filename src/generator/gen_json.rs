@@ -93,6 +93,9 @@ impl GeneratorSw for GeneratorJson {
             }
             self.write(&format!("{tab}   ],\n"));
         }
+        if field.nb_frac!=0 {
+            self.write(&format!("{tab}   \"nb_frac\" : {},\n", field.nb_frac));
+        }
         self.write(&format!("{tab}   \"desc\" : \"{desc}\"\n"));
         let sep = if is_last {""} else {","};
         self.write( &format!("{tab}}}{sep}\n"));

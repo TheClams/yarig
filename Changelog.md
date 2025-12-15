@@ -5,6 +5,10 @@
 
 ### Added
   - Syntax: add `optional_acc` to register and register instance to control access on disabled register
+  - Option (in config file or as command-line argument) to change field limit to assert, and force limit on all enums (either hardware check or assert)
+
+### Changed
+  - JSON: Add number of fractional bit when non-null
 
 ### Fixed
   - Field Description:
