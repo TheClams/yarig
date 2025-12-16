@@ -618,7 +618,7 @@ impl HwRegInst {
         let dim = match &reg.array {
             ArrayIdx::Def(_, _) => SignalDim::Fixed(0),
             ArrayIdx::Inst(_, dim) => SignalDim::Fixed(*dim),
-            ArrayIdx::Gen(_, range, name) => SignalDim::Generic(name.to_owned(), range.max as u16),
+            ArrayIdx::Gen(_, range, name) => SignalDim::Generic(name.to_owned(), range.max),
         };
         HwRegInst {group, dim, port, intr_derived, missing_fields, limits}
     }

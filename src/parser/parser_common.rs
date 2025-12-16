@@ -161,8 +161,8 @@ pub fn parse_binary<'a>(input: &mut &'a str) -> Res<'a, u8> {
     .parse_next(input)
 }
 
-pub fn parse_range<'a>(input: &mut &'a str) -> Res<'a, Vec<u8>> {
-    repeat(1..=3, terminated(ws(val_u8), opt(":")))
+pub fn parse_range<'a>(input: &mut &'a str) -> Res<'a, Vec<u16>> {
+    repeat(1..=3, terminated(ws(val_u16), opt(":")))
     .context(StrContext::Label("range"))
     .parse_next(input)
 }

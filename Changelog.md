@@ -14,7 +14,10 @@
   - Field Description:
     * Add missing interpolation on single field part of register array
     * Python : Use field base description when part of register array
+  - Hardware: fix width extraction of generic range (could be too large by one)
 
+### Internals
+  - GenericRange now uses u16 instead of u8.
 
 ## [0.18.1] - 2025-11-19
 

@@ -662,7 +662,7 @@ impl ArrayIdx {
         match self {
             ArrayIdx::Def(_, dim) => *dim,
             ArrayIdx::Inst(_, dim) => *dim,
-            ArrayIdx::Gen(_, range,_) => range.max as u16, // TODO: change range to support array > 255 ?
+            ArrayIdx::Gen(_, range,_) => range.max,
         }
     }
 
@@ -843,8 +843,8 @@ impl RifRegInst {
         };
         let array =  if let RegInstArgs::Arr(idx) = &args {idx} else {&ArrayIdx::Def(0,0)};
         let optional = if let ArrayIdx::Gen(_,range,gen_name) = &array {
-            if array.idx() > range.min.into() {
-                Some((LogicExpr::gte(gen_name.to_owned().into(), (array.idx(), range.max as u16).into()), def.optional_acc))
+            if array.idx() > range.min {
+                Some((LogicExpr::gte(gen_name.to_owned().into(), (array.idx(), range.max).into()), def.optional_acc))
             } else {
                 None
             }

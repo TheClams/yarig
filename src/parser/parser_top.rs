@@ -88,7 +88,7 @@ pub fn reset_def(input: &str) -> ResF<'_, ResetDef> {
 pub fn generic_range<'a>(input: &mut &'a str) -> Res<'a, GenericRange> {
   let values = alt((
       parse_range,
-      parse_binary.map(|v| vec![v]),
+      parse_binary.map(|v| vec![v as u16]),
     )).context(StrContext::Label("generic range"))
     .parse_next(input)?;
   let desc = opt(quoted_string)

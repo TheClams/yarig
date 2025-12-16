@@ -269,9 +269,10 @@ impl From<&MissingFieldInfo> for LogicExpr {
 /// Implement conversion from a couple value,max
 impl From<(u16,u16)> for LogicExpr {
     fn from(value: (u16,u16)) -> Self {
+        let nb_bits = (u16::BITS - (value.1-1).leading_zeros()).max(1);
         LogicExpr::ValueU(
             value.0 as u128,
-            (u16::BITS - value.1.leading_zeros()) as usize
+            nb_bits as usize
         )
     }
 }

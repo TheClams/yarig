@@ -432,7 +432,7 @@ impl ExprValue {
     pub fn max(&self) -> isize {
         match self {
             ExprValue::Value(n) => *n,
-            ExprValue::Range(_,r) => r.max.into(),
+            ExprValue::Range(_,r) => r.max as isize,
         }
     }
 }

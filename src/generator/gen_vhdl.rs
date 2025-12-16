@@ -501,7 +501,7 @@ impl GeneratorHw for GeneratorVhdl {
     }
 
     fn write_module_generic_decl(&mut self, name: &str, range: &GenericRange, is_last: bool) {
-        let width = (u8::BITS - (range.max-1).leading_zeros()).max(1) as u8;
+        let width = (u16::BITS - (range.max-1).leading_zeros()).max(1) as u8;
         self.generics.insert(name.to_owned(), width);
         self.write(&format!("      {name} : integer range {} to {} := {}",
             range.min, range.max, range.default));

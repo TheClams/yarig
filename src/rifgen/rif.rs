@@ -96,20 +96,20 @@ impl Interface {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct GenericRange {
-    pub min : u8,
-    pub max : u8,
-    pub default : u8,
+    pub min : u16,
+    pub max : u16,
+    pub default : u16,
     pub desc: Option<String>,
 }
 
 impl GenericRange {
     pub fn binary(init: u8, desc: Option<String>) -> Self {
-        GenericRange {min:0, default:init, max:1, desc}
+        GenericRange {min:0, default: init.into(), max:1, desc}
     }
 }
 
-impl From<(Vec<u8>, Option<&str>)> for GenericRange {
-    fn from(v: (Vec<u8>, Option<&str>)) -> GenericRange {
+impl From<(Vec<u16>, Option<&str>)> for GenericRange {
+    fn from(v: (Vec<u16>, Option<&str>)) -> GenericRange {
         let desc =  v.1.map(|d| d.to_owned());
         match v.0.len() {
             // Empty vec ? just set everything to 1, should never happen
@@ -117,7 +117,7 @@ impl From<(Vec<u8>, Option<&str>)> for GenericRange {
             // Only one value => default==max
             1 => {
                 if v.0[0] < 2 {
-                    GenericRange::binary(v.0[0], desc)
+                    GenericRange::binary(v.0[0] as u8, desc)
                 } else {
                     GenericRange{min:1, default:v.0[0], max:v.0[0], desc}
                 }
