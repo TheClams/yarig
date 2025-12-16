@@ -1,5 +1,5 @@
 use crate::{
-    cfg::{CfgRtl, RtlLimitCfg}, comp::{comp_inst::RifInst, hw_info::{PortDir, PortInfo, SignalDecl, SignalDef, SignalInfo, SignalKind}}, rifgen::{CastInfo, EnumEntry, ExprId, GenericRange, LogicExpr, ResetDef}
+    cfg::{CfgRtl, RtlLimit, RtlLimitCfg}, comp::{comp_inst::RifInst, hw_info::{PortDir, PortInfo, SignalDecl, SignalDef, SignalInfo, SignalKind}}, rifgen::{CastInfo, EnumEntry, ExprId, GenericRange, LogicExpr, ResetDef}
 };
 
 use super::{
@@ -21,7 +21,10 @@ pub struct GeneratorSv {
     is_bridge : bool,
     /// Controls how field limits are used
     limit: RtlLimitCfg,
+    /// Software clock for curren RIF
     sw_clk: String,
+    /// Flag when UVM library should be imported for current RIF
+    import_uvm: bool,
 }
 
 impl GeneratorSv {
@@ -38,9 +41,10 @@ impl GeneratorSv {
             nb_pipe: extra.nb_pipe.unwrap_or(1),
             const_reg: extra.const_reg.unwrap_or(false),
             const_field: extra.const_field.unwrap_or(false),
+            is_bridge: false,
             limit,
             sw_clk: "clk".to_owned(),
-            is_bridge: false
+            import_uvm: false
         }
     }
 
@@ -251,6 +255,10 @@ impl GeneratorHw for GeneratorSv {
 
     fn set_rif_info(&mut self, rif: &RifInst) {
         self.sw_clk = rif.sw_clocking.clk.clone();
+        self.import_uvm =
+            (self.limit.1==RtlLimit::UvmError && !rif.enum_defs.is_empty()) ||
+            (self.limit.0==RtlLimit::UvmError && rif.iter_reg().flat_map(|r| r.fields.iter()).any(|f| f.has_limit()));
+
     }
 
     fn write_pkg_header(&mut self, name: &str) {
@@ -372,6 +380,11 @@ impl GeneratorHw for GeneratorSv {
 
     fn write_module_decl_footer(&mut self, _name: &str) {
         self.write(");\n");
+        if self.import_uvm {
+            self.write("\n`ifndef SYNTHESIS\n");
+            self.write("   import uvm_pkg::*;\n");
+            self.write("`endif // SYNTHESIS\n");
+        }
     }
 
     fn write_module_impl_footer(&mut self, name: &str) {
@@ -573,18 +586,17 @@ impl GeneratorHw for GeneratorSv {
         self.write("//-----------------------------------------------------------------------------\n");
     }
 
-    fn write_assert(&mut self, name: &str, cond: LogicExpr, msg: String, _is_uvm: bool) {
+    fn write_assert(&mut self, name: &str, cond: LogicExpr, msg: String, is_uvm: bool) {
         self.write("\n`ifndef SYNTHESIS\n");
         self.write(&format!("   always @ (posedge {}) begin : proc_assert_{name}\n", self.sw_clk));
         self.write("      if(");
         self.add_logic_expr(&cond, 0, false);
         self.write(")\n         ");
-        // if is_uvm {
-        //     self.write(&format!("uvm_report_error(\"RIF\", \"{msg}\", UVM_NONE)\n"));
-        // } else {
-        //     self.write(&format!("$error(\"{msg}\")\n"));
-        // }
-        self.write(&format!("$error(\"{msg}\");\n"));
+        if is_uvm {
+            self.write(&format!("uvm_report_error(\"RIF\", \"{msg}\", UVM_NONE);\n"));
+        } else {
+            self.write(&format!("$error(\"{msg}\")\n"));
+        }
         self.write("   end\n");
         self.write("`endif // SYNTHESIS\n\n");
     }

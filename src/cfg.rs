@@ -204,6 +204,13 @@ impl RtlLimitCfg {
         if field.has_limit() {self.0}
         else {self.1}
     }
+
+    /// True when one of the limit is set to UVM
+    pub fn has_uvm(&self) -> bool {
+        self.0 == RtlLimit::UvmError ||
+        self.1 == RtlLimit::UvmError
+    }
+
 }
 
 /// Main configuration structure for YARIG code generation.

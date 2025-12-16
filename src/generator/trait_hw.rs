@@ -321,11 +321,12 @@ pub trait GeneratorHw : GeneratorBase {
 
     /// Generate RIF module
     fn gen_rif(&mut self, rif: &RifInst) -> Result<(), Box<dyn std::error::Error>> {
-        self.set_rif_info(rif);
         let rif_name = self.casing(&rif.name(false));
         let rif_pkg_name = self.casing(&rif.name(true));
         let hw_clk = rif.hw_clocking.first().unwrap_or(&rif.sw_clocking);
         let addr_shift = (rif.data_width as f32).log2().ceil() as u16 - 3; // Min data width is 8 bits
+        let limit_cfg = self.limit_cfg();
+        self.set_rif_info(rif);
         self.write_file_header();
         self.write_module_decl_header(&rif_name);
         if !rif.generics.is_empty() {
@@ -455,8 +456,6 @@ pub trait GeneratorHw : GeneratorBase {
             }
         }
         self.write("\n");
-
-        let limit_cfg = self.limit_cfg();
 
         // Declare local signal per register group
         for (inst_name, hw_reg) in rif.hw_regs.items().filter(|(_,r)| !r.intr_derived) {

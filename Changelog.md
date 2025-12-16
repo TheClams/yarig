@@ -1,7 +1,12 @@
 # Change Log
 
 
-## [0.19.0] - 2025-12-11
+## [0.19.0] - Unreleased
+
+### Added
+  - SV: support RtlLimit::UvmError
+
+## [0.19.0] - 2025-12-16
 
 ### Added
   - Syntax: add `optional_acc` to register and register instance to control access on disabled register
