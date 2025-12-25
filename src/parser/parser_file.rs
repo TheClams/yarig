@@ -14,7 +14,7 @@ use crate::parser::{
     reg_incl_or_decl, reg_inst_array_properties, reg_inst_properties, reg_pulse_info, rif_inst_suffix, rifmux_group, rifmux_map, signal_or_expr, val_isize, val_u16
 };
 use crate::rifgen::{
-    Access, ClockingInfo, Context, DataWidth, EnumDef, EnumKind, ExternalKind, Field, FieldHwKind, FieldSwKind, InstMode, Interface, InterruptInfo, Lock, LogicExpr, OverrideIndex, RegDef, RegDefOrIncl, RegInst, RegPulseKind, ResetDef, Rif, RifPage, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility
+    Access, AddressOffset, ClockingInfo, Context, DataWidth, EnumDef, EnumKind, ExternalKind, Field, FieldHwKind, FieldSwKind, InstMode, Interface, InterruptInfo, Lock, LogicExpr, OverrideIndex, RegDef, RegDefOrIncl, RegInst, RegPulseKind, ResetDef, Rif, RifPage, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility
 };
 
 use super::{
@@ -674,7 +674,7 @@ impl RifGenSrc {
                 // Instances
                 Context::Instances => {
                     let inst = reg_inst(l)?;
-                    if inst.addr & self.last_data_width.addr_mask() != 0 {
+                    if let AddressOffset::Value(addr) = &inst.addr.offset && (addr & self.last_data_width.addr_mask()) != 0 {
                         return Err(RifErrorKind::AddrUnaligned.into())
                     }
                     self.last_page_mut().instances.push(inst);
@@ -799,6 +799,9 @@ impl RifGenSrc {
                                 }
                                 Context::Optional => {
                                     self.last_reg_inst().set_optional(&ovr_idx,  parse_expr(l)?)
+                                }
+                                Context::Address(addr) => {
+                                    self.last_reg_inst().set_addr(&ovr_idx, addr);
                                 }
                                 Context::Hidden => {
                                     let v = if bool_or_default(l, true)? {

@@ -1,9 +1,12 @@
 # Change Log
 
 
-## [0.19.0] - Unreleased
+## [0.19.1] - Unreleased
 
 ### Added
+  - Syntax: improved address handling
+    * support parameters for register instance address
+    * support address override when in auto-instance mode
   - SV: support RtlLimit::UvmError
 
 ## [0.19.0] - 2025-12-16

@@ -3,9 +3,9 @@ use winnow::{
   error::StrContext, Parser
 };
 
-use crate::rifgen::{AddressKind, AddressOffset, Context, RifmuxItem, RifType, RifmuxGroup, SuffixInfo};
+use crate::rifgen::{Context, RifmuxItem, RifType, RifmuxGroup, SuffixInfo};
 
-use super::{identifier, param, path_name, quoted_string, val_u64, val_u8, ws, Res, ResF};
+use super::{Res, ResF, address, identifier, path_name, quoted_string, val_u8, ws};
 
 
 pub fn rifmux_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
@@ -38,14 +38,6 @@ pub fn rifmux_map<'a>(input: &mut &'a str) -> Res<'a, Context> {
   .parse_next(input)
 }
 
-pub fn address_offset<'a>(input: &mut &'a str) -> Res<'a, AddressOffset> {
-    alt((
-      val_u64.map(AddressOffset::Value),
-      ws(param).map(|v| AddressOffset::Param(v.to_owned())),
-    )).context(StrContext::Label("address offset"))
-    .parse_next(input)
-}
-
 // - <rif_name> = <rif_type> @ <regAddr> "description"
 // - <rif_name> external <addrWidth> @ <regAddr> "description"
 pub fn rif_inst<'a>(input: &'a str, group: &'a str) -> ResF<'a, RifmuxItem> {
@@ -55,14 +47,7 @@ pub fn rif_inst<'a>(input: &'a str, group: &'a str) -> ResF<'a, RifmuxItem> {
       preceded(ws("="), ws(identifier)).map(|s| RifType::Rif(s.to_owned())),
       preceded(ws("external"),val_u8).map(RifType::Ext),
     )),
-    opt((
-        alt((
-          ws("@+=").value(AddressKind::RelativeSet),
-          ws("@+").value(AddressKind::Relative),
-          ws("@").value(AddressKind::Absolute)
-        )),
-        address_offset
-    )),
+    opt(address),
     opt(quoted_string)
   ).context(StrContext::Label("rif instance"))
   .parse(input).map(|v| RifmuxItem::new(v, group))
@@ -118,12 +103,7 @@ pub fn rif_inst_suffix(input: &str) -> ResF<'_, (Option<&str>, SuffixInfo)> {
 pub fn rifmux_group(input: &str) -> ResF<'_, RifmuxGroup> {
   (
     ws(identifier),
-    alt((
-      ws("@+=").value(AddressKind::RelativeSet),
-      ws("@+").value(AddressKind::Relative),
-      ws("@").value(AddressKind::Absolute)
-    )),
-    address_offset,
+    address,
     opt(quoted_string)
   ).context(StrContext::Label("rifmux group definition"))
   .parse(input)

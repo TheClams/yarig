@@ -4,7 +4,7 @@ use serde_derive::Deserialize;
 
 use crate::parser::{parser_expr::{ExprTokens, ParamValues}, suffix_info};
 
-use super::{order_dict::OrderDict, AddressKind, ClockingInfo, DataWidth, Description, GenericRange, GenericValues, Interface};
+use super::{Address, ClockingInfo, DataWidth, Description, GenericRange, GenericValues, Interface, order_dict::OrderDict};
 
 #[derive(Clone, Debug)]
 pub struct Rifmux {
@@ -79,7 +79,7 @@ impl Rifmux {
 pub enum RifType {Rif(String), Ext(u8)}
 /// Tuple from parser
 /// Values are: instance name, array size, type name, group name, addressing scheme and address
-pub type RifmuxItemTuple<'a> = (&'a str, RifType, Option<(AddressKind, AddressOffset)>, Option<&'a str>);
+pub type RifmuxItemTuple<'a> = (&'a str, RifType, Option<Address>, Option<&'a str>);
 
 /// Suffix Information: name, position and if used for RTL package
 #[derive(Deserialize, Clone, Debug, PartialEq, Default)]
@@ -116,10 +116,8 @@ pub struct RifmuxItem {
     pub group: String,
     /// Name of the register type
     pub rif_type: RifType,
-    /// Addressing scheme used: absolute or relative
-    pub addr_kind: AddressKind,
     /// Address of the instance
-    pub addr: AddressOffset,
+    pub addr: Address,
     /// Description
     pub description: Description,
     /// Parameters override for this instance
@@ -139,8 +137,7 @@ impl RifmuxItem {
             name: info.0.to_owned(),
             group: group.to_owned(),
             rif_type: info.1,
-            addr_kind: addr_info.0,
-            addr: addr_info.1,
+            addr: addr_info,
             optional: ExprTokens::new(0),
             description: info.3.unwrap_or("").into(),
             parameters: OrderDict::new(),
@@ -168,49 +165,24 @@ impl RifmuxItem {
 
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum AddressOffset {
-    Value(u64),
-    Param(String)
-}
-
-impl Default for AddressOffset {
-    fn default() -> Self {
-        AddressOffset::Value(0)
-    }
-}
-
-impl AddressOffset {
-    pub fn value(&self, params: &ParamValues) -> u64 {
-        match self {
-            AddressOffset::Value(v) => *v,
-            AddressOffset::Param(n) => *params.get(n).unwrap() as u64,
-        }
-
-    }
-}
-
 #[derive(Clone, Debug)]
 /// Group instances with a common offset under a common name prefix
 pub struct RifmuxGroup {
     /// Name of the RIF instance
     pub name: String,
-    /// Addressing scheme used: absolute or relative
-    pub addr_kind: AddressKind,
     /// Address of the instance
-    pub addr: AddressOffset,
+    pub addr: Address,
     /// Description
     pub description: Description,
 }
 
-pub type RifmuxGroupTuple<'a> = (&'a str, AddressKind, AddressOffset, Option<&'a str>);
+pub type RifmuxGroupTuple<'a> = (&'a str, Address, Option<&'a str>);
 impl From<RifmuxGroupTuple<'_>> for RifmuxGroup {
     fn from(info: RifmuxGroupTuple) -> RifmuxGroup {
         RifmuxGroup {
             name: info.0.to_owned(),
-            addr_kind: info.1,
-            addr: info.2,
-            description: info.3.unwrap_or("").into(),
+            addr: info.1,
+            description: info.2.unwrap_or("").into(),
         }
     }
 }

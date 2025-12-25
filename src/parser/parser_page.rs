@@ -1,4 +1,4 @@
-use crate::rifgen::{AddressKind, Context, InstMode, RegInst};
+use crate::rifgen::{Address, AddressKind, AddressOffset, Context, InstMode, RegInst};
 
 use winnow::{
     ascii::space0,
@@ -8,7 +8,7 @@ use winnow::{
     Parser
 };
 
-use super::{identifier, parser_expr::{parse_expr, ExprTokens}, val_u64, val_u16, ws, Res, ResF};
+use super::{Res, ResF, identifier, param, parser_expr::{ExprTokens, parse_expr}, val_u16, val_u64, ws};
 
 //--------------------------------
 // Page properties
@@ -43,6 +43,31 @@ pub fn is_auto(input: &str) -> ResF<'_, InstMode> {
     )).parse(input)
 }
 
+pub fn address_offset<'a>(input: &mut &'a str) -> Res<'a, AddressOffset> {
+    alt((
+      ws(val_u64).map(AddressOffset::Value),
+      ws(param).map(|v| AddressOffset::Param(v.to_owned())),
+    )).context(StrContext::Label("address offset"))
+    .parse_next(input)
+}
+
+pub fn address_kind<'a>(input: &mut &'a str) -> Res<'a, AddressKind> {
+    alt((
+        ws("@+=").value(AddressKind::RelativeSet),
+        ws("@+").value(AddressKind::Relative),
+        ws("@").value(AddressKind::Absolute),
+    )).context(StrContext::Label("address kind"))
+    .parse_next(input)
+}
+
+pub fn address<'a>(input: &mut &'a str) -> Res<'a, Address> {
+
+    (address_kind, address_offset)
+    .context(StrContext::Label("address"))
+    .parse_next(input)
+    .map(|v| v.into())
+}
+
 // - reg_name[[array_size]] [= regType] [(groupName)] [@ regAddr]
 pub fn reg_inst(input: &str) -> ResF<'_, RegInst> {
     (
@@ -56,14 +81,7 @@ pub fn reg_inst(input: &str) -> ResF<'_, RegInst> {
         ).try_map(|s| if let Some(expr) = s {parse_expr(expr)} else {Ok(ExprTokens::new(0))}),
         opt(preceded(ws("="), ws(identifier))),
         opt(delimited(ws("("), identifier, ws(")"))),
-        opt((
-            alt((
-                ws("@+=").value(AddressKind::RelativeSet),
-                ws("@+").value(AddressKind::Relative),
-                ws("@").value(AddressKind::Absolute),
-            )),
-            ws(val_u64),
-        )),
+        opt(address),
     ).context(StrContext::Label("register instance"))
     .parse(input)
     .map(|v| v.into())
@@ -81,9 +99,9 @@ pub fn reg_inst_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
             alt((ws("disabled"),ws("disable"))).value(Context::Disabled),
             ws("reserved").value(Context::Reserved),
             ws("hw").value(Context::HwAccess),
-            terminated(index_list,".").map(Context::RegIndex),
             terminated(identifier, ".").map(|v| Context::Item(v.into())),
             terminated(reg_inst_field_array, "."),
+            terminated(index_list,opt(".")).map(Context::RegIndex),
         )),
         opt(alt((ws(":"),ws("=")))),
     ).context(StrContext::Label("register instance property"))
@@ -100,6 +118,7 @@ pub fn reg_inst_array_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
             ws("reserved").value(Context::Reserved),
             alt((ws("disabled"),ws("disable"))).value(Context::Disabled),
             ws("hw").value(Context::HwAccess),
+            address.map(Context::Address),
             terminated(identifier, ".").map(|v| Context::Item(v.into())),
         )),
         opt(alt((ws(":"),ws("=")))),
@@ -172,6 +191,8 @@ mod tests_parsing {
 
     use std::collections::HashMap;
 
+    use crate::rifgen::{Address, AddressOffset};
+
     use super::*;
 
     #[test]
@@ -210,6 +231,22 @@ mod tests_parsing {
         assert!(index_list(&mut "[3:5,]").is_err());
     }
 
+    #[test]
+    fn test_address() {
+        assert_eq!(
+            address(&mut " @ $OFFSET"),
+            Ok(Address::new(AddressKind::Absolute, AddressOffset::Param("OFFSET".to_owned())))
+        );
+        assert_eq!(
+            address(&mut "@+3"),
+            Ok(Address::new(AddressKind::Relative, AddressOffset::Value(3)))
+        );
+        assert_eq!(
+            address(&mut "@+=4"),
+            Ok(Address::new(AddressKind::RelativeSet, AddressOffset::Value(4)))
+        );
+    }
+
     // - reg_name[[array_size]] [= regType] [(groupName)] [@ regAddr]
     #[test]
     fn test_reg_inst() {
@@ -219,8 +256,7 @@ mod tests_parsing {
                 inst_name: "reg_name".to_owned(),
                 type_name: "reg_type".to_owned(),
                 group_name: "reg_group".to_owned(),
-                addr_kind: AddressKind::Absolute,
-                addr: 0x10,
+                addr: Address::new(AddressKind::Absolute, AddressOffset::Value(0x10)),
                 array: parse_expr("4").expect("Parse 4 cannot fail"),
                 reg_override: HashMap::new(),
             })
@@ -231,8 +267,7 @@ mod tests_parsing {
                 inst_name: "reg_name".to_owned(),
                 type_name: "reg_name".to_owned(),
                 group_name: "".to_owned(),
-                addr_kind: AddressKind::Absolute,
-                addr: 0x04,
+                addr: Address::new(AddressKind::Absolute, AddressOffset::Value(0x04)),
                 array: ExprTokens::new(0),
                 reg_override: HashMap::new(),
             })

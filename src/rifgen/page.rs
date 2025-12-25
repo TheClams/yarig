@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::parser::{get_rif, parser_expr::ExprTokens};
+use crate::{comp::comp_inst::ArrayIdx, parser::{get_rif, parser_expr::{ExprTokens, ParamValues}}};
 
 use super::{Access, ClkEn, Description, InterruptRegKind, LimitP, RegDef, RegDefOrIncl, ResetValP, Rif, Visibility};
 
@@ -155,6 +155,59 @@ pub enum AddressKind {#[default]
     RelativeSet
 }
 
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum AddressOffset {
+    Value(u64),
+    Param(String)
+}
+
+impl Default for AddressOffset {
+    fn default() -> Self {
+        AddressOffset::Value(0)
+    }
+}
+
+impl AddressOffset {
+    pub fn value(&self, params: &ParamValues) -> u64 {
+        match self {
+            AddressOffset::Value(v) => *v,
+            AddressOffset::Param(n) => *params.get(n).unwrap() as u64,
+        }
+
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Address {
+    pub kind: AddressKind,
+    pub offset: AddressOffset,
+}
+
+impl Default for Address {
+    fn default() -> Self {
+        Address::new(AddressKind::RelativeSet, AddressOffset::Value(0))
+    }
+}
+
+impl Address {
+    /// Create Address with kind and offset
+    pub fn new(kind: AddressKind, offset: AddressOffset) -> Self {
+        Self {kind, offset}
+    }
+
+    /// Return the offset value (after interpreting parameters if any)
+    pub fn value(&self, params: &ParamValues) -> u64 {
+        self.offset.value(params)
+    }
+}
+
+impl From<(AddressKind,AddressOffset)> for Address {
+    fn from(value: (AddressKind,AddressOffset)) -> Self {
+        Self::new(value.0, value.1)
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq)]
 pub enum ResetValOverride {
@@ -223,6 +276,8 @@ impl FieldOverride {
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct RegOverride {
+    /// Register address override (For auto instance only)
+    pub addr: Option<Address>,
     /// Register description override
     pub description: Option<Description>,
     /// Indicates the register instance is controlled by a parameter
@@ -243,6 +298,9 @@ impl RegOverride {
     pub fn merge(&self, def: Option<&Self>) -> Self {
         let mut merged = self.clone();
         if let Some(d) = def {
+            if self.addr.is_none() {
+                merged.addr = d.addr.clone();
+            }
             if self.description.is_none() {
                 merged.description = d.description.clone();
             }
@@ -335,7 +393,7 @@ pub type RegOverrideDict = HashMap<OptArrayIndex,RegOverride>;
 
 /// Tuple from parser
 /// Values are: instance name, array size, type name, group name, addressing scheme and address
-pub type RegInstTuple<'a> = (&'a str, ExprTokens, Option<&'a str>, Option<&'a str>, Option<(AddressKind, u64)>);
+pub type RegInstTuple<'a> = (&'a str, ExprTokens, Option<&'a str>, Option<&'a str>, Option<Address>);
 
 #[derive(Clone, Debug, PartialEq)]
 /// Register instance description
@@ -346,10 +404,8 @@ pub struct RegInst {
     pub type_name: String,
     /// Name of the hardware structure the register is part of (only needed when the structure spans multiple registers)
     pub group_name: String,
-    /// Addressing scheme used: absolute or relative
-    pub addr_kind: AddressKind,
     /// Address of the instance
-    pub addr: u64,
+    pub addr: Address,
     /// Number of the instance: can be an integer, a parameter or a generic
     pub array: ExprTokens,
     /// Register settings override
@@ -358,14 +414,12 @@ pub struct RegInst {
 
 impl From<RegInstTuple<'_>> for RegInst {
     fn from(info:RegInstTuple) -> RegInst {
-        let addr_info = info.4.unwrap_or((AddressKind::RelativeSet,0));
         let default_group = if info.2.is_some() {info.0} else {""};
         RegInst {
             inst_name: info.0.to_owned(),
             type_name: info.2.unwrap_or(info.0).to_owned(),
             group_name:info.3.unwrap_or(default_group).to_owned(),
-            addr_kind: addr_info.0,
-            addr: addr_info.1,
+            addr: info.4.unwrap_or_default(),
             array: info.1,
             reg_override: HashMap::new()
         }
@@ -381,6 +435,12 @@ impl RegInst {
             field_name.push_str(&format!("[{field_idx}]"));
         }
         reg.fields.entry(field_name).or_default()
+    }
+
+    /// Return reference to a register override, given an array index
+    pub fn get_ovr(&self, idx: &ArrayIdx) -> Option<&RegOverride> {
+        self.reg_override.get(&idx.opt_idx())
+            .or_else(|| self.reg_override.get(&None))
     }
 
     /// Override description of a register/field
@@ -422,6 +482,14 @@ impl RegInst {
                 },
                 None => reg.optional = v.clone(),
             }
+        }
+    }
+
+    /// Set optional access in override settings
+    pub fn set_addr(&mut self, idx: &OverrideIndex, addr: Address) {
+        for reg_idx in idx.iter_reg() {
+            let reg = self.reg_override.entry(reg_idx).or_default();
+            reg.addr = Some(addr.clone());
         }
     }
 

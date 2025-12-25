@@ -1,3 +1,5 @@
+use super::Address;
+
 #[derive(Clone, Debug, PartialEq, Default)]
 /// Parsing context
 pub enum Context { #[default]
@@ -80,6 +82,8 @@ pub enum Context { #[default]
     RegIndex(Vec<u16>),
     /// Field index used to override field array instance default properties
     FieldIndex((String,Vec<u16>)),
+    /// Register instance address override
+    Address(Address),
 }
 
 impl std::fmt::Display for Context {

@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use crate::{
     cfg::{RtlLimit, RtlLimitCfg}, parser::{RifGenSrc, RifGenTop, get_rif, parser_expr::{ExprValue, ParamValues}}, rifgen::{
-        Access, AddressKind, ClockingInfo, CounterInfo, DescIdx, Description, EnumDef, EnumDefs, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, GenericRange, GenericValues, Interface, InterruptRegKind, InterruptTrigger, Limit, LogicExpr, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegPulseKind, ResetVal, ResetValOverride, Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SignalRange, SuffixInfo, Visibility, order_dict::{OrderDict, OrderedDictIterV}
+        Access, Address, AddressKind, ClockingInfo, CounterInfo, DescIdx, Description, EnumDef, EnumDefs, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, GenericRange, GenericValues, Interface, InterruptRegKind, InterruptTrigger, Limit, LogicExpr, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegPulseKind, ResetVal, ResetValOverride, Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SignalRange, SuffixInfo, Visibility, order_dict::{OrderDict, OrderedDictIterV}
     }
 };
 
@@ -193,8 +193,9 @@ impl InstAddr {
     }
 
     /// Update with new address
-    pub fn updt(&mut self, offset: u64, kind: AddressKind) -> u64 {
-        match kind {
+    pub fn updt(&mut self, addr: &Address, params: &ParamValues) -> u64 {
+        let offset = addr.value(params);
+        match addr.kind {
             AddressKind::Absolute => {
                 self.base = offset as i64;
                 self.base as u64
@@ -248,7 +249,7 @@ impl RifmuxGroupInst {
         let mut v = Vec::with_capacity(groups.len());
         let mut addr_inst = InstAddr::new(0);
         for g in groups.iter() {
-            let addr = addr_inst.updt(g.addr.value(params), g.addr_kind);
+            let addr = addr_inst.updt(&g.addr, params);
             v.push(RifmuxGroupInst::new(g.name.to_owned(), addr, g.description.clone()));
         }
         v
@@ -477,17 +478,20 @@ impl RifPageInst {
                 if let Some(ovr) = reg.reg_override.get(&None)
                     && !ovr.optional.is_empty()
                     && ovr.optional.eval_with_gen(&rifs.params,&rifs.generics)? == ExprValue::Value(0) {
-                        // Add relative register disabled to the null list
-                        // These registers should typically not generate address error
-                        if (reg.addr_kind == AddressKind::Relative && reg.addr!=0) || reg.addr_kind==AddressKind::Absolute {
-                            let addr = inst_addr.base().wrapping_add(reg.addr);
+                        // Add register disabled to the null list when address is absolute or relative with a given offset
+                        // These disabled registers should typically not generate address error when accessed
+                        let mut addr = reg.addr.value(&rifs.params);
+                        if reg.addr.kind==AddressKind::Absolute || (reg.addr.kind == AddressKind::Relative && addr!=0) {
+                            if reg.addr.kind==AddressKind::Relative {
+                                addr = addr.wrapping_add(inst_addr.base());
+                            }
                             let acc = ovr.optional_acc.unwrap_or(Access::NA);
                             p.nulls.push((addr, acc));
                         }
                         continue;
                 }
                 if let Some(regdef) = page.find_regdef(&reg.type_name,rifs.rifs ) {
-                    let addr = inst_addr.updt(reg.addr, reg.addr_kind);
+                    let addr = inst_addr.updt(&reg.addr, &rifs.params);
                     // println!("Reg {} with {:?}({:04x}) -> {:04x}", reg.inst_name, reg.addr_kind, reg.addr, addr);
                     let array_size = reg.array.eval_with_gen(&rifs.params, &rifs.generics)?;
                     let nb = array_size.max() as u16;
@@ -663,6 +667,15 @@ impl ArrayIdx {
             ArrayIdx::Def(_, dim) => *dim,
             ArrayIdx::Inst(_, dim) => *dim,
             ArrayIdx::Gen(_, range,_) => range.max,
+        }
+    }
+
+    /// Return array index only for "true" arrays
+    pub fn opt_idx(&self) -> Option<u16> {
+         if self.dim() > 0 {
+            Some(self.idx())
+        } else {
+            None
         }
     }
 
@@ -927,73 +940,73 @@ impl RifRegInst {
         }
 
         // Handle override settings
-        if let Some(inst) = inst {
-            let idx = if r.array.dim() > 1 {Some(r.array.idx())} else {None};
-            if let Some(ovr_base) = inst.reg_override.get(&idx).or_else(|| inst.reg_override.get(&None)) {
-                let ovr_def = inst.reg_override.get(&None); // Get the default override
-                let ovr = ovr_base.merge(ovr_def);
-                // let ovr_desc = ovr.description.as_ref().or(ovr_def.map(|o| o.description.as_ref()).unwrap_or(None));
-                // Register override: Description
-                if let Some(desc) = &ovr.description {
-                    r.description = if let Some(i) = idx {
-                        desc.interpolate(i.into())
-                    } else {
-                        desc.clone()
+        if let Some(inst) = inst && let Some(ovr_base) = inst.get_ovr(&r.array) {
+            // Merge the override for the whole register with the one specific to current index
+            let ovr_def = inst.reg_override.get(&None);
+            let ovr = ovr_base.merge(ovr_def);
+            // Override description and ainterpolate it with current index
+            if let Some(desc) = &ovr.description {
+                r.description = if let Some(i) = r.array.opt_idx() {
+                    desc.interpolate(i.into())
+                } else {
+                    desc.clone()
+                };
+            }
+            if !ovr.optional.is_empty() {
+                match ovr.optional.eval_with_gen(&rifs.params, &rifs.generics)? {
+                    // If optional evaluate to 0, skip register instance
+                    ExprValue::Value(0) => {return Ok(None);}
+                    // For generic array, add conditional instance with the proper access when register is disabled
+                    ExprValue::Range(name, _) => {
+                        let acc = ovr.optional_acc.unwrap_or(def.optional_acc);
+                        r.optional = Some((LogicExpr::eq(name.into(),LogicExpr::ValueU(1, 1)), acc));
+                    }
+                    ExprValue::Value(_) => {}
+                }
+            }
+            if let Some(v) = ovr.visibility {
+                r.visibility = v;
+            }
+            if let Some(hw_access) = ovr.hw_acc {
+                r.hw_access = hw_access;
+            }
+            // Field override : Description, optional visbility, reset, limit, info
+            for (k,ovr_f) in ovr.fields.iter() {
+                let Some(reg_field) = r.fields.iter_mut()
+                    .find(|field| field.name == *k || field.name() == *k) else {
+                        return Err(
+                            format!("Field {k} must exist in {} | Fields available {:?}",
+                                r.reg_type, r.fields.iter().map(|f| f.name()).collect::<Vec<String>>() )
+                        );
                     };
+                if let Some(desc) = &ovr_f.description {
+                    let desc_idx =
+                        if reg_field.array.dim() > 1 {DescIdx::Array(reg_field.array.idx())}
+                        else if r.array.dim() > 1 {DescIdx::Array(r.array.idx())}
+                        else {DescIdx::None};
+                    reg_field.description = desc.interpolate(desc_idx);
                 }
-                if !ovr.optional.is_empty() {
-                    match ovr.optional.eval_with_gen(&rifs.params, &rifs.generics)? {
-                        ExprValue::Value(i) => if i==0 {return Ok(None);}
-                        ExprValue::Range(name, _) => {
-                            let acc = ovr.optional_acc.unwrap_or(def.optional_acc);
-                            r.optional = Some((LogicExpr::eq(name.into(),LogicExpr::ValueU(1, 1)), acc));
-                        }
+                if let Some(visibility) = ovr_f.visibility {
+                    reg_field.visibility = visibility;
+                }
+                if !ovr_f.optional.is_empty() {
+                    let optional = ovr_f.optional.eval(&rifs.params)?;
+                    if optional == 0 {
+                        reg_field.visibility = Visibility::Disabled;
                     }
                 }
-                if let Some(v) = ovr.visibility {
-                    r.visibility = v;
+                let enum_def : Option<&EnumDef> = reg_field.enum_kind.get_def(&rifs.enums);
+                match &ovr_f.reset {
+                    ResetValOverride::Reset(reset_val) => reg_field.reset = reset_val.compile(reg_field.is_signed(), reg_field.nb_frac, &rifs.params, enum_def)?,
+                    ResetValOverride::Disable(reset_val) => {
+                        reg_field.reset = reset_val.compile(reg_field.is_signed(), reg_field.nb_frac, &rifs.params, enum_def)?;
+                        reg_field.visibility = Visibility::Disabled;
+                    },
+                    // Nothing
+                    ResetValOverride::None => {},
                 }
-                if let Some(hw_access) = ovr.hw_acc {
-                    r.hw_access = hw_access;
-                }
-                // Field override : Description, optional visbility, reset, limit, info
-                for (k,ovr_f) in ovr.fields.iter() {
-                    let Some(reg_field) = r.fields.iter_mut()
-                        .find(|field| field.name == *k || field.name() == *k) else {
-                            return Err(
-                                format!("Field {k} must exist in {} | Fields available {:?}",
-                                    r.reg_type, r.fields.iter().map(|f| f.name()).collect::<Vec<String>>() )
-                            );
-                        };
-                    if let Some(desc) = &ovr_f.description {
-                        let desc_idx =
-                            if reg_field.array.dim() > 1 {DescIdx::Array(reg_field.array.idx())}
-                            else if r.array.dim() > 1 {DescIdx::Array(r.array.idx())}
-                            else {DescIdx::None};
-                        reg_field.description = desc.interpolate(desc_idx);
-                    }
-                    if let Some(visibility) = ovr_f.visibility {
-                        reg_field.visibility = visibility;
-                    }
-                    if !ovr_f.optional.is_empty() {
-                        let optional = ovr_f.optional.eval(&rifs.params)?;
-                        if optional == 0 {
-                            reg_field.visibility = Visibility::Disabled;
-                        }
-                    }
-                    let enum_def : Option<&EnumDef> = reg_field.enum_kind.get_def(&rifs.enums);
-                    match &ovr_f.reset {
-                        ResetValOverride::Reset(reset_val) => reg_field.reset = reset_val.compile(reg_field.is_signed(), reg_field.nb_frac, &rifs.params, enum_def)?,
-                        ResetValOverride::Disable(reset_val) => {
-                            reg_field.reset = reset_val.compile(reg_field.is_signed(), reg_field.nb_frac, &rifs.params, enum_def)?;
-                            reg_field.visibility = Visibility::Disabled;
-                        },
-                        // Nothing
-                        ResetValOverride::None => {},
-                    }
-                    if let Some(limit) = &ovr_f.limit {
-                        reg_field.limit = limit.compile(reg_field.is_signed(), reg_field.nb_frac, &rifs.params, enum_def)?;
-                    }
+                if let Some(limit) = &ovr_f.limit {
+                    reg_field.limit = limit.compile(reg_field.is_signed(), reg_field.nb_frac, &rifs.params, enum_def)?;
                 }
             }
         }
@@ -1619,7 +1632,7 @@ impl RifmuxInst {
             if i.is_disabled(&params) {
                 continue;
             }
-            let addr = inst_addr.updt(i.addr.value(&params) /*+ group_offset*/, i.addr_kind);
+            let addr = inst_addr.updt(&i.addr, &params);
             if addr >= (1 << rifmux.addr_width) {
                 return Err(format!("Address of {inst_name} = 0x{:0x} out of range ({}b)", addr, rifmux.addr_width));
             }
