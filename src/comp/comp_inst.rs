@@ -475,6 +475,7 @@ impl RifPageInst {
         else {
             let mut inst_addr = InstAddr::new(addr_incr);
             for reg in page.instances.iter() {
+                // Check for optional register, check the addressL
                 if let Some(ovr) = reg.reg_override.get(&None)
                     && !ovr.optional.is_empty()
                     && ovr.optional.eval_with_gen(&rifs.params,&rifs.generics)? == ExprValue::Value(0) {
@@ -539,7 +540,7 @@ impl RifPageInst {
         page: &RifPage,
         addr_incr: u8,
     ) -> Result<(), String> {
-        let mut addr = 0_u64;
+        let mut inst_addr = InstAddr::new(addr_incr);
         for r in page.registers.iter() {
             match r {
                 RegDefOrIncl::Include(inc) => {
@@ -566,21 +567,22 @@ impl RifPageInst {
                     // For interrupt register create one register instance per optional property (enable/mask/pending)
                     if !d.interrupt.is_empty() {
                         for (idx, info) in d.interrupt.iter().enumerate() {
-                            self.add_reg(RifRegInst::new(d, addr, inst, RegInstArgs::Intr(InterruptRegKind::Base, idx, true), None, rifs)?);
-                            addr += addr_incr as u64;
+                            // Note: address override for interrupt not supported yet
+                            let _addr = inst_addr.incr();
+                            self.add_reg(RifRegInst::new(d, _addr, inst, RegInstArgs::Intr(InterruptRegKind::Base, idx, true), None, rifs)?);
                             if info.enable.is_some() {
+                                let _addr = inst_addr.incr();
                                 let delta = if page.is_auto_legacy() && info.mask.is_some() {addr_incr} else {0} as u64;
-                                self.add_reg(RifRegInst::new(d, addr+delta, inst, RegInstArgs::Intr(InterruptRegKind::Enable, idx, true), None, rifs)?);
-                                addr += addr_incr as u64;
+                                self.add_reg(RifRegInst::new(d, _addr+delta, inst, RegInstArgs::Intr(InterruptRegKind::Enable, idx, true), None, rifs)?);
                             }
                             if info.mask.is_some() {
+                                let _addr = inst_addr.incr();
                                 let delta = if page.is_auto_legacy() && info.mask.is_some() {addr_incr} else {0} as u64;
-                                self.add_reg(RifRegInst::new(d, addr-delta, inst, RegInstArgs::Intr(InterruptRegKind::Mask, idx, true), None, rifs)?);
-                                addr += addr_incr as u64;
+                                self.add_reg(RifRegInst::new(d, _addr-delta, inst, RegInstArgs::Intr(InterruptRegKind::Mask, idx, true), None, rifs)?);
                             }
                             if info.pending {
-                                self.add_reg(RifRegInst::new(d, addr, inst, RegInstArgs::Intr(InterruptRegKind::Pending, idx, true), None, rifs)?);
-                                addr += addr_incr as u64;
+                                let _addr = inst_addr.incr();
+                                self.add_reg(RifRegInst::new(d, _addr, inst, RegInstArgs::Intr(InterruptRegKind::Pending, idx, true), None, rifs)?);
                             }
                         }
                     } else {
@@ -588,12 +590,20 @@ impl RifPageInst {
                         if nb > 1 {
                             // println!("Array of size {nb} found for {} (Auto)", d.name);
                             for i in 0..nb {
-                                self.add_reg(RifRegInst::new(d, addr, inst, RegInstArgs::arr_def(i, nb), None, rifs)?);
-                                addr += addr_incr as u64;
+                                let addr_ovr = inst
+                                    .and_then(|r| r.reg_override.get(&Some(i)) )
+                                    .and_then(|ovr| ovr.addr.clone())
+                                    .unwrap_or_default();
+                                let _addr = inst_addr.updt(&addr_ovr, &rifs.params);
+                                self.add_reg(RifRegInst::new(d, _addr, inst, RegInstArgs::arr_def(i, nb), None, rifs)?);
                             }
                         } else {
-                            self.add_reg(RifRegInst::new(d, addr, inst, RegInstArgs::Basic, None, rifs)?);
-                            addr += addr_incr as u64;
+                            let addr_updt = inst
+                                .and_then(|r| r.reg_override.get(&None) )
+                                .and_then(|ovr| ovr.addr.clone())
+                                .unwrap_or_default();
+                            let _addr = inst_addr.updt(&addr_updt, &rifs.params);
+                            self.add_reg(RifRegInst::new(d, _addr, inst, RegInstArgs::Basic, None, rifs)?);
                         }
                     }
                 }
