@@ -61,7 +61,7 @@ But the main weakness of SystemRDL (in my opinion) is that the syntax is neither
 
 How simpler is the RIF syntax compare to the SystemRDL is quite subjective, but like can be seen in the syntax example
 it is quite compact when defining simple register, with default behavior that should feel intuitive.
-For example, if there is no reset value an no hardware/software defined, then it is assumed this is a read-only register driven by hardware.
+For example, if there is no reset value and no hardware/software defined, then it is assumed this is a read-only register driven by hardware.
 
 In term of features missing from SystemRDL, the main one I have identified are:
   - Overriding default precedence hw/sw, parity check field

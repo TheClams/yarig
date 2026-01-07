@@ -627,6 +627,14 @@ impl RifPageInst {
         }
     }
 
+    /// Iterator on all instances of a given type
+    pub fn inst_by_type(&self, type_name: &str) -> RegTypeInstIter<'_> {
+        RegTypeInstIter {
+            regs: &self.regs,
+            idx: self.reg_lut.get(type_name).map_or(&[], |x| x.as_slice()),
+        }
+    }
+
     /// True when page is external
     pub fn is_external(&self) -> bool {
         self.external.is_some()
@@ -646,6 +654,24 @@ impl<'a> Iterator for RegInstTypeIter<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         let v = self.lut_iter.next()?;
         Some(&self.regs[v[0]])
+    }
+}
+
+pub struct RegTypeInstIter<'a> {
+    regs: &'a Vec<RifRegInst>,
+    idx: &'a [usize],
+}
+
+impl<'a> Iterator for RegTypeInstIter<'a> {
+    type Item = &'a RifRegInst;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(&i) = self.idx.get(0) {
+            self.idx = &self.idx[1..];
+            self.regs.get(i)
+        } else {
+            None
+        }
     }
 }
 

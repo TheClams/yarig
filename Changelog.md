@@ -1,7 +1,15 @@
 # Change Log
 
 
-## [0.19.1] - Unreleased
+## [0.19.2] - 2026-01-07
+
+### Added
+  - TraitSw: new static option INTR_VARIANT_DECL to generate register declaration for each interrupt variant (mask, enable, pending)
+
+### Internal
+  - Page: now provides iterator on all instances of a given type
+
+## [0.19.1] - 2025-12-25
 
 ### Added
   - Syntax: improved address handling

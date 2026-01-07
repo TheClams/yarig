@@ -45,6 +45,8 @@ pub trait GeneratorSw : GeneratorBase {
     const IS_HIERARCHICAL : bool = false;
     /// Create register type declaration before register instance
     const HAS_REG_DECL : bool = true;
+    /// Create register type decalration for each variant of interrupts
+    const INTR_VARIANT_DECL : bool = false;
 
     /// Main generator function
     fn gen_all(&mut self, obj: &Comp) -> Result<(), Box<dyn std::error::Error>> {
@@ -121,13 +123,31 @@ pub trait GeneratorSw : GeneratorBase {
             if Self::HAS_REG_DECL {
                 let mut regs = page.iter_reg_type().filter(|r| r.sw_access!=Access::NA).peekable();
                 while let Some(reg) = regs.next()  {
+                    // Prepare an optional iterator on interupts instance
+                    let mut intr_regs = if Self::INTR_VARIANT_DECL && reg.is_intr() {
+                        Some(page.inst_by_type(&reg.reg_type).skip(1).peekable())
+                    } else {
+                        None
+                    };
+                    let last_type = regs.peek().is_none();
+                    let last_reg = intr_regs.as_mut().map_or(true, |x| x.peek().is_none());
+                    // Get max lenegth of field name to allow alignment
                     let max_len = reg.fields.iter()
                         .map(|f| self.get_field_name(reg,f).len())
                         .max().expect("Registers should have fields");
                     self.set_max_field_name_len(max_len);
+                    //
                     self.write_reg_header(basename, reg);
                     self.write_fields_decl(rif, basename, reg);
-                    self.write_reg_footer(basename, reg, regs.peek().is_none());
+                    self.write_reg_footer(basename, reg, last_type && last_reg);
+                    //
+                    if let Some(mut intr_regs) = intr_regs {
+                        while let Some(r) = intr_regs.next() {
+                            self.write_reg_header(basename, r);
+                            self.write_fields_decl(rif, basename, r);
+                            self.write_reg_footer(basename, r, last_type && intr_regs.peek().is_none());
+                        }
+                    }
                 }
             }
             // Instantiate all registers
