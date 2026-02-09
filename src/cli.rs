@@ -88,6 +88,9 @@ pub struct RifGenArgs{
     /// Python version (default 3.11)
     #[arg(long)]
     pub py_version: Option<PyVersion>,
+    /// Python create Init File
+    #[arg(long)]
+    pub py_init_file: Option<bool>,
     /// Base class for RAL target
     #[arg(long)]
     pub ral_class: Option<String>,

@@ -578,6 +578,7 @@ impl YarigCfg {
         if !args.parameters.is_empty() {self.parameters.extend(args.parameters)};
         if let Some(suffix) = args.suffix {self.suffixes.insert("".to_owned(), suffix);};
         if args.py_version.is_some() {self.py.version = args.py_version};
+        if args.py_init_file.is_some() {self.py.init_file = args.py_init_file};
         if args.casing.is_some() {self.casing = args.casing};
         if args.subdir.is_some() {self.subdir = args.subdir.clone()};
         if args.interface.is_some() {self.interface = args.interface};
