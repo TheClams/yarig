@@ -246,7 +246,7 @@ impl GeneratorSw for GeneratorPy {
         self.write("\n");
     }
 
-    fn write_field_decl(&mut self, _basename: &str, reg: &RifRegInst, field: &RifFieldInst, enum_def: Option<&EnumDef>, _is_last: bool) {
+    fn write_field_decl(&mut self, _basename: &str, reg: &RifRegInst, _regs_rst: &[u128], field: &RifFieldInst, enum_def: Option<&EnumDef>, _is_last: bool) {
         let comp_name = remove_rif(self.comp_name()).to_casing(Casing::Pascal);
         let field_type = field.name.to_casing(Casing::Pascal);
         let reg_type = reg.reg_type.to_casing(Casing::Pascal);

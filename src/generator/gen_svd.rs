@@ -101,7 +101,7 @@ impl GeneratorSw for GeneratorSvd {
         self.write(&format!("{tab}  <fields>\n"));
     }
 
-    fn write_field_decl(&mut self, _basename: &str, _reg: &RifRegInst, field: &RifFieldInst, enum_def: Option<&EnumDef>, _is_last: bool) {
+    fn write_field_decl(&mut self, _basename: &str, _reg: &RifRegInst, _regs_rst: &[u128], field: &RifFieldInst, enum_def: Option<&EnumDef>, _is_last: bool) {
         let tab = " ".repeat(6*2);
         let name = self.casing(&field.name_flat());
         let desc = self.desc_to_string(&field.description);

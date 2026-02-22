@@ -589,6 +589,11 @@ impl From<&ResetVal> for ResetValP {
 }
 
 impl ResetVal {
+    /// Create a ResetVal::Signed from a u128
+    pub fn new_signed(val: u128, width: u8) -> Self {
+        let offset = if val >= (1<<(width-1)) {(1<<width) as i128} else {0};
+        ResetVal::Signed(val as i128 - offset)
+    }
 
     /// Convert value on w bits (signed or unsigned) to u128
     pub fn to_u128(&self, w: u8) -> u128 {

@@ -138,13 +138,19 @@ pub trait GeneratorSw : GeneratorBase {
                     self.set_max_field_name_len(max_len);
                     //
                     self.write_reg_header(basename, reg);
-                    self.write_fields_decl(rif, basename, reg);
+                    // When register is defined as an array
+                    let nb_regs_def = reg.array.dim_def() as usize;
+                    let mut regs_rst : Vec<u128> = Vec::with_capacity(nb_regs_def);
+                    if nb_regs_def > 0 {
+                        regs_rst.extend(page.inst_by_type(&reg.reg_type).map(|r| r.reset));
+                    }
+                    self.write_fields_decl(rif, basename, reg, &regs_rst);
                     self.write_reg_footer(basename, reg, last_type && last_reg);
                     //
                     if let Some(mut intr_regs) = intr_regs {
                         while let Some(r) = intr_regs.next() {
                             self.write_reg_header(basename, r);
-                            self.write_fields_decl(rif, basename, r);
+                            self.write_fields_decl(rif, basename, r, &regs_rst);
                             self.write_reg_footer(basename, r, last_type && intr_regs.peek().is_none());
                         }
                     }
@@ -181,7 +187,7 @@ pub trait GeneratorSw : GeneratorBase {
                 let is_last_reg = is_last_page && regs.peek().is_none();
                 self.write_reginst(basename, page, reg, &inst_dict, is_last_reg);
                 if !Self::HAS_REG_DECL {
-                    self.write_fields_decl(rif, basename, reg);
+                    self.write_fields_decl(rif, basename, reg, &[]);
                     self.write_reg_footer(basename, reg, is_last_reg);
                 }
 
@@ -242,7 +248,7 @@ pub trait GeneratorSw : GeneratorBase {
     /// Write register end of declaration
     fn write_reg_footer(&mut self,  basename: &str, reg: &RifRegInst, is_last: bool) {}
 
-    fn write_fields_decl(&mut self, rif: &RifInst, basename: &str, reg: &RifRegInst) {
+    fn write_fields_decl(&mut self, rif: &RifInst, basename: &str, reg: &RifRegInst, regs_rst: &[u128]) {
         let is_public = self.is_public();
         let mut fields = reg.fields.iter().filter(|f| !(f.visibility.is_hidden() && is_public)).peekable();
         let mut pos_l = 0;
@@ -256,7 +262,7 @@ pub trait GeneratorSw : GeneratorBase {
                 } else {
                     None
                 };
-            self.write_field_decl(basename, reg, f, enum_def, fields.peek().is_none());
+            self.write_field_decl(basename, reg, regs_rst, f, enum_def, fields.peek().is_none());
             pos_l = f.lsb + f.width;
         }
         // Fill remaining bits if any
@@ -266,7 +272,7 @@ pub trait GeneratorSw : GeneratorBase {
     }
 
     /// Write register end of declaration
-    fn write_field_decl(&mut self, basename: &str, reg: &RifRegInst, field: &RifFieldInst, enum_defs: Option<&EnumDef>, is_last: bool) {}
+    fn write_field_decl(&mut self, basename: &str, reg: &RifRegInst, regs_rst: &[u128], field: &RifFieldInst, enum_defs: Option<&EnumDef>, is_last: bool) {}
 
     fn get_field_name(&self, reg: &RifRegInst, field: &RifFieldInst) -> String {
         self.core().get_field_name(reg, field)
@@ -284,7 +290,7 @@ pub trait GeneratorSw : GeneratorBase {
     fn write_unused_field_decl(&mut self, basename: &str, reg: &RifRegInst, lsb: u8, width: u8, is_last: bool) {
         if Self::HAS_UNUSED {
             let field = RifFieldInst::new_unused(lsb, width);
-            self.write_field_decl(basename, reg, &field, None, is_last);
+            self.write_field_decl(basename, reg, &[], &field, None, is_last);
         }
     }
 

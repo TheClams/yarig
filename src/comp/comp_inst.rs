@@ -1051,9 +1051,9 @@ impl RifRegInst {
         for f in r.fields.iter() {
             if f.is_partial() {
                 if f.is_password() {
-                    return Err(format!("Field {} is defined as counter and partial: this is not supported !", f.name()));
-                } else if f.is_counter() {
                     return Err(format!("Field {} is defined as password and partial: this is not supported !", f.name()));
+                } else if f.is_counter() {
+                    return Err(format!("Field {} is defined as counter and partial: this is not supported !", f.name()));
                 }
                 r.group_idx = rifs.partials.push(&r.group_type, &r.group_name, PartialFieldInfo::new(f));
             }
@@ -1491,12 +1491,26 @@ impl RifFieldInst {
         }
     }
 
+    /// Return a bit mask on 128b corresponding to the field width
+    pub fn mask(&self) -> u128 {
+        (1<<self.width)-1
+    }
+
+    pub fn init_from_reg_rst(&mut self, reg_rst: u128) {
+        let val = (reg_rst >> self.lsb) & self.mask();
+        if self.is_signed() {
+            self.reset = ResetVal::new_signed(val, self.width);
+        } else {
+            self.reset = ResetVal::Unsigned(val);
+        }
+    }
+
     /// return reset value on 128b taking into account expanded field
     pub fn reset(&self, reg_def_idx: Option<u16>) -> u128 {
         let r = self.reset.to_u128(self.width);
         let idx = if self.array.dim() == 0 {reg_def_idx} else {None};
         if let Some(idx) = idx {
-            (r >> (self.width as u16 * idx)) & ((1<<self.width)-1)
+            (r >> (self.width as u16 * idx)) & self.mask()
         } else {
             r
         }
@@ -1506,8 +1520,12 @@ impl RifFieldInst {
     pub fn reset_val(&self, reg_def_idx: Option<u16>) -> ResetVal {
         if let Some(idx) = reg_def_idx {
             let r = self.reset.to_u128(self.width);
-            let rm = (r >> (self.width as u16 * idx)) & ((1<<self.width)-1);
-            ResetVal::Unsigned(rm)
+            let rm = (r >> (self.width as u16 * idx)) & self.mask();
+            if self.is_signed() {
+                ResetVal::new_signed(rm, self.width)
+            } else {
+                ResetVal::Unsigned(rm)
+            }
         } else {
             self.reset.clone()
         }

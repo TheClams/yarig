@@ -123,8 +123,8 @@ impl GeneratorSw for GeneratorC {
         self.write("  struct {\n");
     }
 
-    /// Write register end of declaration
-    fn write_field_decl(&mut self, basename: &str, reg: &RifRegInst, field: &RifFieldInst, _enum_def: Option<&EnumDef>, _is_last: bool) {
+    /// Write field declaration
+    fn write_field_decl(&mut self, basename: &str, reg: &RifRegInst, _regs_rst: &[u128], field: &RifFieldInst, _enum_def: Option<&EnumDef>, _is_last: bool) {
         let field_name = self.get_field_name(reg, field);
         let name = self.casing(&field_name);
         let mask =

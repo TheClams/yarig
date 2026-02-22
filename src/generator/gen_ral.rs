@@ -147,7 +147,7 @@ impl GeneratorSw for GeneratorRal {
         self.write(&format!("endclass : ral_reg_{basename}_{reg_type}\n\n"));
     }
 
-    fn write_field_decl(&mut self, _basename: &str, reg: &RifRegInst, field: &RifFieldInst, _enum_def: Option<&EnumDef>, _is_last: bool) {
+    fn write_field_decl(&mut self, _basename: &str, reg: &RifRegInst, _regs_rst: &[u128], field: &RifFieldInst, _enum_def: Option<&EnumDef>, _is_last: bool) {
         let fieldname = self.get_field_name(reg, field);
         if !self.reg_is_incl {
             let rand_s = if field.is_sw_write() {"rand "} else {""};

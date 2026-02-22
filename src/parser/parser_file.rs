@@ -629,7 +629,6 @@ impl RifGenSrc {
                     } else if ilvl > desc_lvl {
                         txt.push_str(&" ".repeat(ilvl - desc_lvl));
                     }
-                    // if desc_lvl!=ilvl {println!("Description: {l} | Base indent = {desc_lvl} vs {ilvl}")};
                     txt.push_str(desc(l)?);
                     let hidden = self.last_hidden;
                     match context_stack.get(context_stack.len() - 2) {
