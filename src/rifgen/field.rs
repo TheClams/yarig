@@ -630,7 +630,7 @@ impl Width {
     pub fn value(&self, params: &ParamValues) -> u8 {
         match self {
             Width::Value(v) => *v,
-            Width::Param(name) => *params.get(name).unwrap() as u8,
+            Width::Param(name) => *params.get(name).unwrap_or(&1) as u8,
         }
     }
 }

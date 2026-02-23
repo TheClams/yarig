@@ -96,8 +96,9 @@ impl Description {
             else if s.starts_with('(') {
                 let expr_s = logic_expr(&mut s).unwrap();
                 let expr = parse_expr(expr_s).unwrap();
-                let val = expr.eval(&params).unwrap();
-                desc.push_str(&format!("{val}"));
+                if let Ok(val) = expr.eval(&params) {
+                    desc.push_str(&format!("{val}"));
+                }
                 desc.push_str(s);
             } else {
                 desc.push_str(s);
