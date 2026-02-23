@@ -1,6 +1,11 @@
 # Change Log
 
 
+## [0.21.1] - 2026-02-23
+
+### Fixed
+  - Generator HDL (SV/VHDL): fix generic bit width when max value is a power of 2
+
 ## [0.21.0] - 2026-02-23
 
 ### Changed

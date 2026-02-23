@@ -359,7 +359,7 @@ impl GeneratorHw for GeneratorSv {
     fn write_module_generic_decl(&mut self, name: &str, range: &GenericRange, is_last: bool) {
         self.write("   parameter bit ");
         if range.max > 1 {
-            let msb = (u16::BITS - (range.max-1).leading_zeros()) - 1;
+            let msb = (u16::BITS - range.max.leading_zeros()) - 1;
             self.write(&format!("[{msb}:0] "));
         }
         self.write(&format!("{name} = {}", range.default));
