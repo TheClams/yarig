@@ -5,7 +5,8 @@
 
 ### Changed
   - TraitSw: write_field_decl now has an optional register instance reset value, allowing to reconstruct properly the field reset value if needed
-  - Width: Avoid panic when using unknown parameter in width
+  - Width/Description: Avoid panic when using unknown parameter in width
+  - Check for conflicting name between generics and parameters
 
 ## [0.19.2] - 2026-01-07
 

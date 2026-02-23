@@ -317,8 +317,20 @@ impl RifGenSrc {
                     ?;
                     let expr = parse_expr(v)?;
                     match prev_cntxt {
-                        Some((Context::Rifmux, _)) => self.last_rifmux().add_param(k,expr),
-                        Some((Context::Rif, _)) => self.last_rif().add_param(k,expr),
+                        Some((Context::Rifmux, _))  => {
+                            let last_rifmux = self.last_rifmux();
+                            if last_rifmux.generics.contains_key(k) {
+                                return Err(RifError::duplicated(Context::Parameters, k));
+                            }
+                            last_rifmux.add_param(k,expr);
+                        }
+                        Some((Context::Rif, _))     => {
+                            let last_rif = self.last_rif();
+                            if last_rif.generics.contains_key(k) {
+                                return Err(RifError::duplicated(Context::Parameters, k));
+                            }
+                            last_rif.add_param(k,expr);
+                        }
                         Some((Context::RifInst, _)) => self.last_rif_inst().add_param(k,expr),
                         _ => unreachable!(), // Should never fail
                     }
@@ -327,8 +339,20 @@ impl RifGenSrc {
                     let gen_def = generic_def(l)?;
                     let prev_cntxt = context_stack.get(context_stack.len() - 2);
                     match prev_cntxt {
-                        Some((Context::Rifmux, _)) => self.last_rifmux().add_generic(gen_def),
-                        Some((Context::Rif, _)) => self.last_rif().add_generic(gen_def),
+                        Some((Context::Rifmux, _)) => {
+                            let last_rifmux = self.last_rifmux();
+                            if last_rifmux.parameters.contains_key(gen_def.0) {
+                                return Err(RifError::duplicated(Context::Generics, gen_def.0));
+                            }
+                            last_rifmux.add_generic(gen_def);
+                        }
+                        Some((Context::Rif, _)) => {
+                            let last_rif = self.last_rif();
+                            if last_rif.parameters.contains_key(gen_def.0) {
+                                return Err(RifError::duplicated(Context::Generics, gen_def.0));
+                            }
+                            last_rif.add_generic(gen_def);
+                        }
                         _ => unreachable!(), // Should never fail
                     }
                 },
