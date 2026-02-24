@@ -117,7 +117,7 @@ impl GeneratorSw for GeneratorC {
         for l in reg.base_description.get(self.is_public()).lines() {
             self.write(&format!("/// {l}\n"));
         }
-        let reg_type = reg.reg_type.to_lowercase(); // self.casing(reg_type); //
+        let reg_type = reg.reg_type.to_lowercase(); // self.casing(reg_type);
         self.write(&format!("typedef union {}_{reg_type}_reg {{\n", basename.to_lowercase()));
         self.write(&format!("  uint{w}_t reg{w}; //!< Direct access to the full {reg_type} register\n", ));
         self.write("  struct {\n");

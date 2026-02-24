@@ -41,6 +41,8 @@ pub trait GeneratorSw : GeneratorBase {
     const INC_PAGENAME : bool = false;
     /// Create only one register instance per array (false to create instance per element)
     const INST_ARRAY : bool = false;
+    /// True when trget support field array. False to split field array into individual field for each element of the array
+    const FIELD_ARRAY : bool = false;
     /// Instantiate rifmux instead of flatenning all rifs instance
     const IS_HIERARCHICAL : bool = false;
     /// Create register type declaration before register instance
@@ -141,8 +143,9 @@ pub trait GeneratorSw : GeneratorBase {
                     // When register is defined as an array
                     let nb_regs_def = reg.array.dim_def() as usize;
                     let mut regs_rst : Vec<u128> = Vec::with_capacity(nb_regs_def);
+                    regs_rst.push(reg.reset);
                     if nb_regs_def > 0 {
-                        regs_rst.extend(page.inst_by_type(&reg.reg_type).map(|r| r.reset));
+                        regs_rst.extend(page.inst_by_type(&reg.reg_type).skip(1).map(|r| r.reset));
                     }
                     self.write_fields_decl(rif, basename, reg, &regs_rst);
                     self.write_reg_footer(basename, reg, last_type && last_reg);
@@ -250,8 +253,12 @@ pub trait GeneratorSw : GeneratorBase {
 
     fn write_fields_decl(&mut self, rif: &RifInst, basename: &str, reg: &RifRegInst, regs_rst: &[u128]) {
         let is_public = self.is_public();
-        let mut fields = reg.fields.iter().filter(|f| !(f.visibility.is_hidden() && is_public)).peekable();
+        let mut fields = reg.fields.iter()
+            .filter(|f| !(f.visibility.is_hidden() && is_public) && (!Self::FIELD_ARRAY || f.array.idx()==0))
+            .peekable();
         let mut pos_l = 0;
+        let fields_c = fields.clone();
+        // println!("[WriteFieldsDecl] Reg {} ({}): Fields {:?}", reg.reg_name, Self::FIELD_ARRAY, fields_c.map(|f| format!("{} idx={}", f.name(), f.array.idx())).collect::<Vec<_>>() );
         while let Some(f) = fields.next() {
             if pos_l != f.lsb {
                 self.write_unused_field_decl(basename, reg, pos_l, f.lsb - pos_l, false);
@@ -275,7 +282,7 @@ pub trait GeneratorSw : GeneratorBase {
     fn write_field_decl(&mut self, basename: &str, reg: &RifRegInst, regs_rst: &[u128], field: &RifFieldInst, enum_defs: Option<&EnumDef>, is_last: bool) {}
 
     fn get_field_name(&self, reg: &RifRegInst, field: &RifFieldInst) -> String {
-        self.core().get_field_name(reg, field)
+        self.core().get_field_name(reg, field, Self::FIELD_ARRAY)
     }
 
     fn get_field_iter<'a>(&self, reg: &'a RifRegInst, ) -> impl std::iter::Iterator<Item = &'a RifFieldInst> {

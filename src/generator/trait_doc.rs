@@ -385,7 +385,7 @@ pub trait GeneratorDoc : GeneratorBase {
                     self.write_table_cell((TableKind::Layout, CellKind::Desc), 0, "Field", "", None);
                     let mut last_pos = rif.data_width;
                     for f in reg.fields.iter().rev().filter(|f| !(f.visibility.is_hidden() && is_public)) {
-                        let fieldname = self.core().get_field_name(reg, f);
+                        let fieldname = self.core().get_field_name(reg, f, false);
                         // Insert reserved in unoccupied bits
                         if f.msb()+1 < last_pos {
                             let w = last_pos - (f.msb()+1);
@@ -433,7 +433,7 @@ pub trait GeneratorDoc : GeneratorBase {
                             self.write_table_row_footer();
                         }
 
-                        let fieldname = self.core().get_field_name(reg, f);
+                        let fieldname = self.core().get_field_name(reg, f, false);
                         self.write_table_row_header(Some(&format!("{rif_name}.{reg_type}.{fieldname}")));
                         let pos = if f.width==1 {format!("{}",f.lsb)} else {format!("{}:{}",f.msb(), f.lsb)};
                         self.write_table_cell((TableKind::Field, CellKind::Bits), 0, &pos, "", None);

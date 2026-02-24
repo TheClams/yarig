@@ -1,6 +1,13 @@
 # Change Log
 
 
+## [0.21.2] - 2026-02-23
+
+### Added
+  - Generator SW: Add FIELD_ARRAY option
+    The option allows to handle case where the target support field array
+    Default behavior (option set to false) is to split the array into individual element with suffix \_i
+
 ## [0.21.1] - 2026-02-23
 
 ### Fixed

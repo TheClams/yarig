@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display, ops::{Add, Sub}};
+use std::{collections::HashMap, fmt::Display, ops::{Add, Sub}, u128};
 
 use crate::{error::RifError, parser::parser_expr::{ExprTokens, ParamValues}};
 
@@ -591,7 +591,7 @@ impl From<&ResetVal> for ResetValP {
 impl ResetVal {
     /// Create a ResetVal::Signed from a u128
     pub fn new_signed(val: u128, width: u8) -> Self {
-        let offset = if val >= (1<<(width-1)) {(1<<width) as i128} else {0};
+        let offset = if width < 128 && val >= (1<<(width-1)) {(1<<width) as i128} else {0};
         ResetVal::Signed(val as i128 - offset)
     }
 
@@ -599,7 +599,10 @@ impl ResetVal {
     pub fn to_u128(&self, w: u8) -> u128 {
         match self {
             ResetVal::Unsigned(v) => *v,
-            ResetVal::Signed(v) => (*v as u128) & ((1<<w)-1),
+            ResetVal::Signed(v) => {
+                let mask = if w==0 || w > 127 {u128::MAX} else {(1<<w)-1};
+                (*v as u128) & mask
+            },
         }
     }
 

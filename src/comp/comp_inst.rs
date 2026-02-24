@@ -493,7 +493,6 @@ impl RifPageInst {
                 }
                 if let Some(regdef) = page.find_regdef(&reg.type_name,rifs.rifs ) {
                     let addr = inst_addr.updt(&reg.addr, &rifs.params);
-                    // println!("Reg {} with {:?}({:04x}) -> {:04x}", reg.inst_name, reg.addr_kind, reg.addr, addr);
                     let array_size = reg.array.eval_with_gen(&rifs.params, &rifs.generics)?;
                     let nb = array_size.max() as u16;
                     let range = if let ExprValue::Range(n,r) = array_size {Some((n,r))} else {None};
@@ -588,7 +587,6 @@ impl RifPageInst {
                     } else {
                         let nb = d.array.value(&rifs.params) as u16;
                         if nb > 1 {
-                            // println!("Array of size {nb} found for {} (Auto)", d.name);
                             for i in 0..nb {
                                 let addr_ovr = inst
                                     .and_then(|r| r.reg_override.get(&Some(i)) )
@@ -1497,9 +1495,11 @@ impl RifFieldInst {
     }
 
     pub fn init_from_reg_rst(&mut self, reg_rst: u128) {
-        let val = (reg_rst >> self.lsb) & self.mask();
+        let val = reg_rst >> self.lsb;
         if self.is_signed() {
-            self.reset = ResetVal::new_signed(val, self.width);
+            let w = self.width * self.array.dim().max(1) as u8;
+            // Use a width corresponding to the whold field array (maxred at 128b, the max register size supported)
+            self.reset = ResetVal::new_signed(val, w.min(128));
         } else {
             self.reset = ResetVal::Unsigned(val);
         }
@@ -1519,7 +1519,9 @@ impl RifFieldInst {
     /// return reset value type taking into account expanded field
     pub fn reset_val(&self, reg_def_idx: Option<u16>) -> ResetVal {
         if let Some(idx) = reg_def_idx {
-            let r = self.reset.to_u128(self.width);
+            // get the whole 128b reset value to handle array cases
+            let r = self.reset.to_u128(0);
+            // Extract field reset value based on the field index
             let rm = (r >> (self.width as u16 * idx)) & self.mask();
             if self.is_signed() {
                 ResetVal::new_signed(rm, self.width)
@@ -1667,7 +1669,6 @@ impl RifmuxInst {
     }
 
     pub fn build(src: &RifGenSrc, inst_name: &str, rifmux: &Rifmux, top_params: &ParamValues, suffixes: &HashMap<String,SuffixInfo>) -> Result<Self, String> {
-        // println!("RIF Mux = {s} -> \n{def:?}");
         let params = ParamValues::from_items(rifmux.parameters.items())?;
         let groups = RifmuxGroupInst::from(&rifmux.groups, &params);
         let mut rm = RifmuxInst::new(inst_name.to_owned(), rifmux, groups);
