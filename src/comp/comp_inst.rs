@@ -664,7 +664,7 @@ impl<'a> Iterator for RegTypeInstIter<'a> {
     type Item = &'a RifRegInst;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(&i) = self.idx.get(0) {
+        if let Some(&i) = self.idx.first() {
             self.idx = &self.idx[1..];
             self.regs.get(i)
         } else {

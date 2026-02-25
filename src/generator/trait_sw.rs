@@ -132,7 +132,7 @@ pub trait GeneratorSw : GeneratorBase {
                         None
                     };
                     let last_type = regs.peek().is_none();
-                    let last_reg = intr_regs.as_mut().map_or(true, |x| x.peek().is_none());
+                    let last_reg = intr_regs.as_mut().is_none_or(|x| x.peek().is_none());
                     // Get max lenegth of field name to allow alignment
                     let max_len = reg.fields.iter()
                         .map(|f| self.get_field_name(reg,f).len())
