@@ -16,11 +16,12 @@ pub struct RifContext<'a> {
     pub group: &'a str,
     pub page: &'a str,
     pub addr: u64,
+    pub group_addr: u64,
 }
 
 impl RifContext<'_> {
-    pub fn new<'a>(prefix: &'a str, group: &'a str, page: &'a str, addr: u64) -> RifContext<'a> {
-        RifContext {prefix, group, page, addr}
+    pub fn new<'a>(prefix: &'a str, group: &'a str, page: &'a str, addr: u64, group_addr: u64) -> RifContext<'a> {
+        RifContext {prefix, group, page, addr, group_addr}
     }
 }
 
@@ -364,9 +365,10 @@ pub trait GeneratorSw : GeneratorBase {
                     self.set_comp(r.deref().into(), true);
                     self.set_rif_info(r);
                     let mut pages = r.pages.iter().peekable();
+                    let group_addr = rifmux.groups.iter().find(|g| g.name==comp.group).map(|g| g.addr).unwrap_or(0);
                     while let Some(page) = pages.next() {
                         let desc = if page.description.is_empty(self.is_public()) {&r.description} else {&page.description};
-                        let cntxt = RifContext::new(&prefix, &comp.group, &page.name, page.addr + addr);
+                        let cntxt = RifContext::new(&prefix, &comp.group, &page.name, page.addr + addr, group_addr);
                         self.write_rif_inst(r, cntxt, desc, pages.peek().is_none(), last_comp);
                         if !Self::INST_BY_PAGE {
                             break;

@@ -287,8 +287,9 @@ impl GeneratorSw for GeneratorC {
             page_type.push_str(&format!("_{}",cntxt.page.to_lowercase()));
         }
         let name_uc = name.to_uppercase();
+        let rif_addr = cntxt.addr - cntxt.group_addr;
         self.write(&format!("/// {name_tt} base address: {}\n", desc.get_short(self.is_public())));
-        self.write(&format!("#define {name_uc}_BASE_ADDR ({base_addr_name} + 0x{:08X})\n", cntxt.addr));
+        self.write(&format!("#define {name_uc}_BASE_ADDR ({base_addr_name} + 0x{:08X})\n", rif_addr));
         self.push_stash(0, &format!("/// Pointer to {name_tt} registers\n"));
         self.push_stash(0, &format!("#define P_{name_uc} ((volatile {page_type}_regs_t* ) {name_uc}_BASE_ADDR)\n"));
         if last_page {

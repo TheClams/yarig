@@ -1,6 +1,14 @@
 # Change Log
 
 
+## [0.21.3] - 2026-03-07
+
+### Fix
+  - Generator C: Fix address definition in rifmux when rif instance is part of a group
+
+### Internal
+  - RifContext now save also the group address
+
 ## [0.21.2] - 2026-02-23
 
 ### Added

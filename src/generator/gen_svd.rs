@@ -75,7 +75,7 @@ impl GeneratorSw for GeneratorSvd {
         if base_addr.is_none() {
             self.write_svd_header(remove_rif(&rif.type_name), &rif.description, rif.data_width);
             self.rif_top = true;
-            let cntxt = RifContext {prefix: "", group: "", page: "", addr: 0};
+            let cntxt = RifContext {prefix: "", group: "", page: "", addr: 0, group_addr: 0};
             self.write_rif_inst(rif, cntxt, &rif.description, true, true);
         }
     }
