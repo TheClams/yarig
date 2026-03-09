@@ -531,17 +531,34 @@ pub trait GeneratorHw : GeneratorBase {
                         for f in hw_reg_def.fields.iter() {
                             let f_name = self.casing(&f.name);
                             let w = f.width + (if f.is_counter() {1} else {0});
-                            self.write_signal_decl(&SignalDef::new_bus(
-                                format!("{name}{idx}_{f_name}__cleared"), f.width, false).into());
-                            self.write_signal_decl(&SignalDef::new_bus(
-                                format!("{name}{idx}_{f_name}__next"), f.width, false).into());
-                            if intr_info.enable.is_some() {
+                            if f.array == 0 {
                                 self.write_signal_decl(&SignalDef::new_bus(
-                                    format!("{name}{idx}_en_{f_name}__next"), f.width, false).into());
-                            }
-                            if intr_info.mask.is_some() {
+                                    format!("{name}{idx}_{f_name}__cleared"), f.width, false).into());
                                 self.write_signal_decl(&SignalDef::new_bus(
-                                    format!("{name}{idx}_mask_{f_name}__next"), f.width, false).into());
+                                    format!("{name}{idx}_{f_name}__next"), f.width, false).into());
+                                if intr_info.enable.is_some() {
+                                    self.write_signal_decl(&SignalDef::new_bus(
+                                        format!("{name}{idx}_en_{f_name}__next"), f.width, false).into());
+                                }
+                                if intr_info.mask.is_some() {
+                                    self.write_signal_decl(&SignalDef::new_bus(
+                                        format!("{name}{idx}_mask_{f_name}__next"), f.width, false).into());
+                                }
+                            } else {
+                                for fi in 0..f.array {
+                                    self.write_signal_decl(&SignalDef::new_bus(
+                                        format!("{name}{idx}_{f_name}{fi}__cleared"), f.width, false).into());
+                                    self.write_signal_decl(&SignalDef::new_bus(
+                                        format!("{name}{idx}_{f_name}{fi}__next"), f.width, false).into());
+                                    if intr_info.enable.is_some() {
+                                        self.write_signal_decl(&SignalDef::new_bus(
+                                            format!("{name}{idx}_en_{f_name}{fi}__next"), f.width, false).into());
+                                    }
+                                    if intr_info.mask.is_some() {
+                                        self.write_signal_decl(&SignalDef::new_bus(
+                                            format!("{name}{idx}_mask_{f_name}{fi}__next"), f.width, false).into());
+                                    }
+                                }
                             }
                         }
 
@@ -991,9 +1008,9 @@ pub trait GeneratorHw : GeneratorBase {
                         let intr_info = reg_impl.intr_info(reg)?;
                         let group_name_base = reg.group_name.to_casing(Snake);
                         // Local signal where interrupt vector is and with the optional enable signals
-                        let intr_l = ExprId::new_field_range(format!("{group_name}_l"), None, field_name.to_owned(), field_range);
+                        let intr_l = ExprId::new_field_range(format!("{group_name}_l"), None, field_name.to_owned(), field_range.clone());
+                        let mut rhs : LogicExpr = (ExprId::new_field_range(group_name_base, None, field_name.to_owned(), field_range)).into();
 
-                        let mut rhs : LogicExpr = (ExprId::from((group_name_base, field_name.clone()))).into();
                         if intr_info.enable.is_some() {
                             let en : ExprId = (format!("rif_{group_name}_en"), field_name.clone()).into();
                             rhs = LogicExpr::and_b(rhs.clone(), en.into());

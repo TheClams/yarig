@@ -1,6 +1,11 @@
 # Change Log
 
 
+## [0.21.4] - 2026-03-09
+
+### Fix
+  - Generator HW: Fix interrupt field array
+
 ## [0.21.3] - 2026-03-07
 
 ### Fix
