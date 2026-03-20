@@ -99,20 +99,24 @@ fn operator<'a>(input: &mut &'a str) -> Res<'a, Token> {
     use Token::Operator;
     use OpKind::*;
     alt((
-        ws("+").value(Operator(Plus)),
-        ws("-").value(Operator(Minus)),
-        ws("*").value(Operator(Mult)),
-        ws("/").value(Operator(Div)),
-        ws("^").value(Operator(Pow)),
-        ws("%").value(Operator(Rem)),
-        ws("==").value(Operator(Equal)),
-        ws("!=").value(Operator(NotEqual)),
-        ws(">=").value(Operator(GreaterEq)),
-        ws("<=").value(Operator(LesserEq)),
-        ws("<<").value(Operator(ShiftLeft)),
-        ws(">>").value(Operator(ShiftRight)),
-        ws(">").value(Operator(Greater)),
-        ws("<").value(Operator(Lesser)),
+        alt((
+            ws("+").value(Operator(Plus)),
+            ws("-").value(Operator(Minus)),
+            ws("*").value(Operator(Mult)),
+            ws("/").value(Operator(Div)),
+            ws("^").value(Operator(Pow)),
+            ws("%").value(Operator(Rem)),
+        )),
+        alt((
+            ws("==").value(Operator(Equal)),
+            ws("!=").value(Operator(NotEqual)),
+            ws(">=").value(Operator(GreaterEq)),
+            ws("<=").value(Operator(LesserEq)),
+            ws("<<").value(Operator(ShiftLeft)),
+            ws(">>").value(Operator(ShiftRight)),
+            ws(">").value(Operator(Greater)),
+            ws("<").value(Operator(Lesser)),
+        ))
     )).parse_next(input)
 }
 

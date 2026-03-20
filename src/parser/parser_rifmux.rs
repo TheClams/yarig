@@ -11,19 +11,23 @@ use super::{Res, ResF, address, identifier, path_name, quoted_string, val_u8, ws
 pub fn rifmux_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
   terminated(
     alt((
-      ws("description").value(Context::Description),
-      ws("desc"       ).value(Context::Description),
-      ws("info"       ).value(Context::Info       ),
-      ws("swClock"    ).value(Context::SwClock    ),
-      ws("swClkEn"    ).value(Context::SwClkEn    ),
-      ws("swReset"    ).value(Context::SwReset    ),
-      ws("interface"  ).value(Context::Interface  ),
-      ws("addrWidth"  ).value(Context::AddrWidth  ),
-      ws("dataWidth"  ).value(Context::DataWidth  ),
-      ws("parameters" ).value(Context::Parameters ),
-      ws("generics"   ).value(Context::Generics   ),
-      ws("map"        ).value(Context::RifmuxMap  ),
-      ws("top"        ).value(Context::RifmuxTop  ),
+      alt((
+        ws("description").value(Context::Description),
+        ws("desc"       ).value(Context::Description),
+        ws("info"       ).value(Context::Info       ),
+        ws("swClock"    ).value(Context::SwClock    ),
+        ws("swClkEn"    ).value(Context::SwClkEn    ),
+        ws("swReset"    ).value(Context::SwReset    ),
+        ws("interface"  ).value(Context::Interface  ),
+      )),
+      alt((
+        ws("addrWidth"  ).value(Context::AddrWidth  ),
+        ws("dataWidth"  ).value(Context::DataWidth  ),
+        ws("parameters" ).value(Context::Parameters ),
+        ws("generics"   ).value(Context::Generics   ),
+        ws("map"        ).value(Context::RifmuxMap  ),
+        ws("top"        ).value(Context::RifmuxTop  ),
+      )),
     )),
     ws(":")
   ).context(StrContext::Label("rifmux property"))

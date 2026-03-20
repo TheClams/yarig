@@ -3,7 +3,7 @@ use crate::rifgen::{
 };
 
 use winnow::{
-    ascii::{space0, Caseless}, combinator::{alt, delimited, opt, permutation, preceded, terminated}, error::StrContext, Parser
+    ascii::{space0, Caseless}, combinator::{alt, delimited, opt, preceded, terminated, unordered_seq}, error::StrContext, Parser
 };
 
 use super::{identifier, scoped_identifier, item_start, quoted_string, reset_val, val_u8_or_param, ws, Res, ResF};
@@ -37,27 +37,33 @@ pub fn reg_incl_or_decl<'a>(input: &mut &'a str) -> Res<'a, Context> {
 pub fn reg_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
     terminated(
         alt((
-            alt((ws("description"),ws("desc"))).value(Context::Description),
-            ws("enable.description").value(Context::DescIntrEnable),
-            ws("mask.description").value(Context::DescIntrMask),
-            ws("pending.description").value(Context::DescIntrPending),
-            ws("clock").value(Context::HwClock),
-            ws("hwReset").value(Context::HwReset),
-            ws(Caseless("clkEn")).value(Context::HwClkEn),
-            ws("clear").value(Context::HwClear),
-            ws("externalDone").value(Context::ExternalDone),
-            ws("external").value(Context::External),
-            ws("interrupt").value(Context::Interrupt),
-            ws("alt").value(Context::InterruptAlt),
-            ws("hidden").value(Context::Hidden),
-            alt((ws("disabled"),ws("disable"))).value(Context::Disabled),
-            ws("reserved").value(Context::Reserved),
-            ws("optional").value(Context::Optional),
-            ws("info").value(Context::Info),
-            ws("wrPulse").value(Context::RegPulseWr),
-            ws("rdPulse").value(Context::RegPulseRd),
-            ws("accPulse").value(Context::RegPulseAcc),
-            terminated(identifier,".").map(|v| Context::PathStart(v.to_owned())),
+            alt((
+                alt((ws("description"),ws("desc"))).value(Context::Description),
+                ws("enable.description").value(Context::DescIntrEnable),
+                ws("mask.description").value(Context::DescIntrMask),
+                ws("pending.description").value(Context::DescIntrPending),
+                ws("info").value(Context::Info),
+                ws("wrPulse").value(Context::RegPulseWr),
+                ws("rdPulse").value(Context::RegPulseRd),
+                ws("accPulse").value(Context::RegPulseAcc),
+            )),
+            alt((
+                ws("clock").value(Context::HwClock),
+                ws("hwReset").value(Context::HwReset),
+                ws(Caseless("clkEn")).value(Context::HwClkEn),
+                ws("clear").value(Context::HwClear),
+                ws("hidden").value(Context::Hidden),
+                alt((ws("disabled"),ws("disable"))).value(Context::Disabled),
+                ws("reserved").value(Context::Reserved),
+                ws("optional").value(Context::Optional),
+            )),
+            alt((
+                ws("externalDone").value(Context::ExternalDone),
+                ws("external").value(Context::External),
+                ws("interrupt").value(Context::Interrupt),
+                ws("alt").value(Context::InterruptAlt),
+                terminated(identifier,".").map(|v| Context::PathStart(v.to_owned())),
+            )),
         )),
         opt(alt((ws(":"), ws("="), space0))),
     )
@@ -128,7 +134,7 @@ pub fn reg_interrupt_mask<'a>(input: &mut &'a str) -> Res<'a, ResetValP> {
 }
 
 pub fn reg_interrupt_perm<'a>(input: &mut &'a str) -> Res<'a, InterruptPropTuple> {
-    permutation((
+    unordered_seq!((
         opt(ws(reg_interrupt_trigger)),
         opt(ws(reg_interrupt_clr)),
         opt(ws(reg_interrupt_en)),

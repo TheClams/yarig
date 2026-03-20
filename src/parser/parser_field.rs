@@ -4,7 +4,7 @@ use crate::{parser::comment, rifgen::{
 
 use winnow::{
     ascii::{multispace0, space0, Caseless},
-    combinator::{alt, delimited, opt, permutation, preceded, repeat_till, separated, separated_pair, terminated},
+    combinator::{alt, delimited, opt, preceded, repeat_till, separated, separated_pair, terminated, unordered_seq},
     error::StrContext,
     Parser
 };
@@ -94,6 +94,8 @@ pub fn field_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
                 ws("enable.description").value(Context::DescIntrEnable),
                 ws("mask.description").value(Context::DescIntrMask),
                 ws("pending.description").value(Context::DescIntrPending),
+            )),
+            alt((
                 ws("swset").value(Context::SwSet),
                 ws("pulse").value(Context::Pulse),
                 ws("interrupt").value(Context::Interrupt),
@@ -111,18 +113,22 @@ pub fn field_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
                 ws("hwclr").value(Context::HwClr),
                 ws("hwtgl").value(Context::HwTgl),
                 ws("hw").value(Context::HwAccess),
+                ws("we").value(Context::HwWe),
+                ws("wel").value(Context::HwWel),
+            )),
+            alt((
                 ws("lock").value(Context::HwLock),
                 ws("signed").value(Context::Signed),
                 ws("toggle").value(Context::Toggle),
-                ws("we").value(Context::HwWe),
-                ws("wel").value(Context::HwWel),
                 ws("counter").value(Context::Counter),
+                ws("enum").value(Context::Enum),
+                ws("password").value(Context::Password),
+            )),
+            alt((
                 ws("partial").value(Context::Partial),
                 ws(Caseless("arrayPosIncr")).value(Context::ArrayPosIncr),
                 ws(Caseless("arrayPartial")).value(Context::ArrayPartial),
-                ws("enum").value(Context::Enum),
                 ws("limit").value(Context::Limit),
-                ws("password").value(Context::Password),
             )),
         )),
         opt(alt((ws(":"), space0))),
@@ -146,19 +152,23 @@ pub fn field_acc<'a>(input: &mut &'a str) -> Res<'a, Access> {
 
 pub fn field_sw_kind<'a>(input: &mut &'a str) -> Res<'a, FieldSwKind> {
     alt((
-        ws(Caseless("ro")).value(FieldSwKind::ReadOnly),
-        ws(Caseless("rw")).value(FieldSwKind::ReadWrite),
-        ws(Caseless("rclr")).value(FieldSwKind::ReadClr),
-        ws(Caseless("wclr")).value(FieldSwKind::W1Clr),
-        ws(Caseless("w1clr")).value(FieldSwKind::W1Clr),
-        ws(Caseless("w0clr")).value(FieldSwKind::W0Clr),
-        ws(Caseless("w1set")).value(FieldSwKind::W1Set),
-        ws(Caseless("wo")).value(FieldSwKind::WriteOnly),
-        ws(Caseless("pulse")).value(FieldSwKind::W1Pulse(false, false)),
-        ws(Caseless("pulsereg")).value(FieldSwKind::W1Pulse(true, false)),
-        ws(Caseless("toggle")).value(FieldSwKind::W1Tgl),
-        ws(Caseless("r")).value(FieldSwKind::ReadOnly),
-        ws(Caseless("w")).value(FieldSwKind::WriteOnly),
+        alt((
+            ws(Caseless("ro")).value(FieldSwKind::ReadOnly),
+            ws(Caseless("rw")).value(FieldSwKind::ReadWrite),
+            ws(Caseless("rclr")).value(FieldSwKind::ReadClr),
+            ws(Caseless("r")).value(FieldSwKind::ReadOnly),
+        )),
+        alt((
+            ws(Caseless("wclr")).value(FieldSwKind::W1Clr),
+            ws(Caseless("w1clr")).value(FieldSwKind::W1Clr),
+            ws(Caseless("w0clr")).value(FieldSwKind::W0Clr),
+            ws(Caseless("w1set")).value(FieldSwKind::W1Set),
+            ws(Caseless("wo")).value(FieldSwKind::WriteOnly),
+            ws(Caseless("w")).value(FieldSwKind::WriteOnly),
+            ws(Caseless("pulse")).value(FieldSwKind::W1Pulse(false, false)),
+            ws(Caseless("pulsereg")).value(FieldSwKind::W1Pulse(true, false)),
+            ws(Caseless("toggle")).value(FieldSwKind::W1Tgl),
+        ))
     ))
     .context(StrContext::Label("field kind"))
     .parse_next(input)
@@ -201,7 +211,7 @@ pub fn enum_entry(input: &str) -> ResF<'_, EnumEntry> {
 
 pub fn field_interrupt<'a>(input: &mut &'a str) -> Res<'a, InterruptInfoField> {
     let mut info =
-        permutation((
+        unordered_seq!((
             opt(ws(reg_interrupt_trigger)),
             opt(ws(reg_interrupt_clr))
         )).context(StrContext::Label("interrupt info"))
@@ -245,7 +255,7 @@ pub fn counter_dir<'a>(input: &mut &'a str) -> Res<'a, CounterKind> {
 pub fn counter_def_<'a>(input: &mut &'a str) -> Res<'a, CounterInfo> {
     let kind = counter_dir.parse_next(input)?;
     // Extract incr/decr settings
-    let mut val = permutation((
+    let mut val = unordered_seq!((
         opt(preceded(
             ws("incrVal"),
             opt(preceded(opt("="), val_u8)),

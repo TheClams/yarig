@@ -82,19 +82,23 @@ fn operator_two<'a>(input: &mut &'a str) -> Res<'a, Token> {
     use Token::Operator;
     use OpKind::*;
     alt((
-        ws("&&").value(Operator(AndL)),
-        ws("&").value(Operator(AndB)),
-        ws("||").value(Operator(OrL)),
-        ws("|").value(Operator(OrB)),
-        ws("==").value(Operator(Equal)),
-        ws("!=").value(Operator(NotEqual)),
-        ws(">=").value(Operator(Gte)),
-        ws("<=").value(Operator(Lte)),
-        ws(">").value(Operator(Gt)),
-        ws("<").value(Operator(Lt)),
-        ws("!").value(Operator(NotL)),
-        ws("~").value(Operator(NotB)),
-        ws("^").value(Operator(Xor)),
+        alt((
+            ws("&&").value(Operator(AndL)),
+            ws("&").value(Operator(AndB)),
+            ws("||").value(Operator(OrL)),
+            ws("|").value(Operator(OrB)),
+            ws("==").value(Operator(Equal)),
+            ws("!=").value(Operator(NotEqual)),
+        )),
+        alt((
+            ws(">=").value(Operator(Gte)),
+            ws("<=").value(Operator(Lte)),
+            ws(">").value(Operator(Gt)),
+            ws("<").value(Operator(Lt)),
+            ws("!").value(Operator(NotL)),
+            ws("~").value(Operator(NotB)),
+            ws("^").value(Operator(Xor)),
+        ))
     )).parse_next(input)
 }
 

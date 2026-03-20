@@ -1,6 +1,6 @@
 [package]
 name = "yarig"
-version = "0.21.4"
+version = "0.21.5"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT"
@@ -14,8 +14,8 @@ keywords = ["register", "verilog", "rif"]
 clap = { version = "4.5.4", features = ["derive"] }
 serde = "1.0.218"
 serde_derive = "1.0.218"
-toml = "0.8.20"
-winnow = "0.7"
+toml = "1.0"
+winnow = "1.0"
 yarig_macro = { version = "^0", path = "./yarig_macro" }
 latex2mathml = { version = "^0"}
 

@@ -16,16 +16,20 @@ use super::{Res, ResF, identifier, param, parser_expr::{ExprTokens, parse_expr},
 pub fn page_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
     terminated(
         alt((
-            ws("baseAddress").value(Context::BaseAddress),
-            ws("addrWidth").value(Context::AddrWidth),
-            ws("description").value(Context::Description),
-            ws("desc").value(Context::Description),
-            ws("clkEn").value(Context::HwClkEn),
-            ws("external").value(Context::External),
-            ws("optional").value(Context::Optional),
-            ws("registers").value(Context::Registers),
-            ws("instances").value(Context::Instances),
-            ws("include").value(Context::Include),
+            alt((
+                ws("baseAddress").value(Context::BaseAddress),
+                ws("addrWidth").value(Context::AddrWidth),
+                ws("description").value(Context::Description),
+                ws("desc").value(Context::Description),
+                ws("clkEn").value(Context::HwClkEn),
+            )),
+            alt((
+                ws("external").value(Context::External),
+                ws("optional").value(Context::Optional),
+                ws("registers").value(Context::Registers),
+                ws("instances").value(Context::Instances),
+                ws("include").value(Context::Include),
+            )),
         )),
         opt(ws(":")),
     ).context(StrContext::Label("page property"))
@@ -90,18 +94,22 @@ pub fn reg_inst(input: &str) -> ResF<'_, RegInst> {
 pub fn reg_inst_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
     terminated(
         alt((
-            alt((ws("description"),ws("desc"))).value(Context::Description),
-            ws("parameters").value(Context::Parameters),
-            ws("info").value(Context::Info),
-            ws("optional_acc").value(Context::OptionalAcc),
-            ws("optional").value(Context::Optional),
-            ws("hidden").value(Context::Hidden),
-            alt((ws("disabled"),ws("disable"))).value(Context::Disabled),
-            ws("reserved").value(Context::Reserved),
-            ws("hw").value(Context::HwAccess),
-            terminated(identifier, ".").map(|v| Context::Item(v.into())),
-            terminated(reg_inst_field_array, "."),
-            terminated(index_list,opt(".")).map(Context::RegIndex),
+            alt((
+                alt((ws("description"),ws("desc"))).value(Context::Description),
+                ws("parameters").value(Context::Parameters),
+                ws("info").value(Context::Info),
+                ws("optional_acc").value(Context::OptionalAcc),
+                ws("optional").value(Context::Optional),
+                ws("hidden").value(Context::Hidden),
+                alt((ws("disabled"),ws("disable"))).value(Context::Disabled),
+                ws("reserved").value(Context::Reserved),
+                ws("hw").value(Context::HwAccess),
+            )),
+            alt((
+                terminated(identifier, ".").map(|v| Context::Item(v.into())),
+                terminated(reg_inst_field_array, "."),
+                terminated(index_list,opt(".")).map(Context::RegIndex),
+            )),
         )),
         opt(alt((ws(":"),ws("=")))),
     ).context(StrContext::Label("register instance property"))
