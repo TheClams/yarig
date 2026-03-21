@@ -215,7 +215,7 @@ impl Display for RifError {
             RifErrorKind::MissingDef    => write!(f, "{}.{} | Missing register definition for {}", self.name, self.line_num, self.txt),
             RifErrorKind::Unsupported   => write!(f, "{}.{} | Unsupported feature {}", self.name, self.line_num, self.txt),
             RifErrorKind::Duplicated    => write!(f, "{}.{} | {} duplicated !", self.name, self.line_num, self.txt),
-            RifErrorKind::Keyword       => write!(f, "{}.{} | Field name '{}' is a reserved keyword !", self.name, self.line_num, self.txt),
+            RifErrorKind::Keyword       => write!(f, "{}.{} | Register/Field name '{}' is a reserved keyword !", self.name, self.line_num, self.txt),
             RifErrorKind::Generic       => write!(f, "{}", self.txt),
         }
     }

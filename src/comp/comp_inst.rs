@@ -1618,11 +1618,13 @@ impl PartialFieldInfos {
 
 }
 
+/// Dictionnary of partial fields
 #[derive(Clone, Debug, Default)]
 pub struct PartialFieldDict(BTreeMap<String, PartialFieldInfos>);
 
 impl PartialFieldDict {
 
+    /// Create an empty dictionnary
     pub fn new() -> Self {
         PartialFieldDict(BTreeMap::new())
     }
@@ -1645,13 +1647,19 @@ impl PartialFieldDict {
         }
     }
 
+    /// Retrieve a partial field by group type
     pub fn get(&self, group_type: &str) -> Option<&PartialFieldInfos> {
         self.0.get(group_type)
+    }
+
+    /// List all keys of the dictionnary
+    pub fn keys(&self) -> Vec<&str> {
+        self.0.keys().map(|k| k.as_str()).collect()
     }
 }
 
 impl RifmuxInst {
-    // pub fn new(inst_name: String, type_name: String , addr_width: u8, interface: Interface, description: Description, groups: Vec<RifmuxGroupInst>) -> Self {
+    /// Create an a Rifmux instance from a rifmux defintion and group instances
     pub fn new(inst_name: String, rifmux: &Rifmux, groups: Vec<RifmuxGroupInst>) -> Self {
         RifmuxInst {
             inst_name,

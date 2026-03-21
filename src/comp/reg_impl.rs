@@ -71,7 +71,10 @@ impl FieldImpl {
         // Handle case of partial field
         let (width, resets) = if field.is_partial() {
             // By construction the partials should always be Some if the field is partial
-            partials.unwrap().merge(&field.name, field.signed)
+            let Some(partial_info) = partials else {
+                return Err(format!("Found empty partial for field {}", &field.name));
+            };
+            partial_info.merge(&field.name, field.signed)
         } else {
             let mut resets = Vec::with_capacity(field.reset.len());
             for reset in field.reset.iter() {

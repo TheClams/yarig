@@ -209,8 +209,22 @@ impl RifGenSrc {
             // Check indentation level To update the context
             let ilvl = indentation(&mut l)?;
             while ilvl < context_stack.last().expect("Context Stack Empty").1 {
-                if let Some(cntxt) = context_stack.pop() && cntxt.0 == Context::RifmuxGroup {
-                    self.last_group = "".to_string();
+                if let Some(cntxt) = context_stack.pop() {
+                    match cntxt.0 {
+                        // Clear the group name when popping the context
+                        Context::RifmuxGroup => {self.last_group = "".to_string();}
+                        // Once a register has been declared and it has write access from hardware, check if the name is a reserved keyword
+                        Context::RegDecl => {
+                            let is_hw_wr = self.last_reg().fields.iter().any(|f| f.hw_acc.is_writable());
+                            if is_hw_wr {
+                                let name = self.last_reg().name.as_str();
+                                if cfg.rsvd_kw.contains(&name) {
+                                    return Err(RifError::keyword(name));
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
                 }
             }
             let cntxt = context_stack.last().expect("Context Stack Empty !");
