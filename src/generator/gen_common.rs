@@ -219,8 +219,8 @@ impl GeneratorBaseSetting {
     pub fn path(&self, name: &str, is_top: bool) -> PathBuf {
         if let Some(path) = self.locals.get(remove_rif(name)) {
             path.to_owned()
-        } else if self.subdir.is_some() && !is_top {
-            self.path.join(self.subdir.as_ref().unwrap())
+        } else if !is_top && let Some(subdir) = self.subdir.as_ref() {
+            self.path.join(subdir)
         } else {
             self.path.clone()
         }

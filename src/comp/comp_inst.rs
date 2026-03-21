@@ -1242,6 +1242,7 @@ impl RifFieldInst {
         let format_str = format!("{s}{}.{}", width, field.nb_frac);
         let desc: Description;
         let desc_idx : DescIdx;
+        let desc_idx_base : DescIdx;
         // For array, adjust the increment when needed
         if let Some(array) = field_array {
             let incr = if field.array_pos_incr < width {
@@ -1271,6 +1272,7 @@ impl RifFieldInst {
             let i = array.dim() + array.idx();
             idx = ArrayIdx::Def(i,field.array.value(params).into());
             desc_idx = i.into();
+            desc_idx_base = desc_idx;
             desc = field.description.with_format(&format_str);
         } else {
             idx = ArrayIdx::Def(0,0);
@@ -1285,9 +1287,11 @@ impl RifFieldInst {
             } else {
                 field.description.with_format(&format_str)
             };
-            desc_idx = if let Some(i) = reg_array {DescIdx::field_bus(width as u16,i)} else {DescIdx::None};
+            desc_idx = if let Some(i) = reg_array {DescIdx::reg_bus(width as u16,i)} else {DescIdx::None};
+            desc_idx_base = if let Some(i) = reg_array {DescIdx::field_bus(width as u16,i)} else {DescIdx::None};
         }
-        let desc = desc.interpolate(desc_idx);
+        let description = desc.interpolate(desc_idx);
+        let base_description = desc.interpolate(desc_idx_base).no_dollar();
         // Ensure SW/HW access are compatible (i.e. write control mechanism if both access are write)
         let mut hw_kind = field.hw_kind.to_owned();
         if let Some(kind) = field.get_auto_hw_kind(params) {
@@ -1304,8 +1308,8 @@ impl RifFieldInst {
         *next_lsb += width;
         Ok(Some(RifFieldInst {
             name: field.name.to_owned(),
-            base_description: desc.no_dollar(),
-            description: desc,
+            base_description,
+            description,
             reset,
             sw_kind,
             hw_kind,

@@ -491,7 +491,7 @@ pub trait GeneratorDoc : GeneratorBase {
                         };
                         self.write_table_cell((TableKind::Field, CellKind::Reset), 0, &rst, "", tip);
                         // Description
-                        let mut desc = self.sanitize(&f.description.get(self.is_public()));
+                        let mut desc = self.sanitize(&f.base_description.get(self.is_public()));
                         if let Some(enum_name) = f.enum_kind.name() {
                             let name = if let Some(pkg) = &reg_impl.pkg {
                                 if enum_name.contains(':') {enum_name.to_owned()}

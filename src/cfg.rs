@@ -731,8 +731,8 @@ impl YarigCfg {
         );
         // if !params.is_empty() {println!("Parameters: {params}");}
         let mut rif_path : PathBuf = self.filename.clone().into();
-        if !rif_path.exists() && rif_path.is_relative() && self.path.is_some() {
-            rif_path = [self.path.as_ref().unwrap(), &self.filename].iter().collect();
+        if !rif_path.exists() && rif_path.is_relative() && let Some(path) = self.path.as_ref() {
+            rif_path = [path, &self.filename].iter().collect();
         }
         let parser_cfg = ParserCfg::new(self.keywords, self.auto_legacy);
         let rif_src = RifGenSrc::from_file(&rif_path, &self.include, &parser_cfg)

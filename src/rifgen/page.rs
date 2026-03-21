@@ -451,18 +451,18 @@ impl RegInst {
                 Some(name) => {
                     for field_idx in idx.iter_field() {
                         let field = Self::get_field_ovr(reg, name, field_idx);
-                        if field.description.is_none() {
-                            field.description = Some(desc.into());
+                        if let Some(fd) = field.description.as_mut() {
+                            fd.updt(desc, is_private);
                         } else {
-                            field.description.as_mut().unwrap().updt(desc, is_private);
+                            field.description = Some(desc.into());
                         }
                     }
                 }
                 None => {
-                    if reg.description.is_none() {
-                        reg.description = Some(desc.into());
+                    if let Some(rd) = reg.description.as_mut() {
+                        rd.updt(desc, is_private);
                     } else {
-                        reg.description.as_mut().unwrap().updt(desc, is_private);
+                        reg.description = Some(desc.into());
                     }
                 }
             }
