@@ -215,26 +215,20 @@ This trait is used by the generators for AsciiDoc, HTML, Latex and Mif (FrameMak
           but the logic for out-of-range field element would be forced to 0
     - [ ] The else part of generic should force unused signal to 0 to avoid lint warning ? (TBC)
     - [ ] Value used in documentation should be controllable via parameter settings (default to max, like currently)
-  - [x] Support reset value as enum name
   - [ ] Support for AXI4 bus
   - [ ] Support pipe option RTL
     - [x] No pipe level
     - [ ] Two pipe level (pipe on read_data)
   - [ ] Support option to repeat field description for interrupt derived register
-  - [x] Support latex equation in description
   - [ ] Support overlapping register in hardware. Exclusive access (RO/WO) is already check at compile time: might be a good place to add some overlap flag to ease the generator job ...
   - [ ] Option to add representation value for enum. Syntax could be 'NAME = VAL (repr) "description"'. Could be useful when enum is representing a limited set of integer or real values.
     - [x] Update parser to support new syntax
     - [x] Add python function in the enum class for conversion to/from float
     - [ ] Add C function for conversion to/from float/int ? Would need to add option to the generator allowing to disable the feature, use int, float or double as the representation type
   - [ ] Option to control if clear works without clock enable or not
-  - [x] Add syntax to support override on a range/list of register/field array. Syntax could be [1:5], or [1,3,7] and ideally support a mix like [0:5,8,11:13,15]
-  - [x] For field array with register array definition, support case where total size is not reg_dim * field_dim.
-        First idea would be to use the field reset initialization: if it's different from 1 and field_dim, then consider this is the total size
   - [ ] SV Generator: use SV interface for non-default case with option to control the interface type name
-  - [x] Add some information in generated documentation for disabled field inside an array
-  - [x] Hardware generator: support option to add some constants in the package such as address, field reset/position
   - [ ] Add option to hardware generator to generate limit either as hardware error or simulation assert
+  - [ ] Support register array simulatenously in definition and instance (i.e. an array of array...)
   - [ ] Support byte mask on interface (TBD if really needed)
 
 

@@ -1,10 +1,26 @@
 # Change Log
 
 
+## [0.21.6] - 2026-03-25
+
+### Added
+  - Support manual instances of register defined array
+
+## [0.21.5] - 2026-03-21
+
+### Fix
+  - Generator doc: fix field description when inside a register array
+  - Parser now detects when a register name is using reserved HDL keyword which would lead to compilation error
+
+### Internal
+  - Update all dependencies: winnow 1.0 improve slightly compile times
+
+
 ## [0.21.4] - 2026-03-09
 
 ### Fix
   - Generator HW: Fix interrupt field array
+
 
 ## [0.21.3] - 2026-03-07
 
@@ -14,6 +30,7 @@
 ### Internal
   - RifContext now save also the group address
 
+
 ## [0.21.2] - 2026-02-23
 
 ### Added
@@ -21,10 +38,12 @@
     The option allows to handle case where the target support field array
     Default behavior (option set to false) is to split the array into individual element with suffix \_i
 
+
 ## [0.21.1] - 2026-02-23
 
 ### Fixed
   - Generator HDL (SV/VHDL): fix generic bit width when max value is a power of 2
+
 
 ## [0.21.0] - 2026-02-23
 
@@ -32,6 +51,7 @@
   - TraitSw: write_field_decl now has an optional register instance reset value, allowing to reconstruct properly the field reset value if needed
   - Width/Description: Avoid panic when using unknown parameter in width
   - Check for conflicting name between generics and parameters
+
 
 ## [0.19.2] - 2026-01-07
 
@@ -41,6 +61,7 @@
 ### Internal
   - Page: now provides iterator on all instances of a given type
 
+
 ## [0.19.1] - 2025-12-25
 
 ### Added
@@ -48,6 +69,7 @@
     * support parameters for register instance address
     * support address override when in auto-instance mode
   - SV: support RtlLimit::UvmError
+
 
 ## [0.19.0] - 2025-12-16
 
@@ -67,10 +89,12 @@
 ### Internals
   - GenericRange now uses u16 instead of u8.
 
+
 ## [0.18.1] - 2025-11-19
 
 ### Fixed
   - RTL: missing generic declaration in rifmux
+
 
 
 ## [0.18.0] - 2025-10-30
@@ -81,6 +105,7 @@
 ### Internals
   - Increase MSRV to 1.88 and refactor code using let chains
 
+
 ## [0.17.3] - 2025-10-17
 
 ### Fixed
@@ -88,6 +113,7 @@
 
 ### Added
   - Add Rust documentation, embedding the already existing markdown
+
 
 ## [0.17.2] - 2025-10-17
 
@@ -103,6 +129,7 @@
 ### Fixed
   - RAL: fix interrupt enable/mask/pending access
 
+
 ## [0.17.1] - 2025-10-15
 
 ### Fixed
@@ -110,6 +137,7 @@
   - Python:
     * Fix handling of fields arrays (missing position and reset value)
     * change some spacing to be PEP8 compliant
+
 
 ## [0.17.0] - 2025-10-14
 
@@ -122,10 +150,12 @@
   - Fixed:
     * JSON: escape double-quote in description
 
+
 ## [0.16.2] - 2025-10-10
 
 ### Fixed
   - Python: incorrect import in top rifmux
+
 
 ## [0.16.1] - 2025-08-21
 
@@ -133,6 +163,7 @@
   - Configuration:
     * All target specific configuration now forbid used of unknown field (allow to catch typo)
     * Independent casing configuration are now possible for HTML, MIF, ADoc and LaTeX
+
 
 ## [0.16.0] - 2025-08-02
 
@@ -147,6 +178,7 @@
 
 ### Changed
   - Syntax: when a field array is defined into a register array and the field reset length is bigger than the field array but smaller than the product, then it defined the total field array
+
 
 ## [0.15.0] - 2025-07-20
 
@@ -165,6 +197,7 @@
 ### Fixed
   - Generics: the address error signal was inverted
 
+
 ## [0.14.1] - 2025-07-18
 
 ### Fixed
@@ -172,6 +205,7 @@
 
 ### Added
   - Documentation on all diferent target output
+
 
 ## [0.14.0] - 2025-07-17
 
@@ -186,6 +220,7 @@
     * Handle case of field ro, with hardware rw without any write modifier (i.e. direct feedback of hardware of hardware)
     * Handle limit in register arrays
     * Fix missing check signal declaration when limit is part of field override only
+
 
 ## [0.13.2] - 2025-07-04
 
@@ -202,6 +237,7 @@
   - Latex: changed reference name of field array to avoid handling of special character []
   - Doc Trait: fix missing suffix of interrupt register reference label
 
+
 ## [0.13.0] - 2025-06-24
 
 ### Added
@@ -212,6 +248,7 @@
 
 ### Internals
   - Component enum now box the instances (RifInst/RifMuxInst): avoid large allocation stack.
+
 
 ## [0.12.2] - 2025-06-20
 
@@ -225,10 +262,12 @@
     * First character after a ^ or _ was deleted ...
     * Equation is now properly enclosed between $$ without any character escape
 
+
 ## [0.12.0] - 2025-06-15
 
 ### Added
   - Latex equation in description converted to MathML for HTML output
+
 
 ## [0.11.0] - 2025-05-25
 
@@ -244,6 +283,7 @@
 ### Bug Fixes
   - HDL: fix case where the decode signal was missing
 
+
 ## [0.10.2] - 2025-05-21
 
 ### Bug Fixes
@@ -252,12 +292,14 @@
 ### Changed
   - RAL: use more accurate field access (clear on read, toggle, ...)
 
+
 ## [0.10.1] - 2025-05-06
 
 ### Bug Fixes
   - IpXact target: now passes validation at least for local RIF examples
     * Missing conversion to target IpXact
     * Fix various format changes for version 2022
+
 
 ## [0.10.0] - 2025-04-29
 
@@ -275,6 +317,7 @@
     Old function is still available and was renamed as get_output_path_kd.
   - GeneratoreCore now include some basic RIF information available to all generator (like name, address/data width)
 
+
 ## [0.9.4] - 2025-04-23
 
 ### Bug Fixes
@@ -284,6 +327,7 @@
     * Fix RIF package filename call not properly flagged as package
     * Add new LogicExpr::CastFrom when an enum is used as bit vector (explicit conversion required in VHDL)
   - Fixes VHDL output: missing cast around enum, missing component declaration, RIFmux support, ...
+
 
 ## [0.9.2] - 2025-04-13
 
@@ -295,6 +339,7 @@
 
 ### Changed
  - Update Trait HW: +/- logic expression now include a signed flag
+
 
 ## [0.9.1] - 2025-04-11
 
@@ -323,6 +368,7 @@
 ### Internals
  - Add distinct type for resetVal (ReseltValP and ResetVal) before and after "compilation" to ensure all value are fully defined after compilation.
 
+
 ## [0.8.5] - 2025-04-03
 
 ### Changed
@@ -334,6 +380,7 @@
    * Add name to peripherals
    * Add function to find rif/register/field by name (e.g. my_top.by_name("rif.reg.field"))
    * Move flags inside reginfo and add function to get flags and readonly info for a register
+
 
 ## [0.8.4] - 2025-03-31
 
@@ -349,6 +396,7 @@
  - Python: add a peripheral base address to its element
  - Latex: add missing sanitize call for register chapters
 
+
 ## [0.8.2] - 2025-03-14
 
 ### Added
@@ -357,6 +405,7 @@
 ### Bug Fixes
  - HTML: Fix some missing return line
  - Python: Fix output for version 3.10 (need to skip override decorator, not final)
+
 
 ## [0.8.1] - 2025-03-14
 
@@ -367,6 +416,7 @@
 
 ### Changed
   - SW Trait: write_page_footer description argument now replace by reference to page to provide access to all the page properties
+
 
 ## [0.8.0] - 2025-03-13
 ### Added
@@ -381,6 +431,7 @@
 
 ### Internal
   - RifList: object now contains the list of all instance of rif with their name and address:
+
 
 ## [0.7.0] - 2025-03-10
 
@@ -417,6 +468,7 @@
     * add missing include stdint.h
     * add missing define for group address
 
+
 ## [0.6.0] - 2025-03-02
 ### Added
   - New targets:
@@ -445,6 +497,7 @@
     * Add is_last parameter to a few function (reg_footer, field_decl, reg_inst, rif_inst, rifmux_inst)
   - Trait doc: add some hook functions before register summary and register detail
 
+
 ## [0.5.0] - 2025-02-23
 ### Added
   - target py: generator for python class
@@ -460,6 +513,7 @@
   - Update all dependencies (winnow 0.7) and switch to Rust Edition 2024
   - Field struct now has additional helper function for checking its kind (is_pulse, is_special)
 
+
 ## [0.4.0] - 2025-01-19
 ### Added
   - target ral: generator for systemVerilog Register Abstraction Layer
@@ -468,6 +522,7 @@
   - Trait Sw:
     * Add a few const to control the generator (instance per arrays or element, hierarchical or flatten)
     * update a fw trait functions prototype to be more generic
+
 
 ## [0.3.3] - 2025-01-19
 ### Added
@@ -479,11 +534,13 @@
     * Use enum for address width: ensure width is supported, and centralize some feature such as nb_byte, address mask, ...
     * check address alignment vs data width
 
+
 ## [0.3.2] - 2025-01-15
 ### Changed
   - Error message improved:
     * now contains current file name
     * explicit context name in different parser (might need more details like allowed keywords, ...)
+
 
 ## [0.3.1] - 2025-01-12
 Crate is now a library to allow building other applications reusing parser and generators trait

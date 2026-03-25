@@ -493,14 +493,28 @@ impl RifPageInst {
                 }
                 if let Some(regdef) = page.find_regdef(&reg.type_name,rifs.rifs ) {
                     let addr = inst_addr.updt(&reg.addr, &rifs.params);
-                    let array_size = reg.array.eval_with_gen(&rifs.params, &rifs.generics)?;
-                    let nb = array_size.max() as u16;
-                    let range = if let ExprValue::Range(n,r) = array_size {Some((n,r))} else {None};
+                    let range : Option<(String,GenericRange)>;
+                    let nb : u16;
+                    let array_size_def = regdef.def.array.value(&rifs.params);
+                    let array_size_inst = reg.array.eval_with_gen(&rifs.params, &rifs.generics)?;
+                    if array_size_def > 1 {
+                        nb = array_size_def as u16;
+                        range = None;
+                        if array_size_inst.max() > 1 {
+                            return Err(format!("Register array in both definition and instance not supported yet (Register {})", regdef.def.name));
+                        }
+                    } else {
+                        nb = array_size_inst.max() as u16;
+                        range = if let ExprValue::Range(n,r) = array_size_inst {Some((n,r))} else {None};
+                    }
+                    // println!("Register {} : def_array={} vs inst_array={array_size_inst:?} -> {nb}", regdef.def.name, regdef.def.array);
                     // For array create one instance per element with the array information
                     if nb > 1 {
                         inst_addr.decr(); // Pre-decrement because address will be incremented for each array element
                         for i in 0..nb {
-                            let args = RegInstArgs::arr(i, nb, range.clone());
+                            let args =
+                                if array_size_def > 1 {RegInstArgs::arr_def(i, nb)}
+                                else {RegInstArgs::arr(i, nb, range.clone())};
                             p.add_reg(RifRegInst::new(regdef.def, inst_addr.incr(), Some(reg), args, regdef.incl.to_owned(), rifs)?);
                         }
                     }
