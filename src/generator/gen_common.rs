@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::Deref, path::PathBuf};
+use std::{collections::HashMap, ops::Deref, path::PathBuf, str::FromStr};
 
 use crate::{
     cfg::{RifGenTarget, YarigCfg}, comp::comp_inst::{Comp, RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxInst}, parser::remove_rif
@@ -95,6 +95,31 @@ impl Privacy {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum Skippable {
+    RifTitle, RifmuxTitle
+}
+
+impl FromStr for Skippable {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s_lc = s.to_lowercase();
+        match s_lc.as_str() {
+            "riftitle" | "rif_title" => Ok(Skippable::RifTitle),
+            "rifmuxtitle" | "rif_muxtitle" => Ok(Skippable::RifmuxTitle),
+            _ => Err("Invalid skippable element".to_owned()),
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Skippable {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        Skippable::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct GeneratorBaseSetting {
     /// Top filename
@@ -113,10 +138,13 @@ pub struct GeneratorBaseSetting {
     pub subdir: Option<String>,
     /// Path to the different included component when it must be generated locally to its definition rather than the top one
     locals: HashMap<String, PathBuf>,
+    /// List of element to skip in a generator
+    pub skip: Vec<Skippable>,
 }
 
 impl GeneratorBaseSetting {
 
+    /// Create basic setting with casing, visibility, list of included rif ro generate and sub-directory setting
     pub fn new(casing: Option<Casing>, public: bool, gen_inc: &[String], subdir: &Option<String>) -> Self {
         GeneratorBaseSetting {
             path: "".into(),
@@ -127,6 +155,7 @@ impl GeneratorBaseSetting {
             subdir: subdir.clone(),
             locals: HashMap::new(),
             split: false,
+            skip: Vec::new(),
         }
     }
 
@@ -141,6 +170,7 @@ impl GeneratorBaseSetting {
         else {paths.get(short_name).map(|v| (short_name,v))}
     }
 
+    /// Set list of included reference to generate locally
     pub fn set_locals(&mut self, target: &RifGenTarget, locals: &[String], paths: &HashMap<String,PathBuf>, out: &str) {
         self.locals.clear();
         let iter : Box<dyn Iterator<Item = (&str, &PathBuf, Option<String>)>> =
@@ -205,11 +235,18 @@ impl GeneratorBaseSetting {
         // println!("locals = {:?}", self.locals)
     }
 
+    /// Set skippable element in the generator
+    pub fn set_skip(&mut self, skip: &[Skippable]) {
+        self.skip.extend(skip);
+    }
+
+    /// Check if a specific included RIF should be generated
     pub fn is_gen_inc(&self, rif: &RifInst) -> bool {
         let names = [&rif.inst_name, &rif.type_name, &remove_rif(&rif.type_name).to_owned()];
         names.iter().any(|n| self.gen_inc.contains(n))
     }
 
+    /// Check if all included RIF must be generated
     pub fn is_gen_all(&self) -> bool {
         self.gen_inc.first().map(|c| c.as_str())==Some("*")
     }

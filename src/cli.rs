@@ -4,7 +4,7 @@ use clap::Parser;
 
 use crate::{
     cfg::{RifGenTarget, RtlLimit},
-    generator::{casing::Casing, gen_py::PyVersion},
+    generator::{casing::Casing, gen_common::Skippable, gen_py::PyVersion},
     rifgen::{Interface, SuffixInfo}
 };
 
@@ -109,6 +109,9 @@ pub struct RifGenArgs{
     /// Force generation of limits on all enums
     #[arg(long, action)]
     pub rtl_force_limit: Option<RtlLimit>,
+    /// List of element to skip in generators (ADOC only at the moment): RifTitle, RifmuxTitle
+    #[arg(long, num_args = 1..)]
+    pub skip: Vec<Skippable>,
 }
 
 /// Parse a single key-value pair

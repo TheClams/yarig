@@ -6,7 +6,7 @@ use crate::{
     rifgen::{EnumDef, FieldSwKind, ResetVal}
 };
 
-use super::gen_common::{GeneratorBase, InstDict, RifInstInfo, RifList};
+use super::gen_common::{GeneratorBase, InstDict, RifInstInfo, RifList, Skippable};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TableKind {
@@ -109,7 +109,9 @@ pub trait GeneratorDoc : GeneratorBase {
                 filename = self.filename_rifmux(rifmux);
                 let name = remove_rif(&rifmux.inst_name);
                 let desc = rifmux.description.get_split(self.is_public());
-                self.write_rif_title((name,0), &desc.0);
+                if !self.setting().skip.contains(&Skippable::RifmuxTitle) {
+                    self.write_rif_title((name,0), &desc.0);
+                }
                 if let Some(desc_detail) = desc.1 {
                     let desc_detail = self.sanitize(&desc_detail);
                     self.write_info(&desc_detail);
@@ -214,7 +216,9 @@ pub trait GeneratorDoc : GeneratorBase {
         let rif_name = remove_rif(&rif.type_name);
         let desc = rif.base_description.get_split(self.is_public());
         self.set_rif_info(rif);
-        self.write_rif_title((rif_name, idx), &desc.0);
+        if !self.setting().skip.contains(&Skippable::RifTitle) {
+            self.write_rif_title((rif_name, idx), &desc.0);
+        }
         if let Some(desc_detail) = desc.1 {
             let desc_detail = self.sanitize(&desc_detail);
             self.write_info(&desc_detail);

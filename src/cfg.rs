@@ -58,7 +58,7 @@ use std::{collections::HashMap, fs, path::PathBuf, str::FromStr};
 use toml;
 use crate::{
     cli::RifGenArgs, comp::comp_inst::{Comp, RifFieldInst}, generator::{
-        casing::Casing, gen_adoc::GeneratorAdoc, gen_c::GeneratorC, gen_common::GeneratorBaseSetting, gen_html::GeneratorHtml, gen_ipxact::GeneratorIpXact, gen_json::GeneratorJson, gen_latex::GeneratorLatex, gen_mif::GeneratorMif, gen_py::{GeneratorPy, PyVersion}, gen_ral::GeneratorRal, gen_sv::GeneratorSv, gen_svd::GeneratorSvd, gen_vhdl::GeneratorVhdl, trait_doc::GeneratorDoc, trait_hw::GeneratorHw, trait_sw::GeneratorSw
+        casing::Casing, gen_adoc::GeneratorAdoc, gen_c::GeneratorC, gen_common::{GeneratorBaseSetting, Skippable}, gen_html::GeneratorHtml, gen_ipxact::GeneratorIpXact, gen_json::GeneratorJson, gen_latex::GeneratorLatex, gen_mif::GeneratorMif, gen_py::{GeneratorPy, PyVersion}, gen_ral::GeneratorRal, gen_sv::GeneratorSv, gen_svd::GeneratorSvd, gen_vhdl::GeneratorVhdl, trait_doc::GeneratorDoc, trait_hw::GeneratorHw, trait_sw::GeneratorSw
     }, parser::{ParserCfg, RifGenSrc, RsvdKeywordSel, parser_expr::ParamValues}, rifgen::{Interface, SuffixInfo}
 };
 
@@ -341,6 +341,8 @@ pub struct CfgAdoc {
     pub casing: Option<Casing>,
     /// Sub-directory name for generated file which are not the top level
     pub subdir: Option<String>,
+    /// List of element to skip in the generation
+    pub skip: Option<Vec<Skippable>>,
 }
 
 /// Configuration specific to LaTeX target
@@ -558,7 +560,7 @@ impl YarigCfg {
         let mut cfg = if let Some(cfg_path) = &args.cfg {
             YarigCfg::from_file(cfg_path)?
         } else {
-                YarigCfg::default()
+            YarigCfg::default()
         };
         cfg.update_with_cli(args);
         Ok(cfg)
@@ -590,6 +592,14 @@ impl YarigCfg {
         if args.keyword_rename {self.keywords.error = false;}
         if args.targets.contains(&RifGenTarget::Sv) {self.keywords.sv = true;}
         if args.targets.contains(&RifGenTarget::Vhdl) {self.keywords.vhdl = true;}
+
+        if args.c_base_addr_name.is_some() {
+            self.c.base_offset = args.c_base_addr_name;
+        }
+
+        if !args.skip.is_empty() {
+            self.adoc.skip = Some(args.skip.clone());
+        }
 
         for t in args.split.iter() {
             match t {
@@ -814,6 +824,9 @@ impl YarigCfg {
                     g.gen_all(&rif_obj).map_err(|e| format!("JSON generation failed: {e}"))?;
                 }
                 RifGenTarget::Adoc => {
+                    if let Some(skip) = &self.adoc.skip {
+                        setting.skip = skip.clone();
+                    }
                     let mut g = GeneratorAdoc::new(setting, self.adoc.clone());
                     g.gen_all(&rif_obj).map_err(|e| format!("AsciiDoctor generation failed: {e}"))?;
                 }

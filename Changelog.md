@@ -1,6 +1,15 @@
 # Change Log
 
 
+## [0.21.7] - 2026-04-01
+
+### Added
+  - TraitDoc: Add option to skip RIF/RIFMux title. Configuration only enabled for AsciiDoc at the moment (wither in toml skip=... or CLI --skip rif_title)
+
+### Fix
+  - Command line option --c_base_addr_name was ignored
+
+
 ## [0.21.6] - 2026-03-25
 
 ### Added
