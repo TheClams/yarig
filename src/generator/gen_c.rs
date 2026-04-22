@@ -142,10 +142,10 @@ impl GeneratorSw for GeneratorC {
             let regname = reg.reg_type.to_uppercase();
             let name = format!("{}_{regname}_{fieldname}", basename.to_uppercase());
             self.push_stash(0, &format!("#define {name}_POS   {}\n", field.lsb));
-            self.push_stash(0, &format!("#define {name}_MASK  0x{:08X}\n",(1_u128<< field.width)-1));
+            self.push_stash(0, &format!("#define {name}_MASK  0x{:08X}U\n",(1_u128<< field.width)-1));
             self.push_stash(0, &format!("#define {name}_SMASK ({name}_MASK<<{name}_POS)\n"));
             if field.nb_frac != 0 {
-                self.push_stash(0, &format!("#define {name}_FRAC    {}\n", field.nb_frac));
+                self.push_stash(0, &format!("#define {name}_FRAC  {}\n", field.nb_frac));
             }
         }
     }

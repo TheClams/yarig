@@ -1,6 +1,12 @@
 # Change Log
 
 
+## [0.21.8] - 2026-04-21
+
+### Fix
+  - Generator C: Field MASK now unsigned to avoid warning/error after large bit shift by POS
+
+
 ## [0.21.7] - 2026-04-01
 
 ### Added
