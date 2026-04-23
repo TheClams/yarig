@@ -1,7 +1,10 @@
 # Change Log
 
 
-## [0.21.9] - Unreleased
+## [0.21.9] - 2026-04-24
+
+### Fix
+  - Generator HW: Fix interrupt_en field array
 
 ### Added
   - CLI: parameters value can now be given in hexa (0x..) or binary (0b..) format

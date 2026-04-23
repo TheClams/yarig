@@ -1009,11 +1009,12 @@ pub trait GeneratorHw : GeneratorBase {
                         let group_name_base = reg.group_name.to_casing(Snake);
                         // Local signal where interrupt vector is and with the optional enable signals
                         let intr_l = ExprId::new_field_range(format!("{group_name}_l"), None, field_name.to_owned(), field_range.clone());
-                        let mut rhs : LogicExpr = (ExprId::new_field_range(group_name_base, None, field_name.to_owned(), field_range)).into();
+                        let mut rhs : LogicExpr = ExprId::new_field_range(group_name_base, None, field_name.to_owned(), field_range.clone()).into();
 
                         if intr_info.enable.is_some() {
-                            let en : ExprId = (format!("rif_{group_name}_en"), field_name.clone()).into();
-                            rhs = LogicExpr::and_b(rhs.clone(), en.into());
+                            // let en : LogicExpr = (format!("rif_{group_name}_en"), field_name.clone()).into();
+                            let en : LogicExpr = ExprId::new_field_range(format!("rif_{group_name}_en"), None, field_name.to_owned(), field_range).into();
+                            rhs = LogicExpr::and_b(rhs.clone(), en);
                         }
                         self.write_assign(intr_l.clone(), rhs);
                         // Next interrupt state
