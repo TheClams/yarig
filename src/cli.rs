@@ -59,7 +59,7 @@ pub struct RifGenArgs{
     #[arg(long, action)]
     pub public: bool,
     /// Set parameters value
-    #[arg(short = 'P', value_parser = parse_key_val::<String, isize>)]
+    #[arg(short = 'P', long, value_parser = parse_key_val)]
     pub parameters: Vec<(String, isize)>,
     /// Set suffix value
     #[arg(short = 'S', long)]
@@ -115,16 +115,22 @@ pub struct RifGenArgs{
 }
 
 /// Parse a single key-value pair
-fn parse_key_val<T, U>(s: &str) -> Result<(T, U), Box<dyn Error + Send + Sync + 'static>>
-where
-    T: std::str::FromStr,
-    T::Err: Error + Send + Sync + 'static,
-    U: std::str::FromStr,
-    U::Err: Error + Send + Sync + 'static,
-{
+pub fn parse_key_val(s: &str) -> Result<(String, isize), Box<dyn Error + Send + Sync + 'static>> {
     let pos = s
         .find('=')
         .ok_or_else(|| format!("Invalid KEY=value: no `=` found in `{s}`"))?;
-    Ok((s[..pos].parse()?, s[pos + 1..].parse()?))
+    let key = s[..pos].to_string();
+    let value_str = &s[pos + 1..];
+
+    let value = match value_str.as_bytes() {
+        [b'0', b'x' | b'X', ..] => isize::from_str_radix(&value_str[2..], 16)?,
+        [b'0', b'b' | b'B', ..] => isize::from_str_radix(&value_str[2..], 2)?,
+        [b'F'|b'f', b'a', b'l', b's', b'e' ] => 0,
+        [b'T'|b't', b'r', b'u', b'e' ] => 1,
+        _ => value_str.parse()?,
+    };
+
+    Ok((key, value))
+
 }
 

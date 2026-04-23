@@ -1,6 +1,12 @@
 # Change Log
 
 
+## [0.21.9] - Unreleased
+
+### Added
+  - CLI: parameters value can now be given in hexa (0x..) or binary (0b..) format
+
+
 ## [0.21.8] - 2026-04-21
 
 ### Fix

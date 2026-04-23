@@ -1,6 +1,6 @@
 [package]
 name = "yarig"
-version = "0.21.8"
+version = "0.21.9"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT"
