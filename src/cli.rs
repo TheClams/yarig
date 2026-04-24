@@ -82,7 +82,10 @@ pub struct RifGenArgs{
     /// C macro name defining the base address of the top level
     #[arg(long)]
     pub c_base_addr_name: Option<String>,
-    /// Base class for python target
+    /// Base address offset in documentation
+    #[arg(long, value_parser=parse_usize)]
+    pub doc_base_offset: Option<usize>,
+    /// Base class for python target (default Regmap)
     #[arg(long)]
     pub py_class: Option<String>,
     /// Python version (default 3.11)
@@ -132,5 +135,15 @@ pub fn parse_key_val(s: &str) -> Result<(String, isize), Box<dyn Error + Send + 
 
     Ok((key, value))
 
+}
+
+/// Parse a single key-value pair
+pub fn parse_usize(s: &str) -> Result<usize, Box<dyn Error + Send + Sync + 'static>> {
+    let value = match s.as_bytes() {
+        [b'0', b'x' | b'X', ..] => usize::from_str_radix(&s[2..], 16)?,
+        [b'0', b'b' | b'B', ..] => usize::from_str_radix(&s[2..], 2)?,
+        _ => s.parse()?,
+    };
+    Ok(value)
 }
 

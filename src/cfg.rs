@@ -291,6 +291,8 @@ pub struct YarigCfg {
     pub outputs: HashMap<String,String>,
     /// Use legacy order for interrupts (mask before enable)
     pub auto_legacy: bool,
+    /// Documentation base address offset
+    pub doc_base_offset: Option<usize>,
     /// Use suffix only for RTL generation
     pub suffix_rtl_only: bool,
     /// optional suffix definition
@@ -579,6 +581,7 @@ impl YarigCfg {
         //
         if !args.parameters.is_empty() {self.parameters.extend(args.parameters)};
         if let Some(suffix) = args.suffix {self.suffixes.insert("".to_owned(), suffix);};
+        if args.py_class.is_some() {self.py.class = args.py_class};
         if args.py_version.is_some() {self.py.version = args.py_version};
         if args.py_init_file.is_some() {self.py.init_file = args.py_init_file};
         if args.casing.is_some() {self.casing = args.casing};
@@ -595,6 +598,9 @@ impl YarigCfg {
 
         if args.c_base_addr_name.is_some() {
             self.c.base_offset = args.c_base_addr_name;
+        }
+        if args.doc_base_offset.is_some() {
+            self.doc_base_offset = args.doc_base_offset.clone();
         }
 
         if !args.skip.is_empty() {
@@ -760,7 +766,7 @@ impl YarigCfg {
             rif_obj.set_interface(intf);
         }
         //
-        let base_setting = GeneratorBaseSetting::new(self.casing, self.public, &self.gen_inc, &self.subdir);
+        let base_setting = GeneratorBaseSetting::new(&self);
         for target in self.targets.iter() {
             let mut setting = base_setting.clone();
             let out = self.get_output_path(target);

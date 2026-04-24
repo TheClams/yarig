@@ -140,21 +140,24 @@ pub struct GeneratorBaseSetting {
     locals: HashMap<String, PathBuf>,
     /// List of element to skip in a generator
     pub skip: Vec<Skippable>,
+    /// Optional Address offset (Documentation only atm)
+    pub addr_offset: u64,
 }
 
 impl GeneratorBaseSetting {
 
-    /// Create basic setting with casing, visibility, list of included rif ro generate and sub-directory setting
-    pub fn new(casing: Option<Casing>, public: bool, gen_inc: &[String], subdir: &Option<String>) -> Self {
+    /// Create basic setting with casing, visibility, list of included rif to generate and sub-directory setting
+    pub fn new(cfg: &YarigCfg) -> Self {
         GeneratorBaseSetting {
             path: "".into(),
             fname: None,
-            casing: casing.unwrap_or(Casing::Snake),
-            privacy: if public {Privacy::Public} else {Privacy::Internal},
-            gen_inc: gen_inc.to_vec(),
-            subdir: subdir.clone(),
+            casing: cfg.casing.unwrap_or(Casing::Snake),
+            privacy: if cfg.public {Privacy::Public} else {Privacy::Internal},
+            gen_inc: cfg.gen_inc.to_vec(),
+            subdir: cfg.subdir.clone(),
             locals: HashMap::new(),
             split: false,
+            addr_offset: cfg.doc_base_offset.unwrap_or(0) as u64,
             skip: Vec::new(),
         }
     }
@@ -262,6 +265,7 @@ impl GeneratorBaseSetting {
             self.path.clone()
         }
     }
+
 }
 
 /// Component basic information: name, addr/data bus width, page/group number
@@ -491,7 +495,7 @@ pub trait GeneratorBase {
     }
 
     /// Write a stash content into main buffer and clear the stash
-    fn stash_is_empty(&mut self, idx: usize) -> bool {
+    fn stash_is_empty(&self, idx: usize) -> bool {
         self.core().stash_is_empty(idx)
     }
 

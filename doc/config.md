@@ -36,11 +36,14 @@ interface = "apb"
 
 # Optional: Use suffixes only for RTL generation targets
 suffix_rtl_only = false
+
+# Optional documentation base address offset
+doc_base_offset = 0xF0_0000
 ```
 
 ### Parameters
 
-Override parameter value defined in RIF files:
+Override parameter values defined in RIF files:
 
 ```toml
 [parameters]

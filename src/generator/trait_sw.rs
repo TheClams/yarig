@@ -252,13 +252,14 @@ pub trait GeneratorSw : GeneratorBase {
     /// Write register end of declaration
     fn write_reg_footer(&mut self,  basename: &str, reg: &RifRegInst, is_last: bool) {}
 
+    /// Write fields declaration
     fn write_fields_decl(&mut self, rif: &RifInst, basename: &str, reg: &RifRegInst, regs_rst: &[u128]) {
         let is_public = self.is_public();
         let mut fields = reg.fields.iter()
             .filter(|f| !(f.visibility.is_hidden() && is_public) && (!Self::FIELD_ARRAY || f.array.idx()==0))
             .peekable();
         let mut pos_l = 0;
-        let fields_c = fields.clone();
+        // let fields_c = fields.clone();
         // println!("[WriteFieldsDecl] Reg {} ({}): Fields {:?}", reg.reg_name, Self::FIELD_ARRAY, fields_c.map(|f| format!("{} idx={}", f.name(), f.array.idx())).collect::<Vec<_>>() );
         while let Some(f) = fields.next() {
             if pos_l != f.lsb {
@@ -282,16 +283,17 @@ pub trait GeneratorSw : GeneratorBase {
     /// Write register end of declaration
     fn write_field_decl(&mut self, basename: &str, reg: &RifRegInst, regs_rst: &[u128], field: &RifFieldInst, enum_defs: Option<&EnumDef>, is_last: bool) {}
 
+    /// Return a field name with proper casing
     fn get_field_name(&self, reg: &RifRegInst, field: &RifFieldInst) -> String {
         self.core().get_field_name(reg, field, Self::FIELD_ARRAY)
     }
 
+    /// Return an iterator on fields of a register, skipping any private field when visibiility is set to public
     fn get_field_iter<'a>(&self, reg: &'a RifRegInst, ) -> impl std::iter::Iterator<Item = &'a RifFieldInst> {
         reg.fields.iter()
             .filter(|f| {
                 !(f.visibility.is_hidden() && self.is_public())
             })
-            .peekable()
     }
 
     /// Write register end of declaration

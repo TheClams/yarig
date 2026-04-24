@@ -8,17 +8,52 @@ use crate::{
 
 use super::gen_common::{GeneratorBase, InstDict, RifInstInfo, RifList, Skippable};
 
+/// Categories of table used in documentation
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TableKind {
-    Rifmux, RifInst, Page, RegInst, Layout, Field, FieldRsvd
+    /// Top RIF mux summary
+    Rifmux,
+    /// Top RIF summary
+    RifInst,
+    /// Top RIF pages summary
+    Page,
+    /// Register instances
+    RegInst,
+    /// Register layout (with columns for each bit)
+    Layout,
+    /// Field
+    Field,
+    /// Reserved Field
+    FieldRsvd
 }
 
+/// Categories of cells inside a table
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum CellKind {
-    Addr, Offset, RifType, RegType, Inst, Reset, Desc, Field, Bits, Access
+    /// Address
+    Addr,
+    /// Global address offset (in summary tables)
+    Offset,
+    /// Type of the RIF instance (in RifMux summary table)
+    RifType,
+    /// Register type (in RIF summary)
+    RegType,
+    /// Register instance name (in RIF summary)
+    Inst,
+    /// Reset value (layout or field)
+    Reset,
+    /// Register/Field description
+    Desc,
+    /// Field name (Register/layout)
+    Field,
+    /// Bit index (Layout table)
+    Bits,
+    /// Register/Field access
+    Access
 }
 
 impl CellKind {
+    /// Label associated with each CellKind columns
     pub fn label(&self) -> &str {
         match self {
             CellKind::Addr    => "Address",
@@ -34,17 +69,25 @@ impl CellKind {
         }
     }
 
+    /// Check if the cell represent a type (or RIF or register)
     pub fn is_type(&self) -> bool {
         matches!(self, CellKind::RifType | CellKind::RegType)
     }
 }
 
+/// Link categories
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum LinkKind {
-    Top, Page, Field
+    /// Link to the summary table
+    Top,
+    /// Link to a page summary
+    Page,
+    /// Link to a field details
+    Field
 }
 
 impl std::fmt::Display for LinkKind {
+    /// String assocaited with each link kind
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LinkKind::Top   => write!(f, "Top"),
@@ -125,8 +168,9 @@ pub trait GeneratorDoc : GeneratorBase {
                     self.write_table_cell_top((TableKind::Rifmux, k), 0, k.label(), "");
                 }
                 self.write_table_row_top_footer();
+                let addr_offset = self.setting().addr_offset;
                 for c in rifmux.components.iter() {
-                    self.add_rifmux_entry(c, w,  0, None, &rifmux.groups);
+                    self.add_rifmux_entry(c, w,  addr_offset, None, &rifmux.groups);
                 }
                 self.write_table_footer(TableKind::Rifmux);
                 self.set_comp(rifmux.deref().into(), true);
@@ -238,7 +282,7 @@ pub trait GeneratorDoc : GeneratorBase {
         let data_w = ((rif.data_width+3)>>2) as usize;
         let is_public = self.core().setting.privacy.is_public();
         // Extract a base address if there is only one
-        let offset = if info.len() == 1 {info[0].0} else {0};
+        let offset = if info.len() == 1 {info[0].0} else {0} + self.setting().addr_offset;
         let addr_col = if info.len() > 1 {CellKind::Offset} else {CellKind::Addr};
         if info.len() > 1 {
             self.add_rif_summary(rif, info);
@@ -306,7 +350,7 @@ pub trait GeneratorDoc : GeneratorBase {
         let data_w = ((rif.data_width+3)>>2) as usize;
         let is_public = self.core().setting.privacy.is_public();
         let addr_col = if base_addr.is_none() {CellKind::Offset} else {CellKind::Addr};
-        let offset = base_addr.unwrap_or(0);
+        let offset = base_addr.unwrap_or(0) + self.setting().addr_offset;
         let reg_headers = [addr_col, CellKind::Inst, CellKind::Reset, CellKind::Desc];
         let inst_dict = InstDict::new(&rif.pages, is_public);
         self.write_reg_detail_header(rif);

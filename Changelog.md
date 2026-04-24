@@ -1,15 +1,21 @@
 # Change Log
 
 
-## [0.21.9] - 2026-04-24
+## [0.22.0] - 2026-04-25
 
 ### Fix
-  - Generator HW: Fix interrupt_en field array
+  - Generator HW:
+    * Fix interrupt_en field array
+    * Fix interrupt_en/mask decode signal not being declared in some conditions
+  - CLI: argiment py_class was ignored
 
 ### Added
-  - CLI: parameters value can now be given in hexa (0x..) or binary (0b..) format
   - Add warning when finding extra character after a registter interrupt definiion (likely wrong format)
+  - Add optional address offset in documentation generator (`doc_base_offset` in config file or at command-line)
+  - CLI: parameters value can now be given in hexa (0x..) or binary (0b..) format
 
+### Internal
+  - GeneratorBaseSetting now created based on the config structure to avoid long list of argument
 
 ## [0.21.8] - 2026-04-21
 
