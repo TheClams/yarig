@@ -2,8 +2,9 @@ use std::ops::Deref;
 
 use crate::{
     comp::comp_inst::{val_str, Comp, CompInst, RifInst, RifRegInst, RifmuxGroupInst},
+    error::RifGenError,
     parser::remove_rif,
-    rifgen::{EnumDef, FieldSwKind, ResetVal}
+    rifgen::{EnumDef, FieldSwKind, ResetVal},
 };
 
 use super::gen_common::{GeneratorBase, InstDict, RifInstInfo, RifList, Skippable};
@@ -142,7 +143,7 @@ pub trait GeneratorDoc : GeneratorBase {
     const SHOW_UNUSED : bool = false;
 
     /// Main generator function
-    fn gen_all(&mut self, obj: &Comp) -> Result<(), Box<dyn std::error::Error>> {
+    fn gen_all(&mut self, obj: &Comp) -> Result<(), RifGenError> {
         //
         self.write_header(remove_rif(obj.get_name()));
         let filename;

@@ -3,8 +3,9 @@ use std::{collections::{BTreeMap, BTreeSet}, fs::File, io::Write, path::PathBuf,
 use crate::{
     cfg::CfgPy,
     comp::comp_inst::{RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxInst},
+    error::RifGenError,
     parser::remove_rif,
-    rifgen::{Description, EnumDef, EnumEntry}
+    rifgen::{Description, EnumDef, EnumEntry},
 };
 
 use super::{
@@ -124,7 +125,7 @@ impl GeneratorSw for GeneratorPy {
     }
 
     /// Create the regmap.py containing base class if not defined in another python module
-    fn create_resource(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn create_resource(&mut self) -> Result<(), RifGenError> {
         let dir = self.setting().path("", false);
         // Create output directory if it does not exist
         if !dir.exists() {

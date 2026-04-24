@@ -1,7 +1,10 @@
 use std::{collections::HashMap, ops::Deref, path::PathBuf, str::FromStr};
 
 use crate::{
-    cfg::{RifGenTarget, YarigCfg}, comp::comp_inst::{Comp, RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxInst}, parser::remove_rif
+    cfg::{RifGenTarget, YarigCfg},
+    comp::comp_inst::{Comp, RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxInst},
+    error::RifGenError,
+    parser::remove_rif,
 };
 
 use super::casing::{Casing, ToCasing};
@@ -392,7 +395,7 @@ impl GeneratorCore {
     }
 
     /// Save the main text to a file
-    pub fn save(&mut self, filename: &str, is_top: bool) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn save(&mut self, filename: &str, is_top: bool) -> Result<(), RifGenError> {
         let dir = self.setting.path(&self.comp.name, is_top);
         // Create output directory if it does not exist
         std::fs::create_dir_all(dir.clone())?;
@@ -500,7 +503,7 @@ pub trait GeneratorBase {
     }
 
     /// Save the main buffer into a file and clear buffer and stash
-    fn save(&mut self, filename: &str, is_top: bool) -> Result<(), Box<dyn std::error::Error>> {
+    fn save(&mut self, filename: &str, is_top: bool) -> Result<(), RifGenError> {
         self.core_mut().save(filename, is_top)
     }
 

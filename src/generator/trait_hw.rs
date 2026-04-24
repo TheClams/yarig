@@ -1,11 +1,16 @@
 use std::{collections::HashSet, ops::Deref};
 
 use crate::{
-    cfg::{RtlLimit, RtlLimitCfg}, comp::{
+    cfg::{RtlLimit, RtlLimitCfg},
+    comp::{
         comp_inst::{Comp, CompInst, RifInst, RifmuxInst},
         hw_info::{PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalInfo, SignalKind}
-    }, parser::parser_expr::ParamValues, rifgen::{
-        Access, CastInfo, ClkEn, ClockingInfo, EnumEntry, EnumKind, ExprId, ExternalKind, FieldHwKind, FieldSwKind, GenericRange, Interface, InterruptClr, InterruptRegKind, InterruptTrigger, LimitValue, LogicExpr, RegPulseKind, ResetDef, SignalRange, order_dict::OrderDict}
+    },
+    error::RifGenError,
+    parser::parser_expr::ParamValues,
+    rifgen::{
+        Access, CastInfo, ClkEn, ClockingInfo, EnumEntry, EnumKind, ExprId, ExternalKind, FieldHwKind, FieldSwKind, GenericRange, Interface, InterruptClr, InterruptRegKind, InterruptTrigger, LimitValue, LogicExpr, RegPulseKind, ResetDef, SignalRange, order_dict::OrderDict,
+    },
 };
 
 use super::{
@@ -34,7 +39,7 @@ pub trait GeneratorHw : GeneratorBase {
     fn write_file_header(&mut self) {}
 
 	/// Main generator function
-    fn gen_all(&mut self, obj: &Comp) -> Result<(), Box<dyn std::error::Error>> {
+    fn gen_all(&mut self, obj: &Comp) -> Result<(), RifGenError> {
         // Call relevant generator (Rif or Rifmux)
         match obj {
             Comp::Rif(rif) => {
@@ -71,7 +76,7 @@ pub trait GeneratorHw : GeneratorBase {
     }
 
     /// Generate package containing enum, type and and structure definition
-    fn gen_rif_pkg(&mut self, rif: &RifInst) -> Result<(), Box<dyn std::error::Error>> {
+    fn gen_rif_pkg(&mut self, rif: &RifInst) -> Result<(), RifGenError> {
     	let rif_name = self.casing(&rif.name(true));
         self.write_file_header();
         self.write_rif_pkg_header(rif);
@@ -320,7 +325,7 @@ pub trait GeneratorHw : GeneratorBase {
     }
 
     /// Generate RIF module
-    fn gen_rif(&mut self, rif: &RifInst) -> Result<(), Box<dyn std::error::Error>> {
+    fn gen_rif(&mut self, rif: &RifInst) -> Result<(), RifGenError> {
         let rif_name = self.casing(&rif.name(false));
         let rif_pkg_name = self.casing(&rif.name(true));
         let hw_clk = rif.hw_clocking.first().unwrap_or(&rif.sw_clocking);
@@ -1706,7 +1711,7 @@ pub trait GeneratorHw : GeneratorBase {
     }
 
     /// Generate RIFmux package (define address constant for each RIF instance)
-    fn gen_rifmux_pkg(&mut self, rifmux: &RifmuxInst) -> Result<(), Box<dyn std::error::Error>> {
+    fn gen_rifmux_pkg(&mut self, rifmux: &RifmuxInst) -> Result<(), RifGenError> {
         let name_len = rifmux.components.iter().map(|c| c.get_name().len()).max().unwrap_or(0);
         self.write_file_header();
         self.write_rifmux_pkg_header(rifmux);
@@ -1735,7 +1740,7 @@ pub trait GeneratorHw : GeneratorBase {
     }
 
     /// Generate RIFmux module
-    fn gen_rifmux(&mut self, rifmux: &RifmuxInst) -> Result<(), Box<dyn std::error::Error>> {
+    fn gen_rifmux(&mut self, rifmux: &RifmuxInst) -> Result<(), RifGenError> {
         let rifmux_name = self.casing(&rifmux.type_name);
         let name_len = rifmux.components.iter().map(|c| c.get_name().len()).max().unwrap_or(0);
         self.set_comp(rifmux.into(), true);
@@ -1909,7 +1914,7 @@ pub trait GeneratorHw : GeneratorBase {
         self.write_assign(("if_rif",name).into(),rhs);
     }
 
-    fn gen_riftop(&mut self, rifmux: &RifmuxInst) -> Result<(), Box<dyn std::error::Error>> {
+    fn gen_riftop(&mut self, rifmux: &RifmuxInst) -> Result<(), RifGenError> {
         let Some(riftop) = &rifmux.top else { return Ok(())};
         let riftop_name = self.casing(&riftop.name);
 

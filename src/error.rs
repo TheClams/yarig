@@ -226,3 +226,42 @@ impl From<RifError> for String {
         format!("{value}")
     }
 }
+
+/// Errors from code generation (I/O, validation, and other generator failures).
+#[derive(Debug)]
+pub enum RifGenError {
+    /// File or directory I/O failure while writing generated output
+    Io(std::io::Error),
+    /// Message describing a generation failure
+    Msg(String),
+}
+
+impl From<std::io::Error> for RifGenError {
+    fn from(e: std::io::Error) -> Self {
+        RifGenError::Io(e)
+    }
+}
+
+impl From<String> for RifGenError {
+    fn from(s: String) -> Self {
+        RifGenError::Msg(s)
+    }
+}
+
+impl std::error::Error for RifGenError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            RifGenError::Io(e) => Some(e),
+            RifGenError::Msg(_) => None,
+        }
+    }
+}
+
+impl Display for RifGenError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RifGenError::Io(e) => write!(f, "{e}"),
+            RifGenError::Msg(s) => f.write_str(s),
+        }
+    }
+}

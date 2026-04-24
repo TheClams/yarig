@@ -1098,3 +1098,24 @@ pub fn get_rif<'a,T>(dict: &'a HashMap<String,T>, key: &'a str) -> Option<&'a T>
     // println!("[get_rif] Unable to find {} in {:?}", key, dict.keys().collect::<Vec<&String>>());
     None
 }
+
+/// Try to find a rif name in a Hashmap, by checking the name, name_rif and rif_name
+pub fn get_rif_mut<'a,T>(dict: &'a mut HashMap<String,T>, key: &'a str) -> Option<&'a mut T> {
+    if dict.contains_key(key) {
+        return dict.get_mut(key);
+    }
+    for i in 0..4 {
+        let k  = match i {
+            0 => key.to_owned() + "_rif",
+            1 => key.to_owned() + "_rif_mux",
+            2 => "rif_".to_owned() + key,
+            _ => "rif_mux_".to_owned() + key,
+        };
+        if dict.contains_key(&k) {
+            return dict.get_mut(&k);
+        }
+    }
+    // Everything failed ? return None
+    // println!("[get_rif] Unable to find {} in {:?}", key, dict.keys().collect::<Vec<&String>>());
+    None
+}

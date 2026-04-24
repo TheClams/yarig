@@ -2,7 +2,9 @@ use std::ops::Deref;
 
 use crate::{
     comp::comp_inst::{Comp, RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxGroupInst, RifmuxInst},
-    parser::remove_rif, rifgen::{Access, Description, EnumDef, EnumEntry}
+    error::RifGenError,
+    parser::remove_rif,
+    rifgen::{Access, Description, EnumDef, EnumEntry},
 };
 
 use super::{
@@ -52,7 +54,7 @@ pub trait GeneratorSw : GeneratorBase {
     const INTR_VARIANT_DECL : bool = false;
 
     /// Main generator function
-    fn gen_all(&mut self, obj: &Comp) -> Result<(), Box<dyn std::error::Error>> {
+    fn gen_all(&mut self, obj: &Comp) -> Result<(), RifGenError> {
         // Create resource file if needed
         self.create_resource()?;
         // Dispatch generator: RIF or rifmux
@@ -81,12 +83,12 @@ pub trait GeneratorSw : GeneratorBase {
     }
 
     /// Create base resource related to the generator
-    fn create_resource(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn create_resource(&mut self) -> Result<(), RifGenError> {
         Ok(())
     }
 
     /// Generate structure associated to a RIF
-    fn gen_rif(&mut self, rif: &RifInst, base_addr: Option<u64>) -> Result<(), Box<dyn std::error::Error>> {
+    fn gen_rif(&mut self, rif: &RifInst, base_addr: Option<u64>) -> Result<(), RifGenError> {
         self.set_rif_info(rif);
         self.write_rif_header(rif, base_addr);
         let rif_name = remove_rif(&rif.type_name);
@@ -324,7 +326,7 @@ pub trait GeneratorSw : GeneratorBase {
     fn write_reginst_unused(&mut self, basename: &str, addr: u64, span: u64) {}
 
     /// Generate structure associated to a RIFmux
-    fn gen_rifmux(&mut self, rifmux: &RifmuxInst, rif_list: &RifList) -> Result<(), Box<dyn std::error::Error>> {
+    fn gen_rifmux(&mut self, rifmux: &RifmuxInst, rif_list: &RifList) -> Result<(), RifGenError> {
         self.set_comp(rifmux.into(), true);
         let rifmux_list : Vec<&RifmuxInst> = rifmux.components.iter()
             .filter_map(|c| if let Comp::Rifmux(m) = &c.inst {Some(m.deref())} else {None})
@@ -344,7 +346,7 @@ pub trait GeneratorSw : GeneratorBase {
     }
 
     /// Scan rifmux components
-    fn scan_rifmux(&mut self, rifmux: &RifmuxInst, top_name: &str, offset: u64, last_scan : bool) -> Result<(), Box<dyn std::error::Error>> {
+    fn scan_rifmux(&mut self, rifmux: &RifmuxInst, top_name: &str, offset: u64, last_scan : bool) -> Result<(), RifGenError> {
         let prefix = if top_name.is_empty() {
             "".to_owned()
         } else {
