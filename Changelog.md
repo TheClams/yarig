@@ -8,6 +8,7 @@
     * Fix interrupt_en field array
     * Fix interrupt_en/mask decode signal not being declared in some conditions
   - CLI: argiment py_class was ignored
+  - Parameter override through config file or command-line now functionnal for rifmux
 
 ### Added
   - Add warning when finding extra character after a registter interrupt definiion (likely wrong format)
@@ -16,6 +17,7 @@
 
 ### Internal
   - GeneratorBaseSetting now created based on the config structure to avoid long list of argument
+  - Generator: all methods now use a `RifGenError` type instead of a `Box<dyn Error>`
 
 ## [0.21.8] - 2026-04-21
 

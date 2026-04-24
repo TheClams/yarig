@@ -57,9 +57,15 @@ use serde_derive::Deserialize;
 use std::{collections::HashMap, fs, path::PathBuf, str::FromStr};
 use toml;
 use crate::{
-    cli::RifGenArgs, comp::comp_inst::{Comp, RifFieldInst}, generator::{
-        casing::Casing, gen_adoc::GeneratorAdoc, gen_c::GeneratorC, gen_common::{GeneratorBaseSetting, Skippable}, gen_html::GeneratorHtml, gen_ipxact::GeneratorIpXact, gen_json::GeneratorJson, gen_latex::GeneratorLatex, gen_mif::GeneratorMif, gen_py::{GeneratorPy, PyVersion}, gen_ral::GeneratorRal, gen_sv::GeneratorSv, gen_svd::GeneratorSvd, gen_vhdl::GeneratorVhdl, trait_doc::GeneratorDoc, trait_hw::GeneratorHw, trait_sw::GeneratorSw
-    }, parser::{ParserCfg, RifGenSrc, RsvdKeywordSel, parser_expr::ParamValues}, rifgen::{Interface, SuffixInfo}
+    cli::RifGenArgs, comp::comp_inst::{Comp, RifFieldInst},
+    generator::{
+        casing::Casing, gen_adoc::GeneratorAdoc, trait_doc::GeneratorDoc, trait_hw::GeneratorHw, trait_sw::GeneratorSw,
+        gen_c::GeneratorC, gen_common::{GeneratorBaseSetting, Skippable}, gen_html::GeneratorHtml,
+        gen_ipxact::GeneratorIpXact, gen_json::GeneratorJson, gen_latex::GeneratorLatex, gen_mif::GeneratorMif, gen_py::{GeneratorPy, PyVersion},
+        gen_ral::GeneratorRal, gen_sv::GeneratorSv, gen_svd::GeneratorSvd, gen_vhdl::GeneratorVhdl,
+    },
+    parser::{ParserCfg, RifGenSrc, RsvdKeywordSel, parser_expr::ParamValues},
+    rifgen::{Interface, SuffixInfo}
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -600,7 +606,7 @@ impl YarigCfg {
             self.c.base_offset = args.c_base_addr_name;
         }
         if args.doc_base_offset.is_some() {
-            self.doc_base_offset = args.doc_base_offset.clone();
+            self.doc_base_offset = args.doc_base_offset;
         }
 
         if !args.skip.is_empty() {
@@ -745,7 +751,7 @@ impl YarigCfg {
         self.parameters.iter().for_each(
             |(k,v)| params.insert(k.to_owned(), *v)
         );
-        // if !params.is_empty() {println!("Parameters: {params}");}
+        // Parse RIF file
         let mut rif_path : PathBuf = self.filename.clone().into();
         if !rif_path.exists() && rif_path.is_relative() && let Some(path) = self.path.as_ref() {
             rif_path = [path, &self.filename].iter().collect();
@@ -753,6 +759,7 @@ impl YarigCfg {
         let parser_cfg = ParserCfg::new(self.keywords, self.auto_legacy);
         let rif_src = RifGenSrc::from_file(&rif_path, &self.include, &parser_cfg)
             .map_err(|e| format!("Parsing Error : {e}"))?;
+        // Compile
         let mut rif_obj = Comp::compile(&rif_src, &self.suffixes, &params)
             .map_err(|e| format!("Compilation failed: {e}"))?;
         // Handle case where suffixes are enabled only for RTL targets
@@ -766,7 +773,7 @@ impl YarigCfg {
             rif_obj.set_interface(intf);
         }
         //
-        let base_setting = GeneratorBaseSetting::new(&self);
+        let base_setting = GeneratorBaseSetting::new(self);
         for target in self.targets.iter() {
             let mut setting = base_setting.clone();
             let out = self.get_output_path(target);

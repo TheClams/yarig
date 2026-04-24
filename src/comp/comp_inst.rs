@@ -1693,7 +1693,13 @@ impl RifmuxInst {
     }
 
     pub fn build(src: &RifGenSrc, inst_name: &str, rifmux: &Rifmux, top_params: &ParamValues, suffixes: &HashMap<String,SuffixInfo>) -> Result<Self, String> {
-        let params = ParamValues::from_items(rifmux.parameters.items())?;
+        // let params = ParamValues::from_items(rifmux.parameters.items())?;
+        let mut params = ParamValues::new();
+        for (k,v) in top_params.items().filter(|(k,_)| !k.contains('.')) {
+            params.insert(k.to_owned(), *v);
+        }
+        params.compile(rifmux.parameters.items())?;
+
         let groups = RifmuxGroupInst::from(&rifmux.groups, &params);
         let mut rm = RifmuxInst::new(inst_name.to_owned(), rifmux, groups);
         let mut inst_addr = InstAddr::new(0);

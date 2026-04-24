@@ -228,6 +228,7 @@ This trait is used by the generators for AsciiDoc, HTML, Latex and Mif (FrameMak
   - [ ] Option to control if clear works without clock enable or not
   - [ ] SV Generator: use SV interface for non-default case with option to control the interface type name
   - [x] Add option to hardware generator to generate limit either as hardware error or simulation assert
+  - [ ] Add test for setting parameters through hierarchy (e.g. top.block1.subblock.name) from the config file or command line (currently generate a warning)
   - [ ] Support bridges with parameters (other than dimension): propagate extra parameters to the RIF instance and
   - [ ] Support register array simulatenously in definition and instance (i.e. an array of array...)
   - [ ] Support byte mask on interface (TBD if really needed)

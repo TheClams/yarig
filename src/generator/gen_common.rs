@@ -110,7 +110,7 @@ impl FromStr for Skippable {
         let s_lc = s.to_lowercase();
         match s_lc.as_str() {
             "riftitle" | "rif_title" => Ok(Skippable::RifTitle),
-            "rifmuxtitle" | "rif_muxtitle" => Ok(Skippable::RifmuxTitle),
+            "rifmuxtitle" | "rifmux_title" | "rif_muxtitle" => Ok(Skippable::RifmuxTitle),
             _ => Err("Invalid skippable element".to_owned()),
         }
     }
