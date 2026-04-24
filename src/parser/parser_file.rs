@@ -501,6 +501,10 @@ impl RifGenSrc {
                         },
                         Context::Interrupt => {
                             let info = reg_interrupt(&mut l)?;
+                            if !l.trim().is_empty() {
+                                // return Err(RifError::unsupported(Context::Interrupt, &format!("Invalid characters: '{l}'")));
+                                eprintln!("[WARNING] Ignoring extra chracter '{l}' in interrupt definition of {}", self.last_reg().name);
+                            }
                             self.last_reg_mut().interrupt.push(InterruptInfo::new("", info));
                         },
                         Context::InterruptAlt => {

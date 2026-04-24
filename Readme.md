@@ -227,7 +227,8 @@ This trait is used by the generators for AsciiDoc, HTML, Latex and Mif (FrameMak
     - [ ] Add C function for conversion to/from float/int ? Would need to add option to the generator allowing to disable the feature, use int, float or double as the representation type
   - [ ] Option to control if clear works without clock enable or not
   - [ ] SV Generator: use SV interface for non-default case with option to control the interface type name
-  - [ ] Add option to hardware generator to generate limit either as hardware error or simulation assert
+  - [x] Add option to hardware generator to generate limit either as hardware error or simulation assert
+  - [ ] Support bridges with parameters (other than dimension): propagate extra parameters to the RIF instance and
   - [ ] Support register array simulatenously in definition and instance (i.e. an array of array...)
   - [ ] Support byte mask on interface (TBD if really needed)
 

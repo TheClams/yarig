@@ -42,13 +42,13 @@ pub trait GeneratorSw : GeneratorBase {
     const INC_PAGENAME : bool = false;
     /// Create only one register instance per array (false to create instance per element)
     const INST_ARRAY : bool = false;
-    /// True when trget support field array. False to split field array into individual field for each element of the array
+    /// True when target support field array. False to split field array into individual field for each element of the array
     const FIELD_ARRAY : bool = false;
     /// Instantiate rifmux instead of flatenning all rifs instance
     const IS_HIERARCHICAL : bool = false;
     /// Create register type declaration before register instance
     const HAS_REG_DECL : bool = true;
-    /// Create register type decalration for each variant of interrupts
+    /// Create register type declaration for each variant of interrupts
     const INTR_VARIANT_DECL : bool = false;
 
     /// Main generator function

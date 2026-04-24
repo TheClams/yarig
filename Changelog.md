@@ -8,6 +8,7 @@
 
 ### Added
   - CLI: parameters value can now be given in hexa (0x..) or binary (0b..) format
+  - Add warning when finding extra character after a registter interrupt definiion (likely wrong format)
 
 
 ## [0.21.8] - 2026-04-21

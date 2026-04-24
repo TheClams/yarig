@@ -39,7 +39,7 @@
 //! ```
 //!
 //! For detailed configuration options, see the
-//! [configuration documentation](https://github.com/TheClams/rifgen/blob/dev/doc/config.md).
+//! [configuration documentation](https://github.com/TheClams/yarig/blob/dev/doc/config.md).
 //!
 //! # Supported Targets
 //!

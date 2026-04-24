@@ -963,9 +963,7 @@ impl RifRegInst {
                     r.base_description = info.1.no_dollar();
                     r.description = info.1.interpolate(idx.into());
                 }
-                if kind.is_pending() {
-                    r.sw_access = Access::RO;
-                }
+                r.sw_access = if kind.is_pending() {Access::RO} else {Access::RW};
                 r.hw_access = Access::NA;
                 r.reset = info.0.compile(false, 0, &rifs.params, None)?.to_u128(128);
                 for f in r.fields.iter_mut() {
