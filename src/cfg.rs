@@ -120,6 +120,26 @@ impl From<&str> for RifGenTarget {
     }
 }
 
+impl RifGenTarget {
+    /// Return true for documentation target
+    pub fn is_doc(&self) -> bool {
+        use RifGenTarget::*;
+        matches!(self, Html | Latex | Mif | Json | Adoc)
+    }
+
+    /// Return true for software target
+    pub fn is_sw(&self) -> bool {
+        use RifGenTarget::*;
+        matches!(self, Ral | C | Py | Svd | IpXact)
+    }
+
+    /// Return true for hardware target
+    pub fn is_hw(&self) -> bool {
+        use RifGenTarget::*;
+        matches!(self, Sv | Vhdl)
+    }
+}
+
 impl std::fmt::Display for RifGenTarget {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -371,6 +391,8 @@ pub struct CfgLatex {
 pub struct CfgC {
     /// Name of base address offset (default to PERIPH_BASE_ADDR)
     pub base_offset: Option<String>,
+    /// Prefix C pointer for the top RifMux
+    pub prefix_top_ptr: Option<String>,
     /// List of included reference to generate (use ["*"] for all)
     pub gen_inc: Option<Vec<String>>,
     /// List of included reference which must be generated locally (use ["*"] to match all component in the gen_inc definition)
@@ -584,6 +606,9 @@ impl YarigCfg {
         // Clear target if check is enabled and override target if at least one is defined on the command-line
         if args.check {self.targets.clear();}
         else if !args.targets.is_empty() {self.targets = args.targets.to_owned()};
+
+        if args.ral_base_class.is_some() {self.ral.class = args.ral_base_class;}
+        if args.ral_block_macro.is_some() {self.ral.macro_name = args.ral_block_macro;}
         //
         if !args.parameters.is_empty() {self.parameters.extend(args.parameters)};
         if let Some(suffix) = args.suffix {self.suffixes.insert("".to_owned(), suffix);};
@@ -604,6 +629,9 @@ impl YarigCfg {
 
         if args.c_base_addr_name.is_some() {
             self.c.base_offset = args.c_base_addr_name;
+        }
+        if args.c_prefix_top_ptr.is_some() {
+            self.c.prefix_top_ptr = args.c_prefix_top_ptr;
         }
         if args.doc_base_offset.is_some() {
             self.doc_base_offset = args.doc_base_offset;

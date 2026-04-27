@@ -20,6 +20,8 @@ pub struct GeneratorC {
     max_len_reg_type : usize,
     /// Name for base address of each component
     base_addr_name: String,
+    /// Prefix for C pointer when at the top
+    prefix_top_ptr: String,
     /// Flag overlapping register
     overlap: bool
 }
@@ -32,9 +34,11 @@ impl GeneratorC {
         if let Some(gen_inc) = extra.gen_inc {
             core.setting.gen_inc = gen_inc;
         }
+        let prefix_top_ptr = if let Some(prefix) = extra.prefix_top_ptr {format!("{prefix}_")} else {"".to_owned()};
         GeneratorC {
             core,
             base_addr_name : extra.base_offset.unwrap_or("PERIPH_BASE_ADDR".to_owned()),
+            prefix_top_ptr,
             max_len_field_name : 0,
             max_len_reg_name : 0,
             max_len_reg_type : 0,
@@ -277,8 +281,9 @@ impl GeneratorSw for GeneratorC {
             base_addr_name.push_str(cntxt.group);
         }
         let inst_name = remove_rif(&rif_inst.inst_name);
-        let mut name_tt = format!("{}{inst_name}", cntxt.prefix).to_casing(Casing::Title);
-        let mut name = format!("{}{}", cntxt.prefix, &inst_name.replace('_', ""));
+        let prefix = if cntxt.prefix.is_empty() {&self.prefix_top_ptr} else {cntxt.prefix};
+        let mut name_tt = format!("{prefix}{inst_name}").to_casing(Casing::Title);
+        let mut name = format!("{prefix}{}", &inst_name.replace('_', ""));
         let mut page_type = remove_rif(&rif_inst.type_name).to_lowercase();
         if self.comp().cnt > 1 {
             name.push_str(&cntxt.page.replace('_', ""));

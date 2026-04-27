@@ -82,6 +82,9 @@ pub struct RifGenArgs{
     /// C macro name defining the base address of the top level
     #[arg(long)]
     pub c_base_addr_name: Option<String>,
+    /// Prefix C pointer for the top RifMux
+    #[arg(long)]
+    pub c_prefix_top_ptr: Option<String>,
     /// Base address offset in documentation
     #[arg(long, value_parser=parse_usize)]
     pub doc_base_offset: Option<usize>,
@@ -96,10 +99,10 @@ pub struct RifGenArgs{
     pub py_init_file: Option<bool>,
     /// Base class for RAL target
     #[arg(long)]
-    pub ral_class: Option<String>,
+    pub ral_base_class: Option<String>,
     /// Name of macro to create RAL register block
     #[arg(long)]
-    pub ral_macro: Option<String>,
+    pub ral_block_macro: Option<String>,
     /// Add constant in RTL package for registers (address/reset)
     #[arg(long, action)]
     pub rtl_const_reg: bool,
