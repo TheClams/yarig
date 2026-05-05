@@ -1,6 +1,12 @@
 # Change Log
 
 
+## [0.22.2] - 2026-05-05
+
+### Added
+  - Syntax: parameters value in a a RIF instance can now use parameters name defined in the RIF Mux
+  - Generator C: option to set the top prefix used in pointer macro (prefix_top_ptr in the config file)
+
 ## [0.22.0] - 2026-04-25
 
 ### Fix

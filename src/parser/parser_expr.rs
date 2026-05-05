@@ -465,8 +465,6 @@ impl From<ExprError> for String {
 #[derive(Clone, Debug)]
 pub struct ParamValues(OrderDict<String,isize>);
 
-
-
 impl ParamValues {
 
     pub fn new() -> Self {
@@ -513,6 +511,14 @@ impl ParamValues {
 
     pub fn items(&self) -> impl Iterator<Item=(&String,&isize)> {
         self.0.items()
+    }
+
+    pub fn keys(&self) -> impl Iterator<Item=&String> {
+        self.0.keys()
+    }
+
+    pub fn del_key(&mut self, key: &String) {
+        self.0.del_key(key);
     }
 
     #[allow(dead_code)]

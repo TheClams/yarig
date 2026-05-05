@@ -328,9 +328,16 @@ pub struct RifInst {
 impl RifInst {
     pub fn new(name: &str, rif: &Rif, top_params: &ParamValues, rifs: &HashMap<String, Rif>, description: Description, suffix: Option<SuffixInfo>) -> Result<Self, String> {
         let addr_incr = rif.data_width.nb_byte(); // Address align in byte
+        // println!("[RifInst] Params in {} | Top={:?}, local={:?}",
+        //     rif.name,
+        //     top_params.items().collect::<Vec<_>>(),
+        //     rif.parameters.items().collect::<Vec<_>>(),
+        // );
         let mut params = top_params.clone();
         params.compile(rif.parameters.items())?;
-        // if !params.is_empty() {println!("{} : {}", rif.name, params);}
+        for k in top_params.keys().filter(|k| !rif.parameters.contains_key(*k)) {
+            params.del_key(k);
+        }
         // Build a list of all enum definition, checking potential included file
         let mut enum_defs : EnumDefs = rif.enum_defs.clone().into();
         for page in rif.pages.iter() {
@@ -1699,7 +1706,7 @@ impl RifmuxInst {
             params.insert(k.to_owned(), *v);
         }
         params.compile(rifmux.parameters.items())?;
-
+        // println!("[RifmuxInst] {} params = {:?}", rifmux.name, params.items().collect::<Vec<_>>());
         let groups = RifmuxGroupInst::from(&rifmux.groups, &params);
         let mut rm = RifmuxInst::new(inst_name.to_owned(), rifmux, groups);
         let mut inst_addr = InstAddr::new(0);
@@ -1721,7 +1728,8 @@ impl RifmuxInst {
             if addr >= (1 << rifmux.addr_width) {
                 return Err(format!("Address of {inst_name} = 0x{:0x} out of range ({}b)", addr, rifmux.addr_width));
             }
-            let mut i_params = ParamValues::new();
+            // let mut i_params = ParamValues::new();
+            let mut i_params = params.clone();
             for (k,v) in top_params.items() {
                 let mut ks = k.split('.');
                 if ks.next() == Some(&i.name) {
