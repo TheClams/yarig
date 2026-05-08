@@ -1,6 +1,11 @@
 # Change Log
 
 
+## [0.22.3] - 2026-05-08
+
+### Fix
+  - Generator C: top prefix [propagates to sub-leve ]
+
 ## [0.22.2] - 2026-05-05
 
 ### Added

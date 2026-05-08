@@ -281,7 +281,10 @@ impl GeneratorSw for GeneratorC {
             base_addr_name.push_str(cntxt.group);
         }
         let inst_name = remove_rif(&rif_inst.inst_name);
-        let prefix = if cntxt.prefix.is_empty() {&self.prefix_top_ptr} else {cntxt.prefix};
+        let mut prefix = self.prefix_top_ptr.clone();
+        if !cntxt.prefix.is_empty() {
+            prefix.push_str(cntxt.prefix)
+        }
         let mut name_tt = format!("{prefix}{inst_name}").to_casing(Casing::Title);
         let mut name = format!("{prefix}{}", &inst_name.replace('_', ""));
         let mut page_type = remove_rif(&rif_inst.type_name).to_lowercase();
