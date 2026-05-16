@@ -3,7 +3,7 @@ use std::{collections::HashSet, ops::Deref};
 use crate::{
     cfg::{RtlLimit, RtlLimitCfg},
     comp::{
-        comp_inst::{Comp, CompInst, RifInst, RifmuxInst},
+        comp_inst::{Comp, CompInst, FieldWidth, RifInst, RifmuxInst},
         hw_info::{PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalInfo, SignalKind}
     },
     error::RifGenError,
@@ -107,7 +107,7 @@ pub trait GeneratorHw : GeneratorBase {
             // Iterate over all register fields to add them in the structs
             for f in hw_reg.fields.iter() {
                 // Create signal declaration
-                let width = if f.sw_kind.is_password() {1} else {f.width};
+                let width = if f.sw_kind.is_password() {1} else {f.width()};
                 let name = f.name.to_casing(Snake);
                 let Some(ctrl) = hw_reg.regs_ctrl.get(f.ctrl_idx) else {
                     return Err(format!("Field {}.{name} points to ctrl {} but max is {}",hw_reg.name, f.ctrl_idx, hw_reg.regs_ctrl.len()).into())
@@ -272,7 +272,7 @@ pub trait GeneratorHw : GeneratorBase {
                 for f in reg.fields.iter() {
                     let fieldname = f.name_flat().to_uppercase();
                     let decl  = SignalDef::new_bus(format!("C_MSK_{base}_{fieldname}  "), rif.data_width.into(), false);
-                    let value = LogicExpr::ValueU((1_u128<<f.width).wrapping_sub(1), rif.data_width.into());
+                    let value = LogicExpr::ValueU((1_u128<<f.width()).wrapping_sub(1), rif.data_width.into());
                     self.write_const(&decl.into(), value);
                     let decl  = SignalDef::new_int(format!("C_IL_{base}_{fieldname}   "));
                     let value = LogicExpr::ValueU(f.lsb.into(), 8);
@@ -280,11 +280,11 @@ pub trait GeneratorHw : GeneratorBase {
                     let decl  = SignalDef::new_int(format!("C_IH_{base}_{fieldname}   "));
                     let value = LogicExpr::ValueU(f.msb().into(), 8);
                     self.write_const(&decl.into(), value);
-                    let decl  = SignalDef::new_bus(format!("C_RESET_{base}_{fieldname}"), f.width.into(), f.is_signed());
+                    let decl  = SignalDef::new_bus(format!("C_RESET_{base}_{fieldname}"), f.width(), f.is_signed());
                     let value = if f.is_signed() {
-                        LogicExpr::ValueI(f.reset(None) as i128, f.width.into())
+                        LogicExpr::ValueI(f.reset(None) as i128, f.width().into())
                     } else {
-                        LogicExpr::ValueU(f.reset(None), f.width.into())
+                        LogicExpr::ValueU(f.reset(None), f.width().into())
                     };
                     self.write_const(&decl.into(), value);
                 }
@@ -535,33 +535,32 @@ pub trait GeneratorHw : GeneratorBase {
                         // Add next signal for each field
                         for f in hw_reg_def.fields.iter() {
                             let f_name = self.casing(&f.name);
-                            let w = f.width + (if f.is_counter() {1} else {0});
                             if f.array == 0 {
                                 self.write_signal_decl(&SignalDef::new_bus(
-                                    format!("{name}{idx}_{f_name}__cleared"), f.width, false).into());
+                                    format!("{name}{idx}_{f_name}__cleared"), f.width(), false).into());
                                 self.write_signal_decl(&SignalDef::new_bus(
-                                    format!("{name}{idx}_{f_name}__next"), f.width, false).into());
+                                    format!("{name}{idx}_{f_name}__next"), f.width(), false).into());
                                 if intr_info.enable.is_some() {
                                     self.write_signal_decl(&SignalDef::new_bus(
-                                        format!("{name}{idx}_en_{f_name}__next"), f.width, false).into());
+                                        format!("{name}{idx}_en_{f_name}__next"), f.width(), false).into());
                                 }
                                 if intr_info.mask.is_some() {
                                     self.write_signal_decl(&SignalDef::new_bus(
-                                        format!("{name}{idx}_mask_{f_name}__next"), f.width, false).into());
+                                        format!("{name}{idx}_mask_{f_name}__next"), f.width(), false).into());
                                 }
                             } else {
                                 for fi in 0..f.array {
                                     self.write_signal_decl(&SignalDef::new_bus(
-                                        format!("{name}{idx}_{f_name}{fi}__cleared"), f.width, false).into());
+                                        format!("{name}{idx}_{f_name}{fi}__cleared"), f.width(), false).into());
                                     self.write_signal_decl(&SignalDef::new_bus(
-                                        format!("{name}{idx}_{f_name}{fi}__next"), f.width, false).into());
+                                        format!("{name}{idx}_{f_name}{fi}__next"), f.width(), false).into());
                                     if intr_info.enable.is_some() {
                                         self.write_signal_decl(&SignalDef::new_bus(
-                                            format!("{name}{idx}_en_{f_name}{fi}__next"), f.width, false).into());
+                                            format!("{name}{idx}_en_{f_name}{fi}__next"), f.width(), false).into());
                                     }
                                     if intr_info.mask.is_some() {
                                         self.write_signal_decl(&SignalDef::new_bus(
-                                            format!("{name}{idx}_mask_{f_name}{fi}__next"), f.width, false).into());
+                                            format!("{name}{idx}_mask_{f_name}{fi}__next"), f.width(), false).into());
                                     }
                                 }
                             }
@@ -587,7 +586,7 @@ pub trait GeneratorHw : GeneratorBase {
                     }
                     let mut sig_kind = SignalKind::from_field(f, pkg_base, &group_name);
                     if f.is_counter() {
-                        sig_kind.set_width(f.width+1);
+                        sig_kind.set_width(f.width()+1);
                     }
                     // Check if force limit is enabled and the register did not have yet a limit
                     let has_forced_limit = limit_cfg.1 == RtlLimit::Hardware && f.enum_kind.is_type() && f.limit.is_none() && f.is_sw_write();
@@ -837,6 +836,7 @@ pub trait GeneratorHw : GeneratorBase {
         // Register process
         self.write_comment_box("Registers");
         let mut group_done : HashSet<String> = HashSet::with_capacity(rif.hw_regs.len());
+        let mut cond_assign : Vec<ExprId> = Vec::new(); // Vector of conditional assign to handle fields with parameterized width
         for page in rif.pages.iter().filter(|p| p.external.is_none()) {
             for reg in page.regs.iter() {
                 let reg_impl = rif.get_hw_reg(&reg.group_type);
@@ -857,6 +857,7 @@ pub trait GeneratorHw : GeneratorBase {
                 if let Some((opt,_)) = &reg.optional {
                     self.write_generate_if(opt.to_owned(), format!("gen_reg_{reg_name}"));
                 }
+                cond_assign.clear();
                 for field in reg.fields.iter() {
                     let field_impl = reg_impl.get_field(&field.name)?;
                     let partial  = field.to_range(reg_def_idx,false);
@@ -873,24 +874,34 @@ pub trait GeneratorHw : GeneratorBase {
                     };
                     let field_cast = field_impl.hdl_cast(&rif_pkg_name, &reg.reg_type);
                     let field_next_id = ExprId::new_range(format!("{reg_field_name}__next"), partial.clone());
-                    let field_reset = LogicExpr::reset(&field.reset, field.width);
+                    let field_reset = LogicExpr::reset(&field.reset, field.width() as u8);
                     let reset_expr = if field_cast.is_custom() {
                         LogicExpr::Cast(field_cast.clone(), Box::new(field_reset))
                     } else {
                         field_reset
                     };
+
                     // Constant or Disabled field ? simply assign to its reset value
                     if field_impl.is_constant() || (field.is_disabled() && field.is_sw_write())  {
-                        self.write_assign(field_id, reset_expr);
+                        self.write_assign(field_id.clone(), reset_expr);
+                        // Field with parameterized width
+                        if let FieldWidth::Generic((n,r)) = &field.width {
+                            cond_assign.push(field_id.clone());
+                            self.write_cond_generic_field(&reg_field_name, n.as_ref(), r, &cond_assign);
+                        }
                         continue;
                     }
 
                     // Construct the field value from the bus with bit selection
                     // For non partial field, add proper casting (signed/enum)
-                    let bus_range = if field.width > 1 {
-                        SignalRange::new(field.lsb, field.msb())
-                    } else {
-                        SignalRange::new_bit(field.lsb)
+                    let bus_range = match &field.width {
+                        FieldWidth::Value(w) => {
+                            if *w==1 {SignalRange::new_bit(field.lsb)}
+                            else {SignalRange::new(field.lsb, field.msb())}
+                        },
+                        FieldWidth::Generic((w,_)) => {
+                            SignalRange::new_gen(w.clone(), field.lsb)
+                        }
                     };
 
                     let wr_data_raw = LogicExpr::Id(ExprId::new_field_range("if_rif".to_owned(), None, "wr_data".to_owned(), Some(bus_range)));
@@ -899,21 +910,22 @@ pub trait GeneratorHw : GeneratorBase {
                         if field_impl.is_partial {CastInfo::None} else {field_cast},
                         Box::new(wr_data_raw));
 
+                    let w = field.width() as u8;
                     // Add logic for field with limit
                     if field.has_limit() || (field.enum_kind.is_type() && limit_cfg.has_force() && field.is_sw_write()) {
                         let check_sig : ExprId = format!("{reg_field_name}__check").into();
                         let limit_value = if field.has_limit() {&field.limit.value} else {&LimitValue::Enum};
                         let check_expr = match limit_value {
-                            LimitValue::Min(v) => LogicExpr::gte(wr_data_l.clone(), LogicExpr::reset(v, field.width)),
-                            LimitValue::Max(v) => LogicExpr::lte(wr_data_l.clone(), LogicExpr::reset(v, field.width)),
+                            LimitValue::Min(v) => LogicExpr::gte(wr_data_l.clone(), LogicExpr::reset(v, w)),
+                            LimitValue::Max(v) => LogicExpr::lte(wr_data_l.clone(), LogicExpr::reset(v, w)),
                             LimitValue::MinMax(min, max) => {
-                                let min_expr = LogicExpr::gte(wr_data_l.clone(), LogicExpr::reset(min, field.width));
-                                let max_expr = LogicExpr::lte(wr_data_l.clone(), LogicExpr::reset(max, field.width));
+                                let min_expr = LogicExpr::gte(wr_data_l.clone(), LogicExpr::reset(min, w));
+                                let max_expr = LogicExpr::lte(wr_data_l.clone(), LogicExpr::reset(max, w));
                                 LogicExpr::and(min_expr, max_expr)
                             },
                             LimitValue::List(l) => {
                                 let v : Vec<LogicExpr> = l.iter()
-                                    .map(|e| LogicExpr::eq(wr_data_l.clone(), LogicExpr::reset(e, field.width)))
+                                    .map(|e| LogicExpr::eq(wr_data_l.clone(), LogicExpr::reset(e, w)))
                                     .collect();
                                 LogicExpr::Or(v)
                             }
@@ -946,7 +958,11 @@ pub trait GeneratorHw : GeneratorBase {
 
                     // For external register combinatorial assign from the interface bus
                     if reg.is_external() && field.is_sw_write() {
-                        self.write_assign(field_id, wr_data);
+                        self.write_assign(field_id.clone(), wr_data);
+                        if let FieldWidth::Generic((n,r)) = &field.width {
+                            cond_assign.push(field_id);
+                            self.write_cond_generic_field(&reg_field_name, n.as_ref(), r, &cond_assign);
+                        }
                         continue;
                     }
 
@@ -962,12 +978,12 @@ pub trait GeneratorHw : GeneratorBase {
                     // Counter event
                     if let Some(info) = field.counter_info() && (info.sat || info.event) {
                         let name = field_id.with_fsuffix("_event");
-                        let next_msb = ExprId::new_idx(format!("{reg_field_name}__next"), (field.width-1) as u16);
+                        let next_msb = ExprId::new_idx(format!("{reg_field_name}__next"), field.width()-1);
                         let event = if field.is_signed() {
-                            let ovfl = next_msb.with_idx(field.width as u16);
+                            let ovfl = next_msb.with_idx(field.width());
                             LogicExpr::neq(ovfl.into(), next_msb.clone().into())
                         } else {
-                            let curr_msb : LogicExpr = field_id.with_range(SignalRange::new_bit(field.width-1)).into();
+                            let curr_msb : LogicExpr = field_id.with_range(SignalRange::new_bit(w)).into();
 
                             let incr = if info.incr_val == 0 {None} else {
                                 Some(LogicExpr::And([
@@ -1013,7 +1029,7 @@ pub trait GeneratorHw : GeneratorBase {
                         let intr_info = reg_impl.intr_info(reg)?;
                         let group_name_base = reg.group_name.to_casing(Snake);
                         // Local signal where interrupt vector is and with the optional enable signals
-                        let intr_l = ExprId::new_field_range(format!("{group_name}_l"), None, field_name.to_owned(), field_range.clone());
+                        let intr_l_id = ExprId::new_field_range(format!("{group_name}_l"), None, field_name.to_owned(), field_range.clone());
                         let mut rhs : LogicExpr = ExprId::new_field_range(group_name_base, None, field_name.to_owned(), field_range.clone()).into();
 
                         if intr_info.enable.is_some() {
@@ -1021,10 +1037,10 @@ pub trait GeneratorHw : GeneratorBase {
                             let en : LogicExpr = ExprId::new_field_range(format!("rif_{group_name}_en"), None, field_name.to_owned(), field_range).into();
                             rhs = LogicExpr::and_b(rhs.clone(), en);
                         }
-                        self.write_assign(intr_l.clone(), rhs);
+                        self.write_assign(intr_l_id.clone(), rhs);
                         // Next interrupt state
-                        let intr_l = LogicExpr::Id(intr_l); // Convert ExprId into LogicExpr
-                        let intr_d1 : LogicExpr = (ExprId::from((format!("{group_name}_d1"), field_name.clone()))).into();
+                        let intr_l = LogicExpr::Id(intr_l_id.clone()); // Convert ExprId into LogicExpr
+                        let intr_d1 = LogicExpr::Id(ExprId::new_field_range(format!("{group_name}_d1"), None, field_name.clone(), partial.clone()));
                         let intr_set : LogicExpr = match field.intr_trig(intr_info.trigger) {
                             InterruptTrigger::High    => intr_l,
                             InterruptTrigger::Low     => LogicExpr::not_b(intr_l),
@@ -1036,7 +1052,7 @@ pub trait GeneratorHw : GeneratorBase {
                         let clr_val = match intr_info.clear {
                             InterruptClr::Read   => {
                                 clr_acc.push(rd_wrn.clone());
-                                LogicExpr::ValueU(0, field.width.into())
+                                LogicExpr::ValueU(0, field.width().into())
                             }
                             InterruptClr::Write0 => {
                                 clr_acc.push(LogicExpr::not(rd_wrn.clone()));
@@ -1051,8 +1067,15 @@ pub trait GeneratorHw : GeneratorBase {
                         let intr_clr = LogicExpr::ite(clr_acc, clr_val, field_id.into());
                         let field_clr_id = ExprId::new_range(format!("{reg_field_name}__cleared"), partial.clone());
                         self.write_assign(field_clr_id.clone(), intr_clr);
-                        let rhs = LogicExpr::or_b(intr_set, field_clr_id.into());
-                        self.write_assign(field_next_id, rhs);
+                        let rhs = LogicExpr::or_b(intr_set, field_clr_id.clone().into());
+                        self.write_assign(field_next_id.clone(), rhs);
+                        // Field with parameterized width
+                        if let FieldWidth::Generic((n,r)) = &field.width {
+                            cond_assign.push(intr_l_id);
+                            cond_assign.push(field_clr_id);
+                            cond_assign.push(field_next_id);
+                            self.write_cond_generic_field(&reg_field_name, n.as_ref(), r, &cond_assign);
+                        }
                         continue;
                     }
 
@@ -1063,7 +1086,11 @@ pub trait GeneratorHw : GeneratorBase {
                             rif_en.clone(),
                             LogicExpr::not(rd_wrn.clone())].to_vec());
                         let rhs = LogicExpr::ite(acc, wr_data, field_id.into());
-                        self.write_assign(field_next_id, rhs);
+                        self.write_assign(field_next_id.clone(), rhs);
+                        if let FieldWidth::Generic((n,r)) = &field.width {
+                            cond_assign.push(field_next_id);
+                            self.write_cond_generic_field(&reg_field_name, n.as_ref(), r, &cond_assign);
+                        }
                         continue;
                     }
 
@@ -1085,7 +1112,7 @@ pub trait GeneratorHw : GeneratorBase {
                         if field.sw_kind.is_pulse() && !field_clken.is_empty() {
                             if_then.push((
                                 LogicExpr::and(field_id.clone().into(), field_clken.clone().into()),
-                                LogicExpr::ValueU(0, field.width.into())
+                                LogicExpr::ValueU(0, field.width().into())
                             ));
                         }
                         // Handle hardware access
@@ -1099,7 +1126,7 @@ pub trait GeneratorHw : GeneratorBase {
                                     FieldHwKind::WriteEn(_)  => if_then.push((ctrl_id, field_sig.clone())),
                                     FieldHwKind::WriteEnL(_) => if_then.push((LogicExpr::not(ctrl_id), field_sig.clone())),
                                     FieldHwKind::Set(_) => {
-                                        let val = if field.width == 1 {
+                                        let val = if field.width() == 1 {
                                             LogicExpr::ValueU(1, 1)
                                         } else {
                                             LogicExpr::or_b(field_id.clone().into(), field_sig.clone())
@@ -1107,7 +1134,7 @@ pub trait GeneratorHw : GeneratorBase {
                                         if_then.push((ctrl_id, val));
                                     },
                                     FieldHwKind::Clear(info) => {
-                                        let val = if field.width == 1 {
+                                        let val = if field.width() == 1 {
                                             LogicExpr::ValueU(0, 1)
                                         } else {
                                             LogicExpr::and_b(field_id.clone().into(), LogicExpr::not_b(field_sig.clone()))
@@ -1115,7 +1142,7 @@ pub trait GeneratorHw : GeneratorBase {
                                         if_then.push((ctrl_id, val));
                                     },
                                     FieldHwKind::Toggle(info) => {
-                                        let val = if field.width == 1 {
+                                        let val = if field.width() == 1 {
                                             LogicExpr::not_b(field_id.clone().into())
                                         } else {
                                             LogicExpr::or_b(field_id.clone().into(), field_sig.clone())
@@ -1145,14 +1172,14 @@ pub trait GeneratorHw : GeneratorBase {
                                 //
                                 FieldSwKind::ReadClr => {
                                     if field.is_signed() {
-                                        LogicExpr::ValueI(0, field.width.into())
+                                        LogicExpr::ValueI(0, field.width().into())
                                     } else {
-                                        LogicExpr::ValueU(0, field.width.into())
+                                        LogicExpr::ValueU(0, field.width().into())
                                     }
                                 }
                                 // Write 1 Clear: set to 0 all bit being 1 in the write data bus
                                 FieldSwKind::W1Clr => {
-                                    if field.width==1 {
+                                    if field.width()==1 {
                                         cond.push(wr_data);
                                         LogicExpr::ValueU(0, 1)
                                     } else {
@@ -1161,7 +1188,7 @@ pub trait GeneratorHw : GeneratorBase {
                                 }
                                 // Write 0 Clear: set to 0 all bit being 0 in the write data bus
                                 FieldSwKind::W0Clr => {
-                                    if field.width==1 {
+                                    if field.width()==1 {
                                         cond.push(LogicExpr::not(wr_data));
                                         LogicExpr::ValueU(0, 1)
                                     } else {
@@ -1171,7 +1198,7 @@ pub trait GeneratorHw : GeneratorBase {
                                 // Write 1 Set or Pulse: set to 1 all bit being 1 in the write data bus
                                 FieldSwKind::W1Set |
                                 FieldSwKind::W1Pulse(_,_) => {
-                                    if field.width==1 {
+                                    if field.width()==1 {
                                         wr_data
                                     } else {
                                         LogicExpr::or_b(field_id.clone().into(), wr_data)
@@ -1179,7 +1206,7 @@ pub trait GeneratorHw : GeneratorBase {
                                 }
                                 // Write 1 Toggle: flip all bits being 1 in write data bus
                                 FieldSwKind::W1Tgl => {
-                                    if field.width==1 {
+                                    if field.width()==1 {
                                         LogicExpr::not_b(field_id.clone().into())
                                     } else {
                                         LogicExpr::xor(field_id.clone().into() , wr_data)
@@ -1199,19 +1226,19 @@ pub trait GeneratorHw : GeneratorBase {
                                     let mut if_then_pw = Vec::new();
                                     if let Some(v) = &info.once {
                                         if_then_pw.push((
-                                            LogicExpr::eq(wr_data.clone(), LogicExpr::reset(&v.into(), field.width)),
+                                            LogicExpr::eq(wr_data.clone(), LogicExpr::reset(&v.into(), w)),
                                             LogicExpr::ValueU(0, 2)
                                         ));
                                     }
                                     if let Some(v) = &info.hold {
                                         if_then_pw.push((
-                                            LogicExpr::eq(wr_data.clone(), LogicExpr::reset(&v.into(), field.width)),
+                                            LogicExpr::eq(wr_data.clone(), LogicExpr::reset(&v.into(), w)),
                                             LogicExpr::ValueU(2, 2)
                                         ));
                                     }
                                     if info.protect {
                                         if_then_pw.push((
-                                            LogicExpr::neq(wr_data.clone(), LogicExpr::ValueU(0, field.width.into())),
+                                            LogicExpr::neq(wr_data.clone(), LogicExpr::ValueU(0, field.width().into())),
                                             LogicExpr::ValueU(3, 2)
                                         ));
                                     }
@@ -1238,8 +1265,8 @@ pub trait GeneratorHw : GeneratorBase {
                                 if_then.push((hw_path.with_fsuffix("_clr").into(), reset_expr.clone()));
                             }
                             let one =
-                                if field.is_signed() {LogicExpr::ValueI(1, field.width.into())}
-                                else {LogicExpr::ValueU(1, field.width.into())};
+                                if field.is_signed() {LogicExpr::ValueI(1, field.width().into())}
+                                else {LogicExpr::ValueU(1, field.width().into())};
                             if info.is_up() {
                                 let cond = hw_path.with_fsuffix("_incr_en").into();
                                 let incr = if info.incr_val>1 {hw_path.with_fsuffix("_incr_val").into()} else {one.clone()};
@@ -1256,7 +1283,7 @@ pub trait GeneratorHw : GeneratorBase {
 
                         // Default next to current value
                         let val_default = match &field.sw_kind {
-                            FieldSwKind::W1Pulse(_,_) if field_clken.is_empty() => LogicExpr::ValueU(0, field.width.into()),
+                            FieldSwKind::W1Pulse(_,_) if field_clken.is_empty() => LogicExpr::ValueU(0, field.width().into()),
                             FieldSwKind::Password(info) => {
                                 let b1 = if info.hold.is_some() {field_id.with_fsuffix("_hold").into()}
                                     else {LogicExpr::ValueU(0, 1)};
@@ -1265,16 +1292,24 @@ pub trait GeneratorHw : GeneratorBase {
                             _ => field_id.clone().into()
                         };
 
-                        self.write_assign(field_next_id, LogicExpr::Ite(if_then, Box::new(val_default)));
+                        self.write_assign(field_next_id.clone(), LogicExpr::Ite(if_then, Box::new(val_default)));
+                        if let FieldWidth::Generic((n,r)) = &field.width {
+                            cond_assign.push(field_next_id);
+                            self.write_cond_generic_field(&reg_field_name, n.as_ref(), r, &cond_assign);
+                        }
 
                     }
                     // Handle case of partial field where one part is read-only
                     else if field_impl.has_write_mod() {
-                        self.write_assign(field_next_id, LogicExpr::ValueU(0, field.width.into()));
+                        self.write_assign(field_next_id.clone(), LogicExpr::ValueU(0, field.width().into()));
                     }
                     // Handle case of direct feedback of Hardware written field to hardware read value
                     else if field.hw_access==Access::RW && !reg.is_intr_derived() {
-                        self.write_assign(field_id, field_sig);
+                        self.write_assign(field_id.clone(), field_sig);
+                        if let FieldWidth::Generic((n,r)) = &field.width {
+                            cond_assign.push(field_id);
+                            self.write_cond_generic_field(&reg_field_name, n.as_ref(), r, &cond_assign);
+                        }
                     }
                 }
 
@@ -1287,6 +1322,7 @@ pub trait GeneratorHw : GeneratorBase {
                     if reg.sw_access.is_writable() {
                         let decode_wr = LogicExpr::And([decode.clone(), rif_en.clone(), LogicExpr::not(rd_wrn.clone())].to_vec());
                         let ext_write : ExprId = sw_groupd_id.with_path(self.casing(&format!("{ext_path}_write")), None);
+
                         self.write_assign(ext_write, decode_wr);
                     }
                     if reg.sw_access.is_readable() {
@@ -1355,13 +1391,13 @@ pub trait GeneratorHw : GeneratorBase {
                         } else if let Some(cnt_info) = field.counter_info().and_then(|info| if info.has_satn() {Some(info)} else {None}) {
                             let cond = field_id.with_fsuffix("_event").into();
                             let sat = if field.is_signed() {
-                                let wm1 = field.width - 1;
-                                let w = field.width as usize;
+                                let wm1 = field.width() - 1;
+                                let w = field.width() as usize;
                                 let is_neg = LogicExpr::lt(next.clone().into(), LogicExpr::ValueI(0, w+1));
                                 LogicExpr::ite(is_neg, LogicExpr::ValueI(-(1<<wm1), w), LogicExpr::ValueI((1<<wm1)-1, w))
                             } else {
                                 let is_neg = LogicExpr::eq(next.with_idx(w).into(), LogicExpr::ValueU(1, 1));
-                                LogicExpr::ite(is_neg, LogicExpr::ValueI(0, field.width.into()), LogicExpr::ValueI((1<<w)-1, field.width.into()))
+                                LogicExpr::ite(is_neg, LogicExpr::ValueI(0, field.width().into()), LogicExpr::ValueI((1<<w)-1, field.width().into()))
                             };
                             LogicExpr::ite(cond, sat, next.clone().into())
                         } else {
@@ -1421,12 +1457,12 @@ pub trait GeneratorHw : GeneratorBase {
                             let field_reset = if field.is_partial() {
                                 let rst_val = field_impl.get_reset(reg.group_idx);
                                 if field_impl.signed {
-                                    LogicExpr::ValueI(rst_val as i128, field_impl.width.into())
+                                    LogicExpr::ValueI(rst_val as i128, field_impl.width().into())
                                 } else {
-                                    LogicExpr::ValueU(rst_val, field_impl.width.into())
+                                    LogicExpr::ValueU(rst_val, field_impl.width().into())
                                 }
                             } else {
-                                LogicExpr::reset(&field.reset, field_impl.width as u8)
+                                LogicExpr::reset(&field.reset, field_impl.width() as u8)
                             };
                             if field_cast.is_custom() {
                                 LogicExpr::Cast(field_cast.clone(), Box::new(field_reset))
@@ -1548,8 +1584,8 @@ pub trait GeneratorHw : GeneratorBase {
                             let field_name = self.casing(&field.name());
                             let intr_l : LogicExpr = format!("{group_name}_l.{field_name}").into();
                             let intr_val: LogicExpr = match field.intr_trig(intr_info.trigger) {
-                                InterruptTrigger::High => LogicExpr::ValueU(0, field.width.into()),
-                                InterruptTrigger::Low  => LogicExpr::ValueU((1<<field.width) - 1, field.width.into()),
+                                InterruptTrigger::High => LogicExpr::ValueU(0, field.width().into()),
+                                InterruptTrigger::Low  => LogicExpr::ValueU((1<<field.width()) - 1, field.width().into()),
                                 _ => format!("{group_name}_d1.{field_name}").into()
                             };
                             intr_en.push(LogicExpr::neq(intr_l, intr_val));
@@ -1566,7 +1602,7 @@ pub trait GeneratorHw : GeneratorBase {
                     for field in reg.fields.iter() {
                         let field_name = self.casing(&field.name());
                         let rhs : LogicExpr = if field.is_disabled() {
-                            LogicExpr::ValueU(0, field.width.into())
+                            LogicExpr::ValueU(0, field.width().into())
                         } else if intr_info.mask.is_some() {
                             LogicExpr::and_b(
                                 format!("rif_{group_name}.{field_name}").into(),
@@ -1576,8 +1612,8 @@ pub trait GeneratorHw : GeneratorBase {
                         };
                         let pending : ExprId = format!("rif_{group_name}_pending.{field_name}").into();
                         if !field.is_disabled() {
-                            if field.width > 1 {
-                                pendings.push(LogicExpr::neq(pending.clone().into(), LogicExpr::ValueU(0, field.width.into())));
+                            if field.width() > 1 {
+                                pendings.push(LogicExpr::neq(pending.clone().into(), LogicExpr::ValueU(0, field.width().into())));
                             } else {
                                 pendings.push(pending.clone().into());
                             }
@@ -1596,7 +1632,7 @@ pub trait GeneratorHw : GeneratorBase {
                 let fields = reg.fields.iter().rev().filter(|f| !f.sw_kind.is_wo());
                 let nb_fields = fields.clone().count();
                 let first_field = reg.fields.iter().find(|f| !f.sw_kind.is_wo());
-                let first_width = if let Some(f) = first_field {f.width} else {0};
+                let first_width = if let Some(f) = first_field {f.width() as u8} else {0};
                 let first_is_signed = if let Some(f) = first_field {f.is_signed()} else {false};
 
                 // Track previous LSB to know when to inssert zero-padding
@@ -1619,11 +1655,11 @@ pub trait GeneratorHw : GeneratorBase {
                         values.push(ExprId::new_range(name, partial.clone()).into());
                     } else if let FieldSwKind::Password(info) = &field.sw_kind {
                         if info.has_hold() {
-                            values.push(LogicExpr::ValueU(0, (field.width-2).into()));
+                            values.push(LogicExpr::ValueU(0, (field.width()-2).into()));
                             let hold : ExprId = sw_groupd_id.with_path(self.casing(&format!("{}_hold", field.name)), None);
                             values.push(hold.into());
                         } else {
-                            values.push(LogicExpr::ValueU(0, (field.width-1).into()));
+                            values.push(LogicExpr::ValueU(0, (field.width()-1).into()));
                         }
                         let lock : ExprId = sw_groupd_id.with_path(self.casing(&format!("{}_locked", field.name)), None);
                         values.push(lock.into());
@@ -1633,7 +1669,7 @@ pub trait GeneratorHw : GeneratorBase {
                         let field_range = field.to_range(reg_def_idx,true);
                         let value = ExprId::new_field_range(name, reg_idx, field_name.to_owned(), field_range);
                         if let EnumKind::Type(n) = &field.enum_kind {
-                            values.push(LogicExpr::CastFrom(n.to_owned(), field.width, Box::new(value.into())));
+                            values.push(LogicExpr::CastFrom(n.to_owned(), field.width() as u8, Box::new(value.into())));
                         } else {
                             values.push(value.into());
                         }
@@ -1678,7 +1714,6 @@ pub trait GeneratorHw : GeneratorBase {
             }
         }
 
-
         // Close the module
         self.write_module_impl_footer(&rif_name);
 
@@ -1687,7 +1722,7 @@ pub trait GeneratorHw : GeneratorBase {
         self.save(&filename, true)
     }
 
-    // Add a clocking port to a module interface
+    /// Add a clocking port to a module interface
     fn add_clocking_port(&mut self, info: &ClockingInfo, list: &mut HashSet<String>, is_hw: bool) {
         let kind = if is_hw { "Hardware" } else { "Software" };
         // Clock
@@ -1731,10 +1766,14 @@ pub trait GeneratorHw : GeneratorBase {
         self.save(&filename, true)
     }
 
-    // Hooks for RIF mux package
+    /// Write Rifmux Package header
+    /// Default implementation calls directly write_pkg_header
     fn write_rifmux_pkg_header(&mut self, rifmux: &RifmuxInst) {
         self.write_pkg_header(&rifmux.type_name);
     }
+
+    /// Write Rifmux Package footer
+    /// Default implementation calls directly write_pkg_footer
     fn write_rifmux_pkg_footer(&mut self, rifmux: &RifmuxInst) {
         self.write_pkg_footer(&rifmux.type_name);
     }
@@ -2079,6 +2118,21 @@ pub trait GeneratorHw : GeneratorBase {
         }
     }
 
+    /// Write conditional assign to MSB of unsued field with generic width
+    fn write_cond_generic_field(&mut self, name: &str, param_name: &str, range: &GenericRange, ids: &[ExprId]) {
+        let gen_name = format!("gen_{name}_null");
+        let param_id : ExprId = param_name.into();
+        let cond = LogicExpr::lt(param_id.into(), LogicExpr::ValueI(range.max as i128, 0));
+        self.write("\n");
+        self.write_generate_if(cond, gen_name.clone());
+        for id in ids.iter() {
+            let mut id_msb = id.to_owned();
+            id_msb.range = Some(SignalRange::GenericLsb((range.max as u8, param_name.to_owned())));
+            self.write_assign(id_msb, LogicExpr::ValueU(0, 0));
+        }
+        self.write_generate_end(gen_name);
+    }
+
     /// Save information for the current RIF
     fn set_rif_info(&mut self, rif: &RifInst) {}
     fn set_rifmux_info(&mut self, rifmux: &RifmuxInst) {}
@@ -2107,21 +2161,33 @@ pub trait GeneratorHw : GeneratorBase {
     fn write_inst_header(&mut self, type_name: &str, inst_name: &str, params: &[(String, isize)]) {}
     fn write_port_bind(&mut self, port_name: &str, signal_name: &str, is_last: bool) {}
     fn write_intf_bind(&mut self, name: &str, is_last: bool) {}
+    /// Write combinatorial assign of an expression to a signal
     fn write_assign(&mut self, lhs: ExprId, rhs: LogicExpr) {}
+    /// Write sequenctial process
     fn write_process_seq(&mut self, clk: &str, rst: &ResetDef, name: &str, signals: &[SignalInfo]) {}
+    /// Write combinatorial process header
     fn write_process_comb_header(&mut self, name: &str) {}
+    /// Write combinatorial process footer
+    fn write_process_comb_footer(&mut self, name: &str) {}
+    /// Write combinatorial assign (in a combinatorial process)
+    fn write_assign_comb(&mut self, lvl: usize, lhs: ExprId, rhs: LogicExpr) {}
+    /// Write match header
     fn write_match_header(&mut self, name: &str) {}
+    /// Write match footer
     fn write_match_footer(&mut self) {}
+    /// Write match-case header
     fn write_match_case_header(&mut self, value: LogicExpr) {}
+    /// Write match-case footer
     fn write_match_case_footer(&mut self) {}
+    /// Write if branch
     fn write_cond_if(&mut self, lvl: usize, cond: LogicExpr) {}
+    /// Write else branch
     fn write_cond_else(&mut self, lvl: usize, cond: Option<LogicExpr>) {}
+    /// Write close of an if/else branch
     fn write_cond_end(&mut self, lvl: usize) {}
     fn write_generate_if(&mut self, cond: LogicExpr, name: String) {}
     fn write_generate_else(&mut self, name: String) {}
     fn write_generate_end(&mut self, name: String) {}
-    fn write_assign_comb(&mut self, lvl: usize, lhs: ExprId, rhs: LogicExpr) {}
-    fn write_process_comb_footer(&mut self, name: &str) {}
 
     fn write_assert(&mut self, name: &str, cond: LogicExpr, msg: String, is_uvm: bool);
 

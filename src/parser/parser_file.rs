@@ -14,7 +14,7 @@ use crate::parser::{
     reg_incl_or_decl, reg_inst_array_properties, reg_inst_properties, reg_pulse_info, rif_inst_suffix, rifmux_group, rifmux_map, signal_or_expr, val_isize, val_u16
 };
 use crate::rifgen::{
-    Access, AddressOffset, ClockingInfo, Context, DataWidth, EnumDef, EnumKind, ExternalKind, Field, FieldHwKind, FieldSwKind, InstMode, Interface, InterruptInfo, Lock, LogicExpr, OverrideIndex, RegDef, RegDefOrIncl, RegInst, RegPulseKind, ResetDef, Rif, RifPage, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility
+    Access, AddressOffset, ClockingInfo, Context, DataWidth, EnumDef, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, InstMode, Interface, InterruptInfo, Lock, LogicExpr, OverrideIndex, RegDef, RegDefOrIncl, RegInst, RegPulseKind, ResetDef, Rif, RifPage, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility, Width
 };
 
 use super::{
@@ -526,6 +526,9 @@ impl RifGenSrc {
                         Context::Reserved => self.last_reg_mut().reserved(),
                         Context::Item(_) => {
                             let mut f = field_decl(&mut l)?;
+                            if f.array != Width::Value(0) && matches!(f.pos, FieldPos::Size(Width::Param(_))) {
+                                return Err(RifError::unsupported(info, &format!("Field {} is an array with generic width: not supported yet !", f.name)));
+                            }
                             if !self.last_reg().interrupt.is_empty() {
                                 f.hw_acc = Access::WO;
                             }

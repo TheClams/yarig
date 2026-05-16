@@ -155,12 +155,12 @@ impl GeneratorSw for GeneratorRal {
         }
         // Push field instantiation on stash 0
         self.push_stash(0, &format!("      this.{fieldname} = uvm_reg_field::type_id::create(\"{fieldname}\",,get_full_name());\n"));
-        self.push_stash(0, &format!("      this.{fieldname}.configure(this, {}, {}, ", field.width, field.lsb));
+        self.push_stash(0, &format!("      this.{fieldname}.configure(this, {}, {}, ", field.width(), field.lsb));
         self.push_stash(0, &format!("{}, ", Self::field_acc(field)));
         self.push_stash(0, &format!("{}, ", if field.hw_access.is_writable() {"1"} else {"0"}));
         let rst = field.reset(reg.def_idx());
-        let w = (field.width>>2) as usize;
-        self.push_stash(0, &format!("{}'h{rst:0w$X}, ", field.width));
+        let w = (field.width()>>2) as usize;
+        self.push_stash(0, &format!("{}'h{rst:0w$X}, ", field.width()));
         self.push_stash(0, &format!("{}, 0, 0);\n", if field.sw_kind.is_ro() {0} else {1}));
     }
 
@@ -215,9 +215,10 @@ impl GeneratorSw for GeneratorRal {
             // Override reset when different from default value
             let rst = field.reset(reg.def_idx());
             if rst != reg_1st.fields[fi].reset(reg_1st.def_idx()) {
+                let w = field.width() as u8;
                 self.push_stash(2,
                     &format!("      this.{regname}_{fieldname}.set_reset({});\n",
-                        Self::format_u128(rst, field.width, field.is_signed())));
+                        Self::format_u128(rst, w, field.is_signed())));
             }
             // Override access for auto-interrupt register
             if reg.is_intr_derived() {

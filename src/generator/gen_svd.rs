@@ -119,7 +119,7 @@ impl GeneratorSw for GeneratorSvd {
         self.write(&format!("{tab}  <name>{name}</name>\n"));
         self.write(&format!("{tab}  <description>{desc}</description>\n"));
         self.write(&format!("{tab}  <bitOffset>{}</bitOffset>\n", field.lsb));
-        self.write(&format!("{tab}  <bitWidth>{}</bitWidth>\n", field.width));
+        self.write(&format!("{tab}  <bitWidth>{}</bitWidth>\n", field.width()));
         self.write(&format!("{tab}  <access>{access}</access>\n"));
         match field.sw_kind {
             FieldSwKind::ReadClr => self.write(&format!("{tab}  <readAction>clear</readAction>\n")),

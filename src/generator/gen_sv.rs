@@ -1,5 +1,5 @@
 use crate::{
-    cfg::{CfgRtl, RtlLimit, RtlLimitCfg}, comp::{comp_inst::RifInst, hw_info::{PortDir, PortInfo, SignalDecl, SignalDef, SignalInfo, SignalKind}}, rifgen::{CastInfo, EnumEntry, ExprId, GenericRange, LogicExpr, ResetDef}
+    cfg::{CfgRtl, RtlLimit, RtlLimitCfg}, comp::{comp_inst::RifInst, hw_info::{PortDir, PortInfo, SignalDecl, SignalDef, SignalInfo, SignalKind}}, rifgen::{CastInfo, EnumEntry, ExprId, GenericRange, LogicExpr, ResetDef, SignalRange}
 };
 
 use super::{
@@ -117,6 +117,7 @@ impl GeneratorSv {
             LogicExpr::ValueU(v, w) => {
                 let n = (w+3)>>2;
                 match w {
+                    0 => self.core.write(&format!("'{v}")),
                     1 => self.core.write(&format!("1'b{v}")),
                     2..=12 => self.core.write(&format!("{w}'d{v}")),
                     _ => self.core.write(&format!("{w}'h{v:0n$x}")),
@@ -125,7 +126,8 @@ impl GeneratorSv {
             LogicExpr::ValueI(v, w) => {
                 let n = (w+3)>>2;
                 match w {
-                    0..=12 => {
+                    0 => self.core.write(&format!("{v}")),
+                    1..=12 => {
                         if *v < 0 {
                             self.core.write(&format!("-{w}'sd{}", v.abs()))
                         } else {
@@ -223,10 +225,16 @@ impl GeneratorSv {
             self.core.write(field);
         }
         if let Some(r) = &expr.range {
-            if r.is_bit() {
-                self.core.write(&format!("[{}]",r.lsb));
-            } else {
-                self.core.write(&format!("[{}:{}]", r.msb, r.lsb));
+            match r {
+                SignalRange::Fixed((msb,lsb)) => {
+                    if msb==lsb {
+                        self.core.write(&format!("[{lsb}]"));
+                    } else {
+                        self.core.write(&format!("[{msb}:{lsb}]"));
+                    }
+                }
+                SignalRange::GenericWidth((width,lsb)) => self.core.write(&format!("[{lsb}+:{width}]")),
+                SignalRange::GenericLsb((msb,lsb)) => self.core.write(&format!("[{msb}:{lsb}]")),
             }
         }
     }

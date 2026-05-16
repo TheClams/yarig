@@ -8,7 +8,7 @@ use crate::{
 };
 
 use super::{
-    comp_inst::{ArrayIdx, PartialFieldInfos, RifPageInst, RifRegInst, RifsInfo},
+    comp_inst::{ArrayIdx, PartialFieldInfos, RifPageInst, RifRegInst, RifsInfo, FieldWidth},
     hw_info::SignalDim,
 };
 
@@ -20,7 +20,7 @@ pub struct FieldImpl {
     /// Field name
     pub name: String,
     /// Field width
-    pub width: u16,
+    pub width: FieldWidth,
     /// Field array size
     pub array: u16,
     /// Sign-ness
@@ -60,9 +60,10 @@ impl FieldImpl {
     /// Create a FieldImplementation base on a field definition
     fn new(field: &Field, reg_array: u16, ctrl_idx: usize, rifs: &RifsInfo, partials: Option<&PartialFieldInfos>) -> Result<Self, String> {
         let params = &rifs.params;
+        let param_gen = rifs.param_gen();
         let enum_def = field.enum_kind.get_def(&rifs.enums);
         // Handle field array: total size is given by the register size, the field partial info, and the field reset length
-        let field_array = field.array.value(params) as u16;
+        let field_array = field.array.value(params)? as u16;
         let nb_reset = field.reset.len() as u16;
         let mut array = reg_array.max(1) * field_array + field.partial.1;
         if array > nb_reset && nb_reset > field_array {
@@ -81,7 +82,7 @@ impl FieldImpl {
                 resets.push(reset.compile(field.signed, field.nb_frac, params, enum_def)?);
             }
             let k = if field_array == 0 && reg_array > 1 {reg_array} else {1};
-            (field.width(params) as u16 * k, resets)
+            (field.width(param_gen)? as u16 * k, resets)
         };
         let limit = field.limit.compile(field.signed, field.nb_frac, params, enum_def)?;
         // Get description
@@ -90,12 +91,12 @@ impl FieldImpl {
         let description = field.description.with_format(&format_str).no_dollar();
         // Handle case where only access is a set/clr from software: this implies the equivalent from hardware to be complete
         let mut hw_kind = field.hw_kind.to_owned();
-        if let Some(kind) = field.get_auto_hw_kind(params) {
+        if let Some(kind) = field.get_auto_hw_kind(param_gen) {
             hw_kind.push(kind);
         }
         Ok(FieldImpl {
             name: field.name.clone(),
-            width,
+            width: FieldWidth::Value(width),
             array,
             signed: field.signed,
             clk: field.clk.clone(),
@@ -115,11 +116,16 @@ impl FieldImpl {
         })
     }
 
+    /// Field width
+    pub fn width(&self) -> u16 {
+        self.width.value()
+    }
+
     /// Get the reset value as an unsigned 128b
     // handle case where field is larger than 128b: change to ibig ?
     pub fn get_reset(&self, idx: usize) -> u128 {
         let idx = if idx >= self.reset.len() {0} else {idx};
-        self.reset.get(idx).unwrap().to_u128(self.width as u8)
+        self.reset.get(idx).unwrap().to_u128(self.width() as u8)
     }
 
     /// Flag field which can be set by software
@@ -139,7 +145,7 @@ impl FieldImpl {
 
     /// Flag field which can be set by hardware
     pub fn is_hw_write(&self) -> bool {
-        if self.width > 1 {
+        if self.width() > 1 {
             self.hw_kind.iter().any(|k| *k!=FieldHwKind::ReadOnly)
         } else {
             self.hw_kind.iter().any(|k| k.has_write_mod() || k.is_counter() || k.is_interrupt())
@@ -155,7 +161,7 @@ impl FieldImpl {
     pub fn has_hw_value(&self) -> bool {
         if self.hw_kind.is_empty() && self.hw_acc.is_writable() {
             true
-        } else if self.width > 1 {
+        } else if self.width() > 1 {
             self.hw_kind.iter().any(|k| !matches!(k,FieldHwKind::ReadOnly | FieldHwKind::Counter(_)))
         } else {
             self.hw_kind.iter().any(|k| k.has_we() || k.is_interrupt())
@@ -180,8 +186,8 @@ impl FieldImpl {
     /// Return width of hardware signal needed for implementation
     pub fn hdl_width(&self) -> u16 {
         if self.sw_kind.is_password() {2}
-        else if self.is_counter() {self.width+1}
-        else {self.width}
+        else if self.is_counter() {self.width()+1}
+        else {self.width()}
     }
 
     /// Generate an explicit casting for current field type
@@ -398,7 +404,7 @@ impl RegImpl {
     fn new(reg: &RegDef, rifs: &RifsInfo) -> Result<Self, String> {
         let mut fields = Vec::with_capacity(reg.fields.len());
         let mut port = RegPortKind::from_reg(reg);
-        let array = reg.array.value(&rifs.params) as u16;
+        let array = reg.array.value(&rifs.params)? as u16;
         let mut sw_access = Access::NA;
         let partials = rifs.partials.get(reg.get_group_name());
         // Copy all fields
@@ -429,7 +435,7 @@ impl RegImpl {
     pub fn merge_with(&mut self, reg: &RegDef, rifs: &RifsInfo) -> Result<(),String>{
         let params = &rifs.params;
         let partials = rifs.partials.get(reg.get_group_name());
-        let array = reg.array.value(params) as u16;
+        let array = reg.array.value(params)? as u16;
         // println!("Merging {} in {} : clk_en = {:?} | group clock_enable = {:?}", reg.name, reg.group.name, reg.clk_en, self.clk_en);
         self.port.updt(RegPortKind::from_reg(reg));
         for f in reg.fields.iter() {
@@ -455,7 +461,7 @@ impl RegImpl {
                     if field_impl.array != f.partial.1 {
                         return Err(format!("Field {}.{} : Non contiguous partial field array. Expecting {} found {}", reg.name, f.name, field_impl.array, f.partial.1));
                     }
-                    field_impl.array += f.array.value(params) as u16;
+                    field_impl.array += f.array.value(params)? as u16;
                     let enum_def = f.enum_kind.get_def(&rifs.enums);
                     // TODO: might need to check dimensions (or maybe should be done at parsing level)
                     for r in f.reset.iter() {
@@ -590,7 +596,7 @@ pub struct MissingFieldInfo {
 impl MissingFieldInfo {
     fn from(value: &FieldImpl, idx: usize) -> Self {
         MissingFieldInfo {
-            width: value.width,
+            width: value.width(),
             signed: value.signed,
             reset: value.get_reset(idx),
         }

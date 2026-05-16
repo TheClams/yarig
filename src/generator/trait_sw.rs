@@ -274,7 +274,7 @@ pub trait GeneratorSw : GeneratorBase {
                     None
                 };
             self.write_field_decl(basename, reg, regs_rst, f, enum_def, fields.peek().is_none());
-            pos_l = f.lsb + f.width;
+            pos_l = f.lsb + f.width() as u8;
         }
         // Fill remaining bits if any
         if pos_l < rif.data_width {
@@ -301,7 +301,7 @@ pub trait GeneratorSw : GeneratorBase {
     /// Write register end of declaration
     fn write_unused_field_decl(&mut self, basename: &str, reg: &RifRegInst, lsb: u8, width: u8, is_last: bool) {
         if Self::HAS_UNUSED {
-            let field = RifFieldInst::new_unused(lsb, width);
+            let field = RifFieldInst::new_unused(lsb, width as u16);
             self.write_field_decl(basename, reg, &[], &field, None, is_last);
         }
     }

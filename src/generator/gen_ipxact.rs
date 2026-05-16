@@ -127,11 +127,11 @@ impl GeneratorSw for GeneratorIpXact {
         self.write(&format!("{tab}  <ipxact:name>{name}</ipxact:name>\n"));
         self.write(&format!("{tab}  <ipxact:description>{desc}</ipxact:description>\n"));
         self.write(&format!("{tab}  <ipxact:bitOffset>{}</ipxact:bitOffset>\n", field.lsb));
-        self.write(&format!("{tab}  <ipxact:bitWidth>{}</ipxact:bitWidth>\n", field.width));
+        self.write(&format!("{tab}  <ipxact:bitWidth>{}</ipxact:bitWidth>\n", field.width()));
         self.write(&format!("{tab}  <ipxact:resets>\n"));
         self.write(&format!("{tab}    <ipxact:reset>\n"));
         self.write(&format!("{tab}      <ipxact:value>'h{:x}</ipxact:value>\n",field.reset(reg.def_idx())));
-        self.write(&format!("{tab}      <ipxact:mask>'h{:x}</ipxact:mask>\n",(1_u128<<field.width)-1));
+        self.write(&format!("{tab}      <ipxact:mask>'h{:x}</ipxact:mask>\n",(1_u128<<field.width())-1));
         self.write(&format!("{tab}    </ipxact:reset>\n"));
         self.write(&format!("{tab}  </ipxact:resets>\n"));
         self.write(&format!("{tab}  <ipxact:fieldAccessPolicies>\n"));

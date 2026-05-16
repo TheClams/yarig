@@ -74,7 +74,7 @@ impl GeneratorSw for GeneratorJson {
         let sw_kind = field.sw_kind.access_str().to_lowercase();
         self.write(&format!("{tab}\"{name}\" : {{\n"));
         self.write(&format!("{tab}   \"pos\" : {},\n", field.lsb));
-        self.write(&format!("{tab}   \"width\" : {},\n", field.width));
+        self.write(&format!("{tab}   \"width\" : {},\n", field.width()));
         self.write(&format!("{tab}   \"value\" : {},\n", field.reset(reg.def_idx())));
         self.write(&format!("{tab}   \"signed\" : {signed},\n"));
         self.write(&format!("{tab}   \"kind\" : \"{sw_kind}\",\n"));

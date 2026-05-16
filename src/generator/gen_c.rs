@@ -133,12 +133,12 @@ impl GeneratorSw for GeneratorC {
         let name = self.casing(&field_name);
         let mask =
             if field.visibility.is_unused() {None}
-            else {Some((((1_u128<<field.width)-1)<<field.lsb) as usize)};
+            else {Some((((1_u128<<field.width())-1)<<field.lsb) as usize)};
         let desc = field.base_description.get_short(self.is_public()); // TODO: handle visibility/privacy
         let mask = if let Some(v) = mask {format!("0x{v:08X} ")} else {"".to_owned()};
         let l = self.max_len_field_name;
         self.write(&format!("    uint{}_t {name:<l$} : {:>2}; //!< {mask}{desc}\n",
-            self.data_width(), field.width,
+            self.data_width(), field.width(),
         ));
         // Prepare some define as well for each field in a register (except for unused)
         if !field.visibility.is_unused() {
@@ -146,7 +146,7 @@ impl GeneratorSw for GeneratorC {
             let regname = reg.reg_type.to_uppercase();
             let name = format!("{}_{regname}_{fieldname}", basename.to_uppercase());
             self.push_stash(0, &format!("#define {name}_POS   {}\n", field.lsb));
-            self.push_stash(0, &format!("#define {name}_MASK  0x{:08X}U\n",(1_u128<< field.width)-1));
+            self.push_stash(0, &format!("#define {name}_MASK  0x{:08X}U\n",(1_u128<<field.width())-1));
             self.push_stash(0, &format!("#define {name}_SMASK ({name}_MASK<<{name}_POS)\n"));
             if field.nb_frac != 0 {
                 self.push_stash(0, &format!("#define {name}_FRAC  {}\n", field.nb_frac));

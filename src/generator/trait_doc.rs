@@ -440,7 +440,7 @@ pub trait GeneratorDoc : GeneratorBase {
                             let w = last_pos - (f.msb()+1);
                             self.write_table_cell((TableKind::Layout, CellKind::Field), w.into(), "", "", None);
                         }
-                        self.write_table_cell((TableKind::Layout, CellKind::Field), f.width.into(), &fieldname, "", None);
+                        self.write_table_cell((TableKind::Layout, CellKind::Field), f.width().into(), &fieldname, "", None);
                         last_pos = f.lsb;
                     }
                     if last_pos!=0 {
@@ -484,7 +484,7 @@ pub trait GeneratorDoc : GeneratorBase {
 
                         let fieldname = self.core().get_field_name(reg, f, false);
                         self.write_table_row_header(Some(&format!("{rif_name}.{reg_type}.{fieldname}")));
-                        let pos = if f.width==1 {format!("{}",f.lsb)} else {format!("{}:{}",f.msb(), f.lsb)};
+                        let pos = if f.width()==1 {format!("{}",f.lsb)} else {format!("{}:{}",f.msb(), f.lsb)};
                         self.write_table_cell((TableKind::Field, CellKind::Bits), 0, &pos, "", None);
                         self.write_table_cell((TableKind::Field, CellKind::Inst), 0, &fieldname, "", None);
                         // let access = if is_intr_derived {&FieldSwKind::ReadWrite} else {&f.sw_kind};
@@ -513,7 +513,7 @@ pub trait GeneratorDoc : GeneratorBase {
                             if *inst_rst != f0 && *inst_rst != f_inst_reset {
                                 rst.push('/');
                                 if f_inst_reset == f0 {
-                                    rst.push_str(&val_str(inst_rst.to_u128(f.width), f.width.into(), f.is_signed(), reg_def_idx));
+                                    rst.push_str(&val_str(inst_rst.to_u128(f.width() as u8), f.width(), f.is_signed(), reg_def_idx));
                                     f_inst_reset = inst_rst.clone();
                                 } else {
                                     rst.push('…');
@@ -533,7 +533,7 @@ pub trait GeneratorDoc : GeneratorBase {
                             }).collect::<Vec<String>>().join("\n"))
                         } else if rst.ends_with('…') {
                             Some(resets.iter().map(|r|
-                                val_str(r.to_u128(f.width), f.width.into(), f.is_signed(), reg_def_idx)
+                                val_str(r.to_u128(f.width() as u8), f.width(), f.is_signed(), reg_def_idx)
                             ).collect::<Vec<String>>().join("\n"))
                         } else {
                             None

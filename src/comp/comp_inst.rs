@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use crate::{
     cfg::{RtlLimit, RtlLimitCfg}, parser::{RifGenSrc, RifGenTop, get_rif, parser_expr::{ExprValue, ParamValues}}, rifgen::{
-        Access, Address, AddressKind, ClockingInfo, CounterInfo, DescIdx, Description, EnumDef, EnumDefs, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, GenericRange, GenericValues, Interface, InterruptRegKind, InterruptTrigger, Limit, LogicExpr, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegPulseKind, ResetVal, ResetValOverride, Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SignalRange, SuffixInfo, Visibility, order_dict::{OrderDict, OrderedDictIterV}
+        Access, Address, AddressKind, ClockingInfo, CounterInfo, DescIdx, Description, EnumDef, EnumDefs, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, GenericRange, GenericValues, Interface, InterruptRegKind, InterruptTrigger, Limit, LogicExpr, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegPulseKind, ResetVal, ResetValOverride, Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SignalRange, SuffixInfo, Visibility, Width, order_dict::{OrderDict, OrderedDictIterV}
     }
 };
 
@@ -282,6 +282,11 @@ impl<'a> RifsInfo<'a>  {
             partials: PartialFieldDict::new()
         }
     }
+
+    // Return reference to both parameter and generics
+    pub fn param_gen(&self) -> (&ParamValues, &GenericValues) {
+        (&self.params, &self.generics)
+    }
 }
 
 /// Register Interface instance: collection of pages containing register, with clock/reset/interface type, ...
@@ -502,7 +507,7 @@ impl RifPageInst {
                     let addr = inst_addr.updt(&reg.addr, &rifs.params);
                     let range : Option<(String,GenericRange)>;
                     let nb : u16;
-                    let array_size_def = regdef.def.array.value(&rifs.params);
+                    let array_size_def = regdef.def.array.value(&rifs.params)?;
                     let array_size_inst = reg.array.eval_with_gen(&rifs.params, &rifs.generics)?;
                     if array_size_def > 1 {
                         nb = array_size_def as u16;
@@ -606,7 +611,7 @@ impl RifPageInst {
                             }
                         }
                     } else {
-                        let nb = d.array.value(&rifs.params) as u16;
+                        let nb = d.array.value(&rifs.params)? as u16;
                         if nb > 1 {
                             for i in 0..nb {
                                 let addr_ovr = inst
@@ -898,10 +903,12 @@ impl RifRegInst {
             reg_name = inst_name;
             intr_info = (InterruptRegKind::None,"".to_owned());
         };
+        let params = &rifs.params;
+        let param_gen = rifs.param_gen();
         let description = if let RegInstArgs::Arr(idx) = &args {
             let Some(f0) = def.fields.first() else {return Err(format!("Register {reg_name} has no fields !"));};
-            let desc_idx = if def.fields.len() == 1 && f0.array.value(&rifs.params) == 0 {
-                DescIdx::reg_bus(f0.width(&rifs.params).into() ,idx.idx())
+            let desc_idx = if def.fields.len() == 1 && f0.array.value(params)? == 0 {
+                DescIdx::reg_bus(f0.width(param_gen)?.into() ,idx.idx())
             } else {
                 DescIdx::array(idx.idx())
             };
@@ -943,8 +950,9 @@ impl RifRegInst {
         };
         let mut next_lsb = 0;
         let reg_array_idx = r.def_idx();
+        // let param_gen = rifs.param_gen();
         for f in def.fields.iter() {
-            let array_size = f.array.value(&rifs.params) as u16;
+            let array_size = f.array.value(params)? as u16;
             let nb = array_size.max(1);
             let offset = r.array.idx() * nb + f.partial.1;
             for i in 0..nb {
@@ -974,9 +982,10 @@ impl RifRegInst {
                 r.hw_access = Access::NA;
                 r.reset = info.0.compile(false, 0, &rifs.params, None)?.to_u128(128);
                 for f in r.fields.iter_mut() {
-                    let val : u128 = (r.reset >> f.lsb) & ((1<<f.width)-1);
+                    let w = f.width.value();
+                    let val : u128 = (r.reset >> f.lsb) & ((1<<w)-1);
                     f.reset = if f.is_signed() {
-                        let val_signed = val as i128 - if val >= (1<<(f.width-1)) {(1<<f.width) as i128} else {0};
+                        let val_signed = val as i128 - if val >= (1<<(w-1)) {(1<<w) as i128} else {0};
                         ResetVal::Signed(val_signed)
                     } else {
                         ResetVal::Unsigned(val)
@@ -1074,10 +1083,10 @@ impl RifRegInst {
                 }
                 r.group_idx = rifs.partials.push(&r.group_type, &r.group_name, PartialFieldInfo::new(f));
             }
-
-            let mut reset = f.reset.to_u128(f.width);
+            let w = f.width.value() as u8;
+            let mut reset = f.reset.to_u128(w);
             if f.array.dim() == 0 && let Some(idx) = r.def_idx() {
-                reset = (reset >> (idx * f.width as u16)) & ((1<<f.width)-1);
+                reset = (reset >> (idx * w as u16)) & ((1<<w)-1);
             }
             r.reset |= reset << f.lsb;
         }
@@ -1206,11 +1215,48 @@ impl RifRegInst {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum FieldWidth {
+    Value(u16),
+    Generic((String,GenericRange)),
+}
+
+impl FieldWidth {
+    /// Create FieldWidth from Width definition
+    pub fn new(value: u16, pos: &FieldPos, generics: &GenericValues) -> Self {
+        match pos {
+            FieldPos::MsbLsb(_) => FieldWidth::Value(value),
+            FieldPos::LsbSize((_,w)) |
+            FieldPos::Size(w) => {
+                if let Width::Param(name) = w && let Some(g) = generics.get(name) {
+                    FieldWidth::Generic((name.clone(), g.clone()))
+                } else {
+                    FieldWidth::Value(value)
+                }
+            }
+        }
+    }
+
+    /// Return a field value
+    pub fn value(&self) -> u16 {
+        match self {
+            FieldWidth::Value(v) => *v,
+            FieldWidth::Generic((_,r)) => r.max,
+        }
+    }
+
+    /// Check if the field width is defined by
+    pub fn is_generic(&self) -> bool {
+        matches!(self, FieldWidth::Generic(_))
+    }
+
+}
+
 #[derive(Clone, Debug)]
 pub struct RifFieldInst {
     pub name: String,
     pub lsb: u8,
-    pub width: u8,
+    pub width: FieldWidth,
     pub base_description: Description,
     pub description: Description,
     pub reset: ResetVal,
@@ -1238,10 +1284,12 @@ impl RifFieldInst {
         field_array: Option<ArrayIdx>,
     ) -> Result<Option<Self>,String> {
         let params = &rifs.params;
+        let param_gen = rifs.param_gen();
+
         let (mut lsb, width) = match &field.pos {
-            FieldPos::MsbLsb((m, l)) => (l.value(params), m.value(params) - l.value(params) + 1),
-            FieldPos::LsbSize((l, w)) => (l.value(params), w.value(params)),
-            FieldPos::Size(w) => (*next_lsb, w.value(params)),
+            FieldPos::MsbLsb((m, l)) => (l.value(params)?, m.value(params)? - l.value(params)? + 1),
+            FieldPos::LsbSize((l, w)) => (l.value(params)?, w.value_g(param_gen)?),
+            FieldPos::Size(w) => (*next_lsb, w.value_g(param_gen)?),
         };
         let enum_def = field.enum_kind.get_def(&rifs.enums);
         // Check enum fit on the field size
@@ -1277,7 +1325,7 @@ impl RifFieldInst {
             // (otherwise simply repeat the one at indice 0)
             let mut rst_idx = array.idx() as usize
                         + if array.is_def() {array.dim() as usize} else {0};
-            let field_array_dim = field.array.value(&rifs.params) as usize;
+            let field_array_dim = field.array.value(params)? as usize;
             if rst_idx > field.reset.len() && field.reset.len() == field_array_dim {
                 rst_idx %= field_array_dim;
             }
@@ -1289,7 +1337,7 @@ impl RifFieldInst {
                 return Ok(None);
             }
             let i = array.dim() + array.idx();
-            idx = ArrayIdx::Def(i,field.array.value(params).into());
+            idx = ArrayIdx::Def(i,field.array.value(params)?.into());
             desc_idx = i.into();
             desc_idx_base = desc_idx;
             desc = field.description.with_format(&format_str);
@@ -1313,7 +1361,7 @@ impl RifFieldInst {
         let base_description = desc.interpolate(desc_idx_base).no_dollar();
         // Ensure SW/HW access are compatible (i.e. write control mechanism if both access are write)
         let mut hw_kind = field.hw_kind.to_owned();
-        if let Some(kind) = field.get_auto_hw_kind(params) {
+        if let Some(kind) = field.get_auto_hw_kind(param_gen) {
             hw_kind.push(kind);
         }
         // Compile value containing resetVal in case they use parameters
@@ -1325,6 +1373,7 @@ impl RifFieldInst {
         }
 
         *next_lsb += width;
+        let width = FieldWidth::new(width as u16, &field.pos, &rifs.generics);
         Ok(Some(RifFieldInst {
             name: field.name.to_owned(),
             base_description,
@@ -1357,9 +1406,10 @@ impl RifFieldInst {
     }
 
     /// Generate an unused field (used as padding inside a register)
-    pub fn new_unused(lsb: u8, width: u8) -> Self {
+    pub fn new_unused(lsb: u8, width: u16) -> Self {
         RifFieldInst {
-            name: format!("rsvd{lsb}"), lsb, width,
+            name: format!("rsvd{lsb}"), lsb,
+            width: FieldWidth::Value(width),
             base_description: "Reserved".into(),
             description: "Reserved".into(),
             reset: ResetVal::Unsigned(0),
@@ -1373,6 +1423,12 @@ impl RifFieldInst {
             array: ArrayIdx::default(),
             limit: Limit::default(),
         }
+    }
+
+    #[inline]
+    /// Flag when a field has a limit constraint
+    pub fn width(&self) -> u16 {
+        self.width.value()
     }
 
     /// Flag when a field is split on multiple register
@@ -1397,7 +1453,7 @@ impl RifFieldInst {
 
     /// Flag when the field can be written by hardware
     pub fn is_hw_write(&self) -> bool {
-        if self.width > 1 {
+        if self.width() > 1 {
             self.hw_kind.iter().any(|k| *k!=FieldHwKind::ReadOnly)
         } else {
             self.hw_kind.iter().any(|k| k.has_write_mod() || k.is_counter() || k.is_interrupt())
@@ -1456,7 +1512,7 @@ impl RifFieldInst {
 
     /// Return the field position MSB
     pub fn msb(&self) -> u8 {
-        self.lsb + self.width - 1
+        self.lsb + self.width() as u8 - 1
     }
 
     /// Return the field partial LSB
@@ -1475,20 +1531,18 @@ impl RifFieldInst {
 
     /// Return a signal range if partial or part of an array
     pub fn to_range(&self, reg_idx: Option<u16>, array_en: bool) -> Option<SignalRange> {
+        let w = self.width() as u8; // TODO: maybe re-evaluate how much we can push the idea of a width more than 128 ...
         if let (Some(lsb),_) = &self.partial {
             let lsb = *lsb as u8;
-            Some(SignalRange::new(lsb, self.width - 1 + lsb))
+            Some(SignalRange::new(lsb, w - 1 + lsb))
         } else if self.array.dim() == 0 && let Some(idx) = reg_idx {
-            let lsb = self.width * idx as u8;
-            let msb = self.width * (idx as u8+1) - 1;
+            let lsb = w * idx as u8;
+            let msb = w * (idx as u8+1) - 1;
             Some(SignalRange::new(lsb, msb))
-        } else if array_en {
-            // if let ArrayIdx::Inst(idx,_) = self.array {
-            if self.array.dim() > 0 {
-                Some(SignalRange::new_bit(self.array.idx() as u8))
-            } else {
-                None
-            }
+        } else if array_en && self.array.dim() > 0 {
+            Some(SignalRange::new_bit(self.array.idx() as u8))
+        } else if let FieldWidth::Generic((n,_)) = &self.width {
+            Some(SignalRange::new_gen(n.clone(), 0))
         } else {
             None
         }
@@ -1514,13 +1568,13 @@ impl RifFieldInst {
 
     /// Return a bit mask on 128b corresponding to the field width
     pub fn mask(&self) -> u128 {
-        (1<<self.width)-1
+        (1<<self.width())-1
     }
 
     pub fn init_from_reg_rst(&mut self, reg_rst: u128) {
         let val = reg_rst >> self.lsb;
         if self.is_signed() {
-            let w = self.width * self.array.dim().max(1) as u8;
+            let w = (self.width() * self.array.dim().max(1)) as u8;
             // Use a width corresponding to the whold field array (maxred at 128b, the max register size supported)
             self.reset = ResetVal::new_signed(val, w.min(128));
         } else {
@@ -1530,10 +1584,10 @@ impl RifFieldInst {
 
     /// return reset value on 128b taking into account expanded field
     pub fn reset(&self, reg_def_idx: Option<u16>) -> u128 {
-        let r = self.reset.to_u128(self.width);
+        let r = self.reset.to_u128(self.width() as u8);
         let idx = if self.array.dim() == 0 {reg_def_idx} else {None};
         if let Some(idx) = idx {
-            (r >> (self.width as u16 * idx)) & self.mask()
+            (r >> (self.width() * idx)) & self.mask()
         } else {
             r
         }
@@ -1545,9 +1599,9 @@ impl RifFieldInst {
             // get the whole 128b reset value to handle array cases
             let r = self.reset.to_u128(0);
             // Extract field reset value based on the field index
-            let rm = (r >> (self.width as u16 * idx)) & self.mask();
+            let rm = (r >> (self.width() * idx)) & self.mask();
             if self.is_signed() {
-                ResetVal::new_signed(rm, self.width)
+                ResetVal::new_signed(rm, self.width() as u8)
             } else {
                 ResetVal::Unsigned(rm)
             }
@@ -1559,7 +1613,7 @@ impl RifFieldInst {
     /// return reset value in a string: hexa/decimal are chosen automatically based on width
     pub fn reset_str(&self, reg_def_idx: Option<u16>) -> String {
         let idx = if self.array.dim() == 0 {reg_def_idx} else {None};
-        val_str(self.reset(None), self.width.into(), self.is_signed(), idx)
+        val_str(self.reset(None), self.width(), self.is_signed(), idx)
     }
 
     /// Return interrupt trigger for the field
@@ -1607,8 +1661,8 @@ impl PartialFieldInfo {
         PartialFieldInfo {
             name: inst.name.to_owned(),
             lsb: inst.partial.0.unwrap_or(0),
-            width: inst.width as u16,
-            reset: inst.reset.to_u128(inst.width),
+            width: inst.width(),
+            reset: inst.reset.to_u128(inst.width() as u8),
         }
     }
 }

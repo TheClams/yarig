@@ -4,7 +4,7 @@ use crate::{
     cfg::{CfgRtl, RtlLimitCfg}, comp::{
         comp_inst::{RifInst, RifmuxInst},
         hw_info::{PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalDim, SignalInfo, SignalKind}
-    }, rifgen::{CastInfo, EnumEntry, ExprId, GenericRange, Interface, LogicExpr, ResetDef, order_dict::OrderDict}
+    }, rifgen::{CastInfo, EnumEntry, ExprId, GenericRange, Interface, LogicExpr, ResetDef, SignalRange, order_dict::OrderDict}
 };
 
 use super::{
@@ -148,6 +148,7 @@ impl GeneratorVhdl {
             }
             LogicExpr::ValueU(v, w) => {
                 match w {
+                    0 => self.core.write(&format!("(others => {v})")),
                     1 => self.core.write(&format!("'{v}'")),
                     2..7 => self.core.write(&format!("\"{v:0w$b}\"")),
                     _ => {
@@ -158,6 +159,7 @@ impl GeneratorVhdl {
             }
             LogicExpr::ValueI(v, w) => {
                 match w {
+                    0 => self.core.write(&format!("{v}")),
                     1..7 => self.core.write(&format!("\"{v:0w$b}\"")),
                     _ => {
                         let n = (w+3)>>2;
@@ -281,10 +283,24 @@ impl GeneratorVhdl {
             self.write(field);
         }
         if let Some(r) = &expr.range {
-            if r.is_bit() {
-                self.write(&format!("({})",r.lsb));
-            } else {
-                self.write(&format!("({} downto {})", r.msb, r.lsb));
+            match r {
+                SignalRange::Fixed((msb,lsb)) => {
+                    if msb==lsb {
+                        self.core.write(&format!("({lsb})"));
+                    } else {
+                        self.core.write(&format!("({msb} downto {lsb})"));
+                    }
+                }
+                SignalRange::GenericWidth((width,lsb)) => {
+                    match lsb {
+                        0 => self.core.write(&format!("({width}-1 downto {lsb})")),
+                        1 => self.core.write(&format!("({width} downto {lsb})")),
+                        _ => self.core.write(&format!("({lsb}+{width}-1 downto {lsb})")),
+                    }
+                }
+                SignalRange::GenericLsb((msb,lsb)) => {
+                    self.core.write(&format!("({msb} downto {lsb})"));
+                }
             }
         }
         if has_cast_gen {
@@ -357,8 +373,8 @@ impl GeneratorHw for GeneratorVhdl {
             }
             let hw_reg_def = rif.get_hw_reg(&hw_reg.group);
             for f in hw_reg_def.fields.iter().filter(|f| f.array > 0) {
-                if vec_a.contains(&f.width) {continue;}
-                vec_a.push(f.width);
+                if vec_a.contains(&f.width()) {continue;}
+                vec_a.push(f.width());
             }
         }
         if !names.is_empty() {

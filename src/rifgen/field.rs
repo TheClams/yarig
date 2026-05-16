@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Display, ops::{Add, Sub}};
 
-use crate::{error::RifError, parser::parser_expr::{ExprTokens, ParamValues}};
+use crate::{error::RifError, parser::parser_expr::{ExprTokens, ParamValues}, rifgen::GenericValues};
 
 use super::{
     Context, Description, InterruptClr, InterruptDesc, InterruptInfoField, InterruptTrigger, LogicExpr,
@@ -630,12 +630,32 @@ pub enum Width {
 }
 
 impl Width {
-    pub fn value(&self, params: &ParamValues) -> u8 {
+    /// Return the value (16b) converting parameter value
+    pub fn value(&self, params: &ParamValues) -> Result<u8,String> {
         match self {
-            Width::Value(v) => *v,
-            Width::Param(name) => *params.get(name).unwrap_or(&1) as u8,
+            Width::Value(v) => Ok(*v),
+            Width::Param(name) =>
+                params.get(name)
+                    .map(|v| *v as u8)
+                    .ok_or_else(|| format!("Unknown parameter {name} in position !"))
         }
     }
+
+    /// Return the value (16b) supporting generics as parameter
+    pub fn value_g(&self, params: (&ParamValues, &GenericValues)) -> Result<u8,String> {
+        match self {
+            Width::Value(v) => Ok(*v),
+            Width::Param(name) =>
+                match params.0.get(name) {
+                    Some(v) => Ok(*v as u8),
+                    None =>
+                        params.1.get(name)
+                            .map(|r| r.max as u8)
+                            .ok_or_else(|| format!("Unknown parameter/generics {name} in width definition !"))
+                }
+        }
+    }
+
 }
 
 impl Default for Width {
@@ -1106,18 +1126,18 @@ impl Field {
     }
 
     /// Field width
-    pub fn width(&self, params: &ParamValues) -> u8 {
+    pub fn width(&self, params: (&ParamValues, &GenericValues)) -> Result<u8, String> {
         match &self.pos {
-            FieldPos::MsbLsb((m,l)) => m.value(params) - l.value(params) + 1,
-            FieldPos::LsbSize((_,w)) => w.value(params),
-            FieldPos::Size(w) => w.value(params),
+            FieldPos::MsbLsb((m,l)) => Ok(m.value(params.0)? - l.value(params.0)? + 1),
+            FieldPos::LsbSize((_,w)) => w.value_g(params),
+            FieldPos::Size(w) => w.value_g(params),
         }
     }
 
     /// Return an optional HwKind when unset and write access limited to clear or set
-    pub fn get_auto_hw_kind(&self, params: &ParamValues) -> Option<FieldHwKind> {
+    pub fn get_auto_hw_kind(&self, params:  (&ParamValues, &GenericValues)) -> Option<FieldHwKind> {
         if self.hw_kind.is_empty() && self.hw_acc.is_writable() && self.sw_kind!=FieldSwKind::ReadOnly {
-            let w = self.width(params);
+            let w = self.width(params).unwrap_or(2); // In case of parametr not found just return large enough value to be considered as a bus. This will anyway be catch at another level
             if self.sw_kind.is_set() {
                 Some(FieldHwKind::Clear(None))
             } else if w > 1 || (w==1 && !self.sw_kind.is_clr()) {

@@ -380,7 +380,7 @@ pub fn parse_logic_expr(input: &str) -> Result<LogicExpr,RifError> {
                     return Err(RifError::generic("Malformed expression: unexpected '~'"));
                 };
                 if id.field.is_none() {
-                    id.idx = Some(r.lsb as u16)
+                    id.idx = Some(r.lsb() as u16)
                 } else {
                     id.range = Some(r)
                 }

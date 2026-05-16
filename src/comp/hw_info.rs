@@ -38,7 +38,7 @@ impl SignalKind {
         if let Some((scope,name)) = f.enum_kind.get_type(base_scope, reg_type, &f.name) {
             SignalKind::Custom((Some(scope), name))
         } else {
-            let w = if f.sw_kind.is_password() {2} else {f.width};
+            let w = if f.sw_kind.is_password() {2} else {f.width()};
             if f.signed {
                 SignalKind::Signed(w)
             } else {

@@ -290,7 +290,7 @@ impl GeneratorSw for GeneratorPy {
         //
         let tab = " ".repeat(4*3);
         self.write(&format!("{tab}pos: int = {}\n", field.lsb));
-        self.write(&format!("{tab}width: int = {}\n", field.width));
+        self.write(&format!("{tab}width: int = {}\n", field.width()));
         self.write(&format!("{tab}value: int = {rst}\n", ));
         self.write(&format!("{tab}signed: bool = {}\n",
             if field.is_signed() {"True"} else {"False"}));

@@ -4,22 +4,47 @@ use super::ResetVal;
 
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct SignalRange {
-    pub lsb: u8,
-    pub msb: u8
+pub enum SignalRange {
+    /// Fixed range defined by the pair (msb,lsb)
+    Fixed((u8,u8)),
+    /// Generic range defined by a LSB and parameterized width
+    GenericWidth((String,u8)),
+    /// Generic range defined by a MSB and parameterized LSB
+    GenericLsb((u8,String)),
 }
 
 impl SignalRange {
+    /// Create a fixed range
     pub fn new(lsb: u8, msb: u8) -> Self {
-        SignalRange {lsb,msb}
+        SignalRange::Fixed((msb,lsb))
     }
 
+    /// Create a fixed single bit range
     pub fn new_bit(lsb: u8) -> Self {
-        SignalRange { lsb, msb: lsb }
+        SignalRange::Fixed((lsb,lsb))
     }
 
+    /// Create a range where width is generic
+    pub fn new_gen(name: String, lsb: u8) -> Self {
+        SignalRange::GenericWidth((name,lsb))
+    }
+
+    /// Check if the range is a single bit
     pub fn is_bit(&self) -> bool {
-        self.lsb == self.msb
+        match self {
+            SignalRange::Fixed((msb,lsb)) => lsb==msb,
+            SignalRange::GenericWidth(_) => false,
+            SignalRange::GenericLsb(_) => false,
+        }
+    }
+
+    /// Return LSB of the range
+    pub fn lsb(&self) -> u8 {
+        match self {
+            SignalRange::Fixed((_,lsb)) => *lsb,
+            SignalRange::GenericWidth((_,lsb)) => *lsb,
+            SignalRange::GenericLsb(_) => 0, // Might need to be reviwed if this method is used elsewhere than logic_expr_parser
+        }
     }
 }
 
@@ -280,10 +305,11 @@ impl From<(u16,u16)> for LogicExpr {
 impl LogicExpr {
     /// Create a Value (Signed/Unsigned) from a u128 and a field definition (for signed and width)
     pub fn value(v: u128, info: &RifFieldInst) -> LogicExpr {
+        let w = info.width.value() as usize;
         if info.is_signed() {
-            LogicExpr::ValueI(v as i128, info.width.into())
+            LogicExpr::ValueI(v as i128, w)
         } else {
-            LogicExpr::ValueU(v, info.width.into())
+            LogicExpr::ValueU(v, w)
         }
     }
     /// Create a Value (Signed/Unsigned) from a u128 and a field definition (for signed and width)

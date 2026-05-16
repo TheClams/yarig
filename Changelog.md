@@ -1,6 +1,12 @@
 # Change Log
 
 
+## [0.22.4] - 2026-05-17
+
+### Added
+  - Generator HW:
+    * Support generics in field length: field length in field is decided by max value, but MSBs above the parameter value are forced to 0 (suppose synthesis will properly simplify it)
+
 ## [0.22.3] - 2026-05-08
 
 ### Fix
