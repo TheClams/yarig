@@ -249,6 +249,10 @@ subdir = "subdir_name"
 # Optional: List of package import per register block
 imports.blk0 = "blk0_sim_pkg"
 imports.blk1 = "blk1_sim_pkg"
+
+# Optional: force the ise of the base class rather than extending from another RIF
+# Usefull when the base RIF should stay confidential
+force_base = true
 ```
 
 ### Python Generation

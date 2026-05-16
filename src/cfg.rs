@@ -439,6 +439,8 @@ pub struct CfgRal {
     pub imports: Option<HashMap<String,String>>,
     /// Sub-directory name for generated file which are not the top level
     pub subdir: Option<String>,
+    /// Force the use of the base class rather than extending when RIF is derived from on another one
+    pub force_base: Option<bool>,
 }
 
 /// Configuration specific to python target
@@ -609,6 +611,7 @@ impl YarigCfg {
 
         if args.ral_base_class.is_some() {self.ral.class = args.ral_base_class;}
         if args.ral_block_macro.is_some() {self.ral.macro_name = args.ral_block_macro;}
+        if args.ral_force_base.is_some() {self.ral.force_base = args.ral_force_base;}
         //
         if !args.parameters.is_empty() {self.parameters.extend(args.parameters)};
         if let Some(suffix) = args.suffix {self.suffixes.insert("".to_owned(), suffix);};

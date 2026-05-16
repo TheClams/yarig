@@ -103,6 +103,9 @@ pub struct RifGenArgs{
     /// Name of macro to create RAL register block
     #[arg(long)]
     pub ral_block_macro: Option<String>,
+    /// RAL use the UVM base class instead of extending another RAL (when derived)
+    #[arg(long)]
+    pub ral_force_base: Option<bool>,
     /// Add constant in RTL package for registers (address/reset)
     #[arg(long, action)]
     pub rtl_const_reg: bool,

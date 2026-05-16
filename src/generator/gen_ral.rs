@@ -20,6 +20,8 @@ pub struct GeneratorRal {
     ral_class : String,
     /// Name of macro to instantiate register block
     ral_macro : Option<String>,
+     /// Force the use of the base class rather than extending when RIF is derived from on another one
+    force_base : bool,
     /// Flag when current register is defined in another rif
     reg_is_incl : bool,
     /// Name of macro to instantiate register block
@@ -40,6 +42,7 @@ impl GeneratorRal {
             ral_class: extra.class.unwrap_or("uvm_reg_block".to_owned()),
             ral_macro: extra.macro_name,
             imports: extra.imports.unwrap_or_default(),
+            force_base: extra.force_base.unwrap_or_default(),
             reg_is_incl: false,
         }
     }
@@ -119,7 +122,7 @@ impl GeneratorSw for GeneratorRal {
     fn write_reg_header(&mut self, _basename: &str, reg: &RifRegInst) {
         let reg_type = reg.reg_type.to_lowercase();
         let baseclass =
-            if let Some(rif) = &reg.incl {
+            if !self.force_base && let Some(rif) = &reg.incl {
                 self.reg_is_incl = true;
                 format!("ral_reg_{rif}_{reg_type}")
             }
