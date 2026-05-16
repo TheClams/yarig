@@ -118,6 +118,9 @@ pub struct RifGenArgs{
     /// Force generation of limits on all enums
     #[arg(long, action)]
     pub rtl_force_limit: Option<RtlLimit>,
+    /// Add pipe level in Rifmux when generating invalid address signal due to no RIF being selected
+    #[arg(long)]
+    pub rifmux_pipe_invalid: Option<bool>,
     /// List of element to skip in generators (ADOC only at the moment): RifTitle, RifmuxTitle
     #[arg(long, num_args = 1..)]
     pub skip: Vec<Skippable>,

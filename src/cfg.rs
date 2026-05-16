@@ -413,6 +413,8 @@ pub struct CfgRtl {
     pub local: Option<Vec<String>>,
     /// Generate constant for register address in the package
     pub const_reg: Option<bool>,
+    /// Add one pipe level to generate the invalid address in a rifmux when no RIF is selected
+    pub rifmux_pipe_invalid: Option<bool>,
     /// Generate constant for field reset/position/width
     pub const_field: Option<bool>,
     /// Sub-directory name for generated file which are not the top level
@@ -624,11 +626,13 @@ impl YarigCfg {
         if args.suffix_rtl_only {self.suffix_rtl_only = true;}
         if args.rtl_const_reg {self.rtl.const_reg = Some(true);}
         if args.rtl_const_field {self.rtl.const_field = Some(true);}
-        if let Some(l) = args.rtl_limit {self.rtl.limit = Some(l);}
-        if let Some(l) = args.rtl_force_limit {self.rtl.force_limit = Some(l);}
+        if args.rtl_limit.is_some() {self.rtl.limit = args.rtl_limit;}
+        if args.rtl_force_limit.is_some() {self.rtl.force_limit = args.rtl_force_limit;}
+        if args.rifmux_pipe_invalid.is_some() {self.rtl.rifmux_pipe_invalid = args.rifmux_pipe_invalid;}
         if args.keyword_rename {self.keywords.error = false;}
         if args.targets.contains(&RifGenTarget::Sv) {self.keywords.sv = true;}
         if args.targets.contains(&RifGenTarget::Vhdl) {self.keywords.vhdl = true;}
+
 
         if args.c_base_addr_name.is_some() {
             self.c.base_offset = args.c_base_addr_name;

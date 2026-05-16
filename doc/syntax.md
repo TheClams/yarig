@@ -211,6 +211,7 @@ The optional properties of a field, indented by one level compare to the field d
   - `w` : write-only
   - `rw` : read/write
   - `na` : Not accessible from HW
+ - `clock <clock_name>` : Indicate which clock (amongst the software and all hardware clocks) should be used for this field. Default to use the register clock.
  - `clkEn <clock_enable_name>` : Define a clock enable signal for this field
  - `hwset [<set_signal>] [<data_signal>]` : Hardware high set the field to 1.
   The _set_signal_ can be in the form `self.field_name` in which case a field is added to the hardware structure of the register (if it does not exists).

@@ -1796,7 +1796,7 @@ pub trait GeneratorHw : GeneratorBase {
         }
         self.write_module_port_header();
         // Add port/reset port if not default interface
-        if !rifmux.interface.is_default() {
+        if !rifmux.interface.is_default() || self.rifmux_pipe_invalid() {
             self.write_port_decl(&PortInfo::new_in(
                 rifmux.sw_clocking.clk.to_owned(), "Bridge clock".to_owned()), None, false);
             self.write_port_decl(&PortInfo::new_in(
@@ -1895,11 +1895,16 @@ pub trait GeneratorHw : GeneratorBase {
                 LogicExpr::not(LogicExpr::Or(en_names))
             )
         );
-        // TODO : Use argument to insert pipe
-        self.write_assign(
-            "addr_invalid".into(),
-            "addr_invalid_next".into()
-        );
+        // Optionnal pipe on addr_invalid
+        if self.rifmux_pipe_invalid() {
+            let signals: Vec<SignalInfo> = vec![SignalInfo::new("addr_invalid".into(), LogicExpr::ValueU(0, 1), "addr_invalid_next".into())];
+            self.write_process_seq(&rifmux.sw_clocking.clk, &rifmux.sw_clocking.rst, "proc_addr_invalid", &signals);
+        } else {
+            self.write_assign(
+                "addr_invalid".into(),
+                "addr_invalid_next".into()
+            );
+        }
         self.write("\n");
 
         let mut dones : Vec<LogicExpr> = ["addr_invalid".into()].to_vec();
@@ -2212,6 +2217,9 @@ pub trait GeneratorHw : GeneratorBase {
 
     /// Return the RTL limit configuration (default and force)
     fn limit_cfg(&self) -> RtlLimitCfg;
+
+    /// Return the RifMux address invalid pipe configuration
+    fn rifmux_pipe_invalid(&self) -> bool;
 
 }
 

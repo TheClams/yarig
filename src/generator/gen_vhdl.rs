@@ -26,6 +26,8 @@ pub struct GeneratorVhdl {
     enum_width : u8,
     /// Controls how field limits are used
     limit: RtlLimitCfg,
+    /// add a pipe level to the generation of invalid address flag when no RIF is selected
+    rifmux_pipe_invalid: bool,
     /// True when current module instance is a bridge
     is_bridge : bool,
     /// Component interface
@@ -56,6 +58,7 @@ impl GeneratorVhdl {
             nb_pipe: extra.nb_pipe.unwrap_or(1),
             const_reg: extra.const_reg.unwrap_or(false),
             const_field: extra.const_field.unwrap_or(false),
+            rifmux_pipe_invalid: extra.rifmux_pipe_invalid.unwrap_or(false),
             limit,
             is_bridge: false,
             generics: HashMap::new(),
@@ -333,6 +336,11 @@ impl GeneratorHw for GeneratorVhdl {
     /// Flag when field constants (mask, lsb, msb, reset) should be generated
     fn limit_cfg(&self) -> RtlLimitCfg {
         self.limit
+    }
+
+    /// Return the RifMux address invalid pipe configuration
+    fn rifmux_pipe_invalid(&self) -> bool {
+        self.rifmux_pipe_invalid
     }
 
     /// Write generic header for a file

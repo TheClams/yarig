@@ -1,11 +1,12 @@
 # Change Log
 
 
-## [0.22.4] - 2026-05-17
+## [0.23.0] - 2026-05-17
 
 ### Added
   - Generator HW:
     * Support generics in field length: field length in field is decided by max value, but MSBs above the parameter value are forced to 0 (suppose synthesis will properly simplify it)
+    * New option "rifmux_pipe_invalid" to add a pipe level to the generation of invalid address flag when no RIF is selected. Allows to relax timing constraint on this signal.
   - Generator RAL: new option "--ral_force_base" allows to force base class of derived register to still use uvm_reg
 
 ## [0.22.3] - 2026-05-08

@@ -225,6 +225,9 @@ const_reg = true
 
 # Generate constant for field reset/position/width
 const_field = true
+
+# Add one pipe level to generate the invalid address in a Rifmux when no RIF is selected
+rifmux_pipe_invalid = true
 ```
 
 ### Register Abstraction Layer (RAL)

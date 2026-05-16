@@ -21,6 +21,8 @@ pub struct GeneratorSv {
     is_bridge : bool,
     /// Controls how field limits are used
     limit: RtlLimitCfg,
+    /// add a pipe level to the generation of invalid address flag when no RIF is selected
+    rifmux_pipe_invalid: bool,
     /// Software clock for curren RIF
     sw_clk: String,
     /// Flag when UVM library should be imported for current RIF
@@ -41,6 +43,7 @@ impl GeneratorSv {
             nb_pipe: extra.nb_pipe.unwrap_or(1),
             const_reg: extra.const_reg.unwrap_or(false),
             const_field: extra.const_field.unwrap_or(false),
+            rifmux_pipe_invalid: extra.rifmux_pipe_invalid.unwrap_or(false),
             is_bridge: false,
             limit,
             sw_clk: "clk".to_owned(),
@@ -252,6 +255,11 @@ impl GeneratorHw for GeneratorSv {
     /// Flag when field constants (mask, lsb, msb, reset) should be generated
     fn limit_cfg(&self) -> RtlLimitCfg {
         self.limit
+    }
+
+    /// Return the RifMux address invalid pipe configuration
+    fn rifmux_pipe_invalid(&self) -> bool {
+        self.rifmux_pipe_invalid
     }
 
     /// Write generic header for a file
