@@ -637,7 +637,7 @@ impl Width {
             Width::Param(name) =>
                 params.get(name)
                     .map(|v| *v as u8)
-                    .ok_or_else(|| format!("Unknown parameter {name} in position !"))
+                    .ok_or_else(|| format!("Unknown parameter {name} in width definition !"))
         }
     }
 

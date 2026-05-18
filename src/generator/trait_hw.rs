@@ -118,7 +118,7 @@ pub trait GeneratorHw : GeneratorBase {
                 };
                 let field_name = if f.sw_kind.is_password() {format!("{name}_locked")} else {name.to_owned()};
                 let field_decl = SignalDecl::new(
-                    SignalDef::new_arr(field_name, kind, f.array.into()),
+                    SignalDef::new_arr(field_name, kind, f.array.value().into()),
                     f.description.get_short(false)
                 );
                 // Add field to SW structure writable by firmware or readable by hardware
@@ -535,7 +535,7 @@ pub trait GeneratorHw : GeneratorBase {
                         // Add next signal for each field
                         for f in hw_reg_def.fields.iter() {
                             let f_name = self.casing(&f.name);
-                            if f.array == 0 {
+                            if f.array.value() == 0 {
                                 self.write_signal_decl(&SignalDef::new_bus(
                                     format!("{name}{idx}_{f_name}__cleared"), f.width(), false).into());
                                 self.write_signal_decl(&SignalDef::new_bus(
@@ -549,7 +549,7 @@ pub trait GeneratorHw : GeneratorBase {
                                         format!("{name}{idx}_mask_{f_name}__next"), f.width(), false).into());
                                 }
                             } else {
-                                for fi in 0..f.array {
+                                for fi in 0..f.array.value() {
                                     self.write_signal_decl(&SignalDef::new_bus(
                                         format!("{name}{idx}_{f_name}{fi}__cleared"), f.width(), false).into());
                                     self.write_signal_decl(&SignalDef::new_bus(
@@ -590,13 +590,14 @@ pub trait GeneratorHw : GeneratorBase {
                     }
                     // Check if force limit is enabled and the register did not have yet a limit
                     let has_forced_limit = limit_cfg.1 == RtlLimit::Hardware && f.enum_kind.is_type() && f.limit.is_none() && f.is_sw_write();
-                    if f.array > 0 {
+                    let f_depth = f.array.value();
+                    if f_depth > 0 {
                         if has_forced_limit {
-                            for i in 0..f.array {
+                            for i in 0..f_depth {
                                 self.write_signal_decl(&SignalDef::new_bit(format!("{f_name}{i}__check")).into());
                             }
                         }
-                        for i in 0..f.array {
+                        for i in 0..f_depth {
                             self.write_signal_decl(&SignalDef::new(
                                 format!("{f_name}{i}__next"), sig_kind.clone()).into());
                         }
@@ -892,6 +893,14 @@ pub trait GeneratorHw : GeneratorBase {
                         continue;
                     }
 
+                    // Conditional assign for field array with generic depth
+                    if let FieldWidth::Generic((param_name,_)) = &field_impl.array {
+                        let param_id : LogicExpr = param_name.as_str().into();
+                        let cond = LogicExpr::gt(param_id, LogicExpr::ValueI(field.array.idx() as i128, 0));
+                        self.write("\n");
+                        self.write_generate_if(cond, format!("gen_{reg_field_name}") );
+                    }
+
                     // Construct the field value from the bus with bit selection
                     // For non partial field, add proper casting (signed/enum)
                     let bus_range = match &field.width {
@@ -962,6 +971,12 @@ pub trait GeneratorHw : GeneratorBase {
                         if let FieldWidth::Generic((n,r)) = &field.width {
                             cond_assign.push(field_id);
                             self.write_cond_generic_field(&reg_field_name, n.as_ref(), r, &cond_assign);
+                        }
+                        else if field_impl.array.is_generic() {
+                            self.write_generate_else(format!("gen_no_{reg_field_name}"));
+                            let reset_val = LogicExpr::reset(&field.reset, field_impl.width() as u8);
+                            self.write_assign(field_id, reset_val);
+                            self.write_generate_end(format!("gen_no_{reg_field_name}"));
                         }
                         continue;
                     }
@@ -1075,6 +1090,13 @@ pub trait GeneratorHw : GeneratorBase {
                             cond_assign.push(field_clr_id);
                             cond_assign.push(field_next_id);
                             self.write_cond_generic_field(&reg_field_name, n.as_ref(), r, &cond_assign);
+                        } else if field_impl.array.is_generic() {
+                            self.write_generate_else(format!("gen_no_{reg_field_name}"));
+                            let reset_val = LogicExpr::reset(&field.reset, field_impl.width() as u8);
+                            self.write_assign(intr_l_id, LogicExpr::ValueU(0, 0));
+                            self.write_assign(field_clr_id, LogicExpr::ValueU(0, 0));
+                            self.write_assign(field_next_id, reset_val);
+                            self.write_generate_end(format!("gen_no_{reg_field_name}"));
                         }
                         continue;
                     }
@@ -1090,6 +1112,11 @@ pub trait GeneratorHw : GeneratorBase {
                         if let FieldWidth::Generic((n,r)) = &field.width {
                             cond_assign.push(field_next_id);
                             self.write_cond_generic_field(&reg_field_name, n.as_ref(), r, &cond_assign);
+                        } else if field_impl.array.is_generic() {
+                            self.write_generate_else(format!("gen_no_{reg_field_name}"));
+                            let reset_val = LogicExpr::reset(&field.reset, field_impl.width() as u8);
+                            self.write_assign(field_next_id, reset_val);
+                            self.write_generate_end(format!("gen_no_{reg_field_name}"));
                         }
                         continue;
                     }
@@ -1296,6 +1323,11 @@ pub trait GeneratorHw : GeneratorBase {
                         if let FieldWidth::Generic((n,r)) = &field.width {
                             cond_assign.push(field_next_id);
                             self.write_cond_generic_field(&reg_field_name, n.as_ref(), r, &cond_assign);
+                        } else if field_impl.array.is_generic() {
+                            self.write_generate_else(format!("gen_no_{reg_field_name}"));
+                            let reset_val = LogicExpr::reset(&field.reset, field_impl.width() as u8);
+                            self.write_assign(field_next_id, reset_val);
+                            self.write_generate_end(format!("gen_no_{reg_field_name}"));
                         }
 
                     }

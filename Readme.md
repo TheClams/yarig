@@ -211,9 +211,9 @@ This trait is used by the generators for AsciiDoc, HTML, Latex and Mif (FrameMak
     - [x] Generics for optional register
     - [ ] Generics for optional pages
     - [ ] Generics for optional fields
-    - [ ] Generics for field array: the array size would be defined by the max value (since struct are not parameterizable in SV)
-          but the logic for out-of-range field element would be forced to 0
     - [x] Generics for field width: the field size would be defined by the max value (since struct are not parameterizable in SV)
+          but the logic for out-of-range field element would be forced to 0
+    - [x] Generics for field array: the array size would be defined by the max value (since struct are not parameterizable in SV)
           but the logic for out-of-range field element would be forced to 0
     - [ ] The else part of generic should force unused signal to 0 to avoid lint warning ?
     - [ ] Value used in documentation should be controllable via parameter settings (default to max, like currently)

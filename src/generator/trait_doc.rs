@@ -570,7 +570,7 @@ pub trait GeneratorDoc : GeneratorBase {
                             && let Ok(field_impl) = reg_impl.get_field(&f.name) {
                                 let reg_idx = reg.array.dim() - 1;
                                 let last_field_idx = reg_idx * f.array.dim() + f.array.idx();
-                                if last_field_idx >= field_impl.array {
+                                if last_field_idx >= field_impl.array.value() {
                                     desc.push_str(&self.sanitize(&format!(" \nNote: Disabled in register {}[{reg_idx}]", reg_impl.name)));
                                 }
                         }

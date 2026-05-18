@@ -952,7 +952,7 @@ impl RifRegInst {
         let reg_array_idx = r.def_idx();
         // let param_gen = rifs.param_gen();
         for f in def.fields.iter() {
-            let array_size = f.array.value(params)? as u16;
+            let array_size = f.array.value_g(param_gen).map_err(|msg| format!("{msg} (register {}.{})", def.name, f.name))? as u16;
             let nb = array_size.max(1);
             let offset = r.array.idx() * nb + f.partial.1;
             for i in 0..nb {
@@ -1222,8 +1222,8 @@ pub enum FieldWidth {
 }
 
 impl FieldWidth {
-    /// Create FieldWidth from Width definition
-    pub fn new(value: u16, pos: &FieldPos, generics: &GenericValues) -> Self {
+    /// Create FieldWidth from position definition (for field width)
+    pub fn from_pos(value: u16, pos: &FieldPos, generics: &GenericValues) -> Self {
         match pos {
             FieldPos::MsbLsb(_) => FieldWidth::Value(value),
             FieldPos::LsbSize((_,w)) |
@@ -1237,11 +1237,38 @@ impl FieldWidth {
         }
     }
 
+    /// Create FieldWidth from Width definition (for field array size)
+    pub fn from_width(value: u16, width: &Width, generics: &GenericValues) -> Self {
+        match width {
+            Width::Value(_) => FieldWidth::Value(value),
+            Width::Param(name) => {
+                if let Some(g) = generics.get(name) {
+                    FieldWidth::Generic((name.clone(), g.clone()))
+                } else {
+                    FieldWidth::Value(value)
+                }
+            }
+        }
+    }
+
     /// Return a field value
     pub fn value(&self) -> u16 {
         match self {
             FieldWidth::Value(v) => *v,
             FieldWidth::Generic((_,r)) => r.max,
+        }
+    }
+
+    /// Increment value
+    pub fn incr(&mut self, s: u16) -> Result<(), String> {
+        match self {
+            FieldWidth::Value(v) => {
+                *v += s;
+                Ok(())
+            }
+            FieldWidth::Generic((n,_)) => {
+                Err(format!("Generic width {n} used in unsupported context ! (Partial ?)"))
+            }
         }
     }
 
@@ -1302,7 +1329,8 @@ impl RifFieldInst {
         // Get reset value (could be defined as a param, a float or an enum)
         let mut reset = field.reset.first()
             .unwrap_or_default()
-            .compile(field.signed, field.nb_frac, params, enum_def)?;
+            .compile(field.signed, field.nb_frac, params, enum_def)
+            .map_err(|msg| format!("{msg} in reset value of field {}", field.name))?;
         let idx : ArrayIdx;
         // Create format string for description
         let s = if field.signed {'s'} else {'u'};
@@ -1325,7 +1353,7 @@ impl RifFieldInst {
             // (otherwise simply repeat the one at indice 0)
             let mut rst_idx = array.idx() as usize
                         + if array.is_def() {array.dim() as usize} else {0};
-            let field_array_dim = field.array.value(params)? as usize;
+            let field_array_dim = field.array.value_g(param_gen).map_err(|msg| format!("{msg} (Field {})", field.name))? as usize;
             if rst_idx > field.reset.len() && field.reset.len() == field_array_dim {
                 rst_idx %= field_array_dim;
             }
@@ -1337,7 +1365,7 @@ impl RifFieldInst {
                 return Ok(None);
             }
             let i = array.dim() + array.idx();
-            idx = ArrayIdx::Def(i,field.array.value(params)?.into());
+            idx = ArrayIdx::Def(i,field_array_dim as u16);
             desc_idx = i.into();
             desc_idx_base = desc_idx;
             desc = field.description.with_format(&format_str);
@@ -1373,7 +1401,7 @@ impl RifFieldInst {
         }
 
         *next_lsb += width;
-        let width = FieldWidth::new(width as u16, &field.pos, &rifs.generics);
+        let width = FieldWidth::from_pos(width as u16, &field.pos, &rifs.generics);
         Ok(Some(RifFieldInst {
             name: field.name.to_owned(),
             base_description,

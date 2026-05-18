@@ -22,7 +22,7 @@ pub struct FieldImpl {
     /// Field width
     pub width: FieldWidth,
     /// Field array size
-    pub array: u16,
+    pub array: FieldWidth,
     /// Sign-ness
     pub signed: bool,
     /// Reset value
@@ -63,7 +63,8 @@ impl FieldImpl {
         let param_gen = rifs.param_gen();
         let enum_def = field.enum_kind.get_def(&rifs.enums);
         // Handle field array: total size is given by the register size, the field partial info, and the field reset length
-        let field_array = field.array.value(params)? as u16;
+        let field_array = field.array.value_g(param_gen)
+            .map_err(|msg| format!("{msg} (Field {} )", field.name))? as u16;
         let nb_reset = field.reset.len() as u16;
         let mut array = reg_array.max(1) * field_array + field.partial.1;
         if array > nb_reset && nb_reset > field_array {
@@ -94,6 +95,7 @@ impl FieldImpl {
         if let Some(kind) = field.get_auto_hw_kind(param_gen) {
             hw_kind.push(kind);
         }
+        let array = FieldWidth::from_width(array, &field.array, &rifs.generics);
         Ok(FieldImpl {
             name: field.name.clone(),
             width: FieldWidth::Value(width),
@@ -453,15 +455,18 @@ impl RegImpl {
                     }
                 }
                 // Partial Array
-                if f.partial.1 > 0 && field_impl.array > 0 {
+                let fi_depth = field_impl.array.value();
+                if f.partial.1 > 0 && fi_depth > 0 {
                     if f.is_partial() {
                         return Err(format!("Field {}.{} : arrays of partial field is not supported !", reg.name, f.name))
                     }
                     // Check contiguous partial array in increasing order
-                    if field_impl.array != f.partial.1 {
-                        return Err(format!("Field {}.{} : Non contiguous partial field array. Expecting {} found {}", reg.name, f.name, field_impl.array, f.partial.1));
+                    if fi_depth != f.partial.1 {
+                        return Err(format!("Field {}.{} : Non contiguous partial field array. Expecting {fi_depth} found {}", reg.name, f.name, f.partial.1));
                     }
-                    field_impl.array += f.array.value(params)? as u16;
+                    // field_impl.array += f.array.value(params).map_err(|msg| format!("{msg} (Register {}.{} )", reg.name, f.name))? as u16;
+                    let size_l = f.array.value(params).map_err(|msg| format!("{msg} (Register {}.{} )", reg.name, f.name))? as u16;
+                    field_impl.array.incr(size_l).map_err(|msg| format!("{msg} (Register {}.{})", reg.name, f.name))?;
                     let enum_def = f.enum_kind.get_def(&rifs.enums);
                     // TODO: might need to check dimensions (or maybe should be done at parsing level)
                     for r in f.reset.iter() {
@@ -678,9 +683,10 @@ impl HwRegs {
                             .filter(
                                 |fi| (fi.is_sw_write() || fi.has_write_mod() || reg.is_intr())
                                     && !reg.fields.iter().any(|fr| fr.name == fi.name) ) {
-                            if fi.array > 0 {
+                            let fi_depth = fi.array.value();
+                            if fi_depth > 0 {
                                 // TODO handle partially implemented array: might need to remove the condition check on name inside the filter
-                                for i in 0..fi.array {
+                                for i in 0..fi_depth {
                                     missing.insert(format!("{}[{i}]", fi.name), MissingFieldInfo::from(fi,i as usize));
                                 }
                             } else {

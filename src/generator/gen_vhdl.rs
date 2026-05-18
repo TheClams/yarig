@@ -380,7 +380,7 @@ impl GeneratorHw for GeneratorVhdl {
                 }
             }
             let hw_reg_def = rif.get_hw_reg(&hw_reg.group);
-            for f in hw_reg_def.fields.iter().filter(|f| f.array > 0) {
+            for f in hw_reg_def.fields.iter().filter(|f| f.array.value() > 0) {
                 if vec_a.contains(&f.width()) {continue;}
                 vec_a.push(f.width());
             }
