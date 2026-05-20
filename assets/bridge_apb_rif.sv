@@ -5,7 +5,7 @@
 //
 //----------------------------------------------------------------------------*/
 
-module bridge_apb_rif #(parameter int ADDR_W=16,parameter int DATA_W=32,parameter bit ASSUME_WR_OK = 0) (
+module bridge_apb_rif #(parameter int ADDR_W=16,parameter int DATA_W=32) (
    input  wire              clk    ,
    input  wire              rst_n  ,
    rif_if.ctrl              if_rif ,
@@ -21,39 +21,17 @@ module bridge_apb_rif #(parameter int ADDR_W=16,parameter int DATA_W=32,paramete
 );
 
 /*------------------------------------------------------------------------------
---  Signals declaration
-------------------------------------------------------------------------------*/
-
-   logic wr_en;
-
-/*------------------------------------------------------------------------------
 --
 ------------------------------------------------------------------------------*/
 
-   // Generate a pulse of write enable
-   always_ff @(posedge clk or negedge rst_n) begin : proc_wr_en
-      if(~rst_n) begin
-         wr_en <= 0;
-      end else begin
-         wr_en <= psel & ~penable & pwrite;
-      end
-   end
-
    assign if_rif.addr = paddr;
-   assign if_rif.en   = (psel & ~pwrite & ~penable) | wr_en;
+   assign if_rif.en   = psel & ~penable; // Setup phase
    assign if_rif.rd_wrn = ~pwrite;
    assign if_rif.wr_data = pwdata;
 
    assign prdata = if_rif.rd_data;
 
-   generate
-      if(ASSUME_WR_OK) begin : gen_assume_wr_ok
-         assign pslverr = if_rif.done & if_rif.err_addr & ~pwrite & penable;
-         assign pready  = penable & ~pwrite & ~if_rif.done ? 1'b0 : 1'b1;
-      end else begin : gen_handle_wr_err
-         assign pslverr = if_rif.done & (if_rif.err_addr | if_rif.err_access);
-         assign pready  = penable & ~if_rif.done ? 1'b0 : 1'b1;
-      end
-   endgenerate
+   assign pslverr = if_rif.done & (if_rif.err_addr | if_rif.err_access);
+   assign pready  = penable & ~if_rif.done ? 1'b0 : 1'b1;
 
 endmodule

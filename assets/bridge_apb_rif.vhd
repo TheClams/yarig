@@ -9,7 +9,7 @@ use ieee.std_logic_1164.all;
 use ieee.std_logic_misc.all;
 
 entity bridge_vhd_apb_rif is
-  generic (ADDR_W : natural := 16; DATA_W : natural := 32; ASSUME_WR_OK : boolean := false);
+  generic (ADDR_W : natural := 16; DATA_W : natural := 32);
   port (
     clk : in std_logic; -- Clock
     -- Input signals
@@ -39,36 +39,15 @@ end bridge_vhd_apb_rif;
 
 architecture rtl of bridge_vhd_apb_rif is
 
---------------------------------------------------------------------------------
---  Signals declaration
---------------------------------------------------------------------------------
-  signal wr_en  : std_logic;
-
 begin
 
-  -- Generate a pulse of write enable
-  proc_wr_en : process(clk, rst_n) begin
-    if rst_n = '0' then
-      wr_en <= '0';
-    elsif rising_edge(clk) then
-      wr_en <= psel and not penable and pwrite;        
-    end if;
-  end process;
-
   reg_addr    <= paddr;
-  reg_en      <= (psel and not pwrite and not penable) or wr_en;
+  reg_en      <= psel and not penable;
   reg_rd_wrn  <= not pwrite;
   reg_wr_data <= pwdata;
   prdata      <= reg_rd_data; 
 
-  G_ASSUME_WR_OK : if (ASSUME_WR_OK = true) generate
-    pslverr <= reg_done and reg_err_addr and not pwrite;
-    pready  <= '0' when (penable = '1' and pwrite = '0' and reg_done = '0') else '1';
-  end generate G_ASSUME_WR_OK;
-  
-  G_ASSUME_NOT_WR_OK : if (ASSUME_WR_OK = false) generate 
-    pslverr <= reg_done and (reg_err_addr or reg_err_access);
-    pready  <= '0' when (penable = '1' and reg_done = '0') else '1';
-  end generate G_ASSUME_NOT_WR_OK;
+  pslverr <= reg_done and (reg_err_addr or reg_err_access);
+  pready  <= '0' when (penable = '1' and reg_done = '0') else '1';
 
 end architecture;
