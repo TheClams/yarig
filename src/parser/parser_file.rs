@@ -267,7 +267,7 @@ impl RifGenSrc {
                             self.last_hidden = is_hidden(&mut l)?;
                             if !l.is_empty() {
                                 let hidden = self.last_hidden;
-                                self.last_rif().description.updt(desc(l)?, hidden);
+                                self.last_rif_mut().description.updt(desc(l)?, hidden);
                             }
                             context_stack.push((Context::Description, ilvl + 1));
                             desc_lvl = 0;
@@ -277,41 +277,41 @@ impl RifGenSrc {
                         Context::Interface => {
                             let intf = val_intf(&mut l)?;
                             if intf == Interface::Apb {
-                                if !sw_clk_defined.0 {self.last_rif().sw_clocking.clk = "pclk".to_owned();}
-                                if !sw_clk_defined.1 {self.last_rif().sw_clocking.rst = ResetDef::new("presetn".to_owned());}
+                                if !sw_clk_defined.0 {self.last_rif_mut().sw_clocking.clk = "pclk".to_owned();}
+                                if !sw_clk_defined.1 {self.last_rif_mut().sw_clocking.rst = ResetDef::new("presetn".to_owned());}
                             }
-                            self.last_rif().interface = intf;
+                            self.last_rif_mut().interface = intf;
                         }
-                        Context::AddrWidth => self.last_rif().addr_width = val_u8(&mut l)?,
+                        Context::AddrWidth => self.last_rif_mut().addr_width = val_u8(&mut l)?,
                         Context::DataWidth => {
                             let w = val_u8(&mut l)?.try_into()?;
-                            self.last_rif().data_width = w;
+                            self.last_rif_mut().data_width = w;
                             self.last_data_width = w;
                         }
                         Context::SwClock => {
                             sw_clk_defined.0 = true;
-                            self.last_rif().sw_clocking.clk = identifier_last(l)?.to_owned()
+                            self.last_rif_mut().sw_clocking.clk = identifier_last(l)?.to_owned()
                         }
                         Context::SwClkEn => {
-                            self.last_rif().sw_clocking.en = identifier_last(l)?.to_owned()
+                            self.last_rif_mut().sw_clocking.en = identifier_last(l)?.to_owned()
                         }
                         Context::SwReset => {
                             sw_clk_defined.1 = true;
-                            self.last_rif().sw_clocking.rst = reset_def(l)?;
+                            self.last_rif_mut().sw_clocking.rst = reset_def(l)?;
                         }
                         Context::SwClear => {
-                            self.last_rif().sw_clocking.clear = identifier_last(l)?.to_owned()
+                            self.last_rif_mut().sw_clocking.clear = identifier_last(l)?.to_owned()
                         }
-                        Context::HwClock => self.last_rif().set_hw_clk(vec_id(l)?),
-                        Context::HwClkEn => self.last_rif().set_hw_clken(vec_id(l)?),
-                        Context::HwReset => self.last_rif().set_hw_rst(reset_def(l)?),
-                        Context::HwClear => self.last_rif().set_hw_clear(vec_id(l)?),
+                        Context::HwClock => self.last_rif_mut().set_hw_clk(vec_id(l)?),
+                        Context::HwClkEn => self.last_rif_mut().set_hw_clken(vec_id(l)?),
+                        Context::HwReset => self.last_rif_mut().set_hw_rst(reset_def(l)?),
+                        Context::HwClear => self.last_rif_mut().set_hw_clear(vec_id(l)?),
                         Context::SuffixPkg => {
-                            self.last_rif().suffix_pkg = bool_or_default(l, false)?
+                            self.last_rif_mut().suffix_pkg = bool_or_default(l, false)?
                         }
                         Context::Generics => context_stack.push((Context::Generics, ilvl + 1)),
                         Context::Item(name) => {
-                            self.last_rif().pages.push(RifPage::new(name));
+                            self.last_rif_mut().pages.push(RifPage::new(name));
                             if !l.is_empty() {
                                 let hidden = self.last_hidden;
                                 self.last_page_mut().description.updt(desc(l)?, hidden);
@@ -339,7 +339,7 @@ impl RifGenSrc {
                             last_rifmux.add_param(k,expr);
                         }
                         Some((Context::Rif, _))     => {
-                            let last_rif = self.last_rif();
+                            let last_rif = self.last_rif_mut();
                             if last_rif.generics.contains_key(k) {
                                 return Err(RifError::duplicated(Context::Parameters, k));
                             }
@@ -361,7 +361,7 @@ impl RifGenSrc {
                             last_rifmux.add_generic(gen_def);
                         }
                         Some((Context::Rif, _)) => {
-                            let last_rif = self.last_rif();
+                            let last_rif = self.last_rif_mut();
                             if last_rif.parameters.contains_key(gen_def.0) {
                                 return Err(RifError::duplicated(Context::Generics, gen_def.0));
                             }
@@ -503,7 +503,7 @@ impl RifGenSrc {
                             let info = reg_interrupt(&mut l)?;
                             if !l.trim().is_empty() {
                                 // return Err(RifError::unsupported(Context::Interrupt, &format!("Invalid characters: '{l}'")));
-                                eprintln!("[WARNING] Ignoring extra chracter '{l}' in interrupt definition of {}", self.last_reg().name);
+                                eprintln!("[WARNING] Ignoring extra character '{l}' in interrupt definition of {}.{} (line {line_num})", self.last_rif().name, self.last_reg().name);
                             }
                             self.last_reg_mut().interrupt.push(InterruptInfo::new("", info));
                         },
@@ -651,7 +651,7 @@ impl RifGenSrc {
                                     }
                                     let enum_def = EnumDef::new(enum_name.to_owned(), desc);
                                     last_enum = Some(enum_def.name.to_owned());
-                                    self.last_rif().enum_defs.push(enum_def);
+                                    self.last_rif_mut().enum_defs.push(enum_def);
                                     context_stack.push((Context::Enum, ilvl + 1));
                                 } else {
                                     last_enum = None;
@@ -678,7 +678,7 @@ impl RifGenSrc {
                     let hidden = self.last_hidden;
                     match context_stack.get(context_stack.len() - 2) {
                         Some((Context::Rifmux, _))  => self.last_rifmux().description.updt(&txt, hidden),
-                        Some((Context::Rif, _))     => self.last_rif().description.updt(&txt, hidden),
+                        Some((Context::Rif, _))     => self.last_rif_mut().description.updt(&txt, hidden),
                         Some((Context::Page, _))    => self.last_page_mut().description.updt(&txt, hidden),
                         Some((Context::RegDecl, _)) => self.last_reg_mut().description.updt(&txt, hidden),
                         Some((Context::Field, _))   => self.last_field_mut().description.updt(&txt, hidden),
@@ -701,7 +701,7 @@ impl RifGenSrc {
                 Context::Info => {
                     match context_stack.get(context_stack.len() - 2) {
                         Some((Context::Rifmux, _)) => self.last_rifmux().add_info(key_val(l)?),
-                        Some((Context::Rif, _)) => self.last_rif().add_info(key_val(l)?),
+                        Some((Context::Rif, _)   ) => self.last_rif_mut().add_info(key_val(l)?),
                         // Some((Context::Page,_))    => parser.last_page().add_info(key_val(l)?),
                         Some((Context::RegDecl, _)) => self.last_reg_mut().add_info(key_val(l)?),
                         Some((Context::RegInst, _)) => self.last_reg_inst().add_info(&ovr_idx, key_val(l)?),
@@ -712,7 +712,7 @@ impl RifGenSrc {
                 Context::Enum => {
                     if let Some(name) = &last_enum {
                         let entry = enum_entry(l)?;
-                        self.last_rif().add_enum_entry(name, entry)?;
+                        self.last_rif_mut().add_enum_entry(name, entry)?;
                     }
                 }
                 // Instances
@@ -932,13 +932,14 @@ impl RifGenSrc {
         Ok(refs)
     }
 
-    // Quick access to currently active object
-    // Suppose the function cannot fail since
-    // it should only be called in context where a new element was added
+    /// Quick access to currently active object
+    /// Suppose the function cannot fail since
+    /// it should only be called in context where a new element was added
     fn last_rifmux(&mut self) -> &mut Rifmux {
         self.rifmux.get_mut(&self.last_obj).expect("No RIFMux")
     }
 
+    /// Return mutable reference to last RIF instance in a rifmux
     fn last_rif_inst(&mut self) -> &mut RifmuxItem {
         self.rifmux
             .get_mut(&self.last_obj)
@@ -948,12 +949,18 @@ impl RifGenSrc {
             .expect("No RIF Instance")
     }
 
-    fn last_rif(&mut self) -> &mut Rif {
+    /// Return reference to last RIF definition
+    fn last_rif(&self) -> &Rif {
+        self.rifs.get(&self.last_obj).expect("No RIF")
+    }
+
+    /// Return mutable reference to last RIF definition
+    fn last_rif_mut(&mut self) -> &mut Rif {
         self.rifs.get_mut(&self.last_obj).expect("No RIF")
     }
 
     fn last_page_mut(&mut self) -> &mut RifPage {
-        self.last_rif().pages.last_mut().expect("No Page")
+        self.last_rif_mut().pages.last_mut().expect("No Page")
     }
 
     fn last_page(&self) -> &RifPage {
