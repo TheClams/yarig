@@ -4,7 +4,7 @@ use crate::{
     cfg::{RifGenTarget, YarigCfg},
     comp::comp_inst::{Comp, RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxInst},
     error::RifGenError,
-    parser::remove_rif,
+    parser::remove_rif, rifgen::Description,
 };
 
 use super::casing::{Casing, ToCasing};
@@ -42,7 +42,21 @@ impl Deref for InstDict {
     }
 }
 
-pub type RifInstInfo = (u64, String, String);
+
+#[derive(Clone, Debug)]
+/// Quick summary of a RIF instance: address, name, short description
+pub struct RifInstInfo {
+    pub addr: u64,
+    pub name: String,
+    pub desc: String,
+    pub hier: Vec<String>,
+}
+
+impl RifInstInfo {
+    pub fn new(addr: u64, name: &str, desc: &Description, hier: &[String]) -> Self {
+        Self {addr, name: name.to_owned(), desc: desc.get_short(false), hier: hier.to_owned()}
+    }
+}
 
 pub struct RifList<'a>(Vec<(&'a RifInst,Vec<RifInstInfo>)>);
 
@@ -50,19 +64,21 @@ impl<'a> RifList<'a> {
 
     pub fn new(rifmux: &'a RifmuxInst, deep: bool) -> Self {
         let mut rd = RifList(Vec::with_capacity(rifmux.components.len()));
-        rd.scan(rifmux, deep, 0);
+        rd.scan(rifmux, deep, 0, vec![]);
         rd
     }
 
-    pub fn scan(&mut self, rifmux: &'a RifmuxInst, deep: bool, base_addr: u64) {
+    pub fn scan(&mut self, rifmux: &'a RifmuxInst, deep: bool, base_addr: u64, hier: Vec<String>) {
         for comp in rifmux.components.iter() {
             let addr = base_addr + comp.full_addr(&rifmux.groups);
+            let mut hier = hier.to_owned();
+            hier.push(comp.inst.get_name().to_owned());
             match &comp.inst {
                 Comp::Rifmux(c) => if deep {
-                    self.scan(c, true, addr)
+                    self.scan(c, true, addr, hier);
                 },
                 Comp::Rif(c) => {
-                    let info = (addr, c.inst_name.to_owned(), c.description.get_short(false));
+                    let info = RifInstInfo::new(addr, &c.inst_name, &c.description, &hier);
                     if let Some(ri) = self.0.iter_mut().find(|x| x.0.type_name==c.type_name) {
                         ri.1.push(info);
                     } else {
@@ -141,6 +157,8 @@ pub struct GeneratorBaseSetting {
     pub subdir: Option<String>,
     /// Path to the different included component when it must be generated locally to its definition rather than the top one
     locals: HashMap<String, PathBuf>,
+    /// Dictionnary of generics value (used for documentation)
+    generics: HashMap<String, u16>,
     /// List of element to skip in a generator
     pub skip: Vec<Skippable>,
     /// Optional Address offset (Documentation only atm)
@@ -151,6 +169,7 @@ impl GeneratorBaseSetting {
 
     /// Create basic setting with casing, visibility, list of included rif to generate and sub-directory setting
     pub fn new(cfg: &YarigCfg) -> Self {
+
         GeneratorBaseSetting {
             path: "".into(),
             fname: None,
@@ -159,6 +178,7 @@ impl GeneratorBaseSetting {
             gen_inc: cfg.gen_inc.to_vec(),
             subdir: cfg.subdir.clone(),
             locals: HashMap::new(),
+            generics: cfg.doc_generics.clone(),
             split: false,
             addr_offset: cfg.doc_base_offset.unwrap_or(0) as u64,
             skip: Vec::new(),
@@ -267,6 +287,11 @@ impl GeneratorBaseSetting {
         } else {
             self.path.clone()
         }
+    }
+
+    /// Return generic value if it exists
+    pub fn get_generic(&self, name: &str) -> Option<u16> {
+        self.generics.get(name).copied()
     }
 
 }
@@ -422,6 +447,24 @@ impl GeneratorCore {
         }
     }
 
+    /// Retrieve a generic value, supporting a path inside the dictionary like rifmux.rif.genric
+    pub fn get_generic(&self, name: &str, hier: &[String]) -> Option<u16> {
+        if !self.setting.generics.is_empty() {
+            if hier.is_empty() {
+                return self.setting.get_generic(name);
+            }
+            // If inside a hierachy go from full-path to less specific one
+            for lvl in 0..hier.len() {
+                let mut n = if lvl==hier.len() {hier[lvl].to_owned()} else {hier[lvl..].join(".")};
+                n.extend([".", name]);
+                let g = self.setting.get_generic(&n);
+                if g.is_some() {return g;}
+            }
+            // Last trial with no path at all
+            return self.setting.get_generic(name);
+        }
+        None
+    }
 }
 
 

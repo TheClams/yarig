@@ -41,15 +41,21 @@ suffix_rtl_only = false
 doc_base_offset = 0xF0_0000
 ```
 
-### Parameters
+### Parameters/Generics
 
-Override parameter values defined in RIF files:
+Override parameter or generic values defined in RIF files:
 
 ```toml
 [parameters]
-DATA_WIDTH = 32
-ADDR_WIDTH = 16
-NUM_CHANNELS = 4
+DATA_WIDTH = 16
+dma1.ADDR_WIDTH = 12
+```
+
+The generics only applies to documentation generator
+```toml
+[doc_generics]
+gpio.NB_IO = 32
+digtop.dma.NUM_CHANNELS = 4
 ```
 
 ### Output Paths

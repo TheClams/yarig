@@ -68,7 +68,7 @@ pub trait GeneratorSw : GeneratorBase {
                             continue;
                         }
                         self.set_comp((*rif).into(), true);
-                        self.gen_rif(rif, info.first().map(|e| e.0))?;
+                        self.gen_rif(rif, info.first().map(|e| e.addr))?;
                     }
                 }
                 self.gen_rifmux(rifmux, &riflist)

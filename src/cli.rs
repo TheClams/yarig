@@ -61,6 +61,9 @@ pub struct RifGenArgs{
     /// Set parameters value
     #[arg(short = 'P', long, value_parser = parse_key_val)]
     pub parameters: Vec<(String, isize)>,
+    /// Set parameters value
+    #[arg(short = 'G', long, value_parser = parse_key_val)]
+    pub doc_generics: Vec<(String, isize)>,
     /// Set suffix value
     #[arg(short = 'S', long)]
     pub suffix: Option<SuffixInfo>,

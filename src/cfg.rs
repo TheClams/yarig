@@ -311,8 +311,10 @@ pub struct YarigCfg {
     pub public: bool,
     /// Specify an HDL interface
     pub interface: Option<Interface>,
-    /// dictionary of parameters
+    /// Dictionary of parameters
     pub parameters: HashMap<String,isize>,
+    /// Dictionary of generics value for documentation
+    pub doc_generics: HashMap<String,u16>,
     /// dictionary of path associated to each targets
     pub outputs: HashMap<String,String>,
     /// Use legacy order for interrupts (mask before enable)
@@ -616,6 +618,11 @@ impl YarigCfg {
         if args.ral_force_base.is_some() {self.ral.force_base = args.ral_force_base;}
         //
         if !args.parameters.is_empty() {self.parameters.extend(args.parameters)};
+        if !args.doc_generics.is_empty() {
+            for (k,v) in args.doc_generics {
+                self.doc_generics.insert(k, v as u16);
+            }
+        };
         if let Some(suffix) = args.suffix {self.suffixes.insert("".to_owned(), suffix);};
         if args.py_class.is_some() {self.py.class = args.py_class};
         if args.py_version.is_some() {self.py.version = args.py_version};

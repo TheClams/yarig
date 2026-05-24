@@ -1,6 +1,18 @@
 # Change Log
 
 
+## [0.23.1] - 2026-05-17
+
+### Fix
+  - Generator Doc: fix link for fields details of derived interrupts registers (mask/enable/pending)
+
+### Added
+  - Option doc_generics (both config file and command-line) to set generics value in documentation
+
+### Changed
+  - Assets: optimized APB bridge (remove extra clpck cycle in write)
+  - Parser: Warning message when ignoring end-of-line characters in interrupt definition now also include the RIF name and line number
+
 ## [0.23.0] - 2026-05-17
 
 ### Added
@@ -13,7 +25,7 @@
 ## [0.22.3] - 2026-05-08
 
 ### Fix
-  - Generator C: top prefix [propagates to sub-leve ]
+  - Generator C: top prefix propagates to sub-level
 
 ## [0.22.2] - 2026-05-05
 
