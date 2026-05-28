@@ -1,6 +1,11 @@
 # Change Log
 
 
+## [0.23.2] - 2026-05-28
+
+### Fix
+  - Generator RTL: fix rifmux top generation when the Rifmux does not use a bridge for the interface
+
 ## [0.23.1] - 2026-05-17
 
 ### Fix

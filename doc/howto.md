@@ -61,7 +61,7 @@ A: Define a read-only field with `hw na` (hardware not accessible) or `hw r` (ha
 
 **Q: How to handle read-only fields which have a size larger than a register?**
 
-A: Use the `partial` property to split a field across multiple registers. The field name must be identical in each register, and you specify the LSB position of the larger field:
+A: Use the `partial` property to split a field across multiple registers combine with a `we` property on all register except the first one. The field name must be identical in each register, and you specify the LSB position of the larger field. The `we` property refers to the register triggering the capture of all remaining register to ensure the total value can be read in mutliple cycle:
 
 ```yaml
 - data_low: "Lower 32 bits of 64-bit data (must be read first)"

@@ -234,6 +234,11 @@ const_field = true
 
 # Add one pipe level to generate the invalid address in a Rifmux when no RIF is selected
 rifmux_pipe_invalid = true
+
+# Configure how limit are generated: options are Hardware, Assert or UvmError
+limit = Hardware
+# Force limit on all enum definition
+force_limit = UvmError
 ```
 
 ### Register Abstraction Layer (RAL)

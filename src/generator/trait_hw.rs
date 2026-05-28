@@ -1997,7 +1997,8 @@ pub trait GeneratorHw : GeneratorBase {
         let sw_clk = &rifmux.sw_clocking.clk;
         let sw_rst = &rifmux.sw_clocking.rst.name;
         let intf_ports = RifIntfPorts::new(&rifmux.interface, Self::SUPPORT_INTF);
-        let mut names : Vec<String> = [sw_clk.to_owned(), sw_rst.to_owned()].to_vec();
+        let mut names : Vec<String> = Vec::new();
+        let rifmux_has_clk_rst = !rifmux.interface.is_default() || self.rifmux_pipe_invalid();
         self.set_comp(rifmux.into(), true);
         self.set_rifmux_info(rifmux);
         self.write_file_header();
@@ -2005,8 +2006,13 @@ pub trait GeneratorHw : GeneratorBase {
         self.write_module_decl_header(&riftop_name);
         self.write_module_port_header();
         self.write_comment(1, "RTL clock/reset");
-        self.write_port_decl(&PortInfo::new_in(sw_clk.to_owned(), "Software clock".to_owned()), None, false);
-        self.write_port_decl(&PortInfo::new_in(sw_rst.to_owned(), format!("Software reset : {}", rifmux.sw_clocking.rst.desc())), None, false);
+        // Add Clock/reset
+        if rifmux_has_clk_rst {
+            self.write_port_decl(&PortInfo::new_in(sw_clk.to_owned(), "Software clock".to_owned()), None, false);
+            self.write_port_decl(&PortInfo::new_in(sw_rst.to_owned(), format!("Software reset : {}", rifmux.sw_clocking.rst.desc())), None, false);
+            names.push(sw_clk.to_owned());
+            names.push(sw_rst.to_owned());
+        }
         let mut nb_ctrl = 0;
         for rif in rifmux.components.iter().filter_map(|c| c.get_rif()) {
             nb_ctrl += rif.ports.clk_ens.len() + rif.ports.ctrls.len();
@@ -2066,8 +2072,10 @@ pub trait GeneratorHw : GeneratorBase {
         self.write_comment_box("Instances");
         let comp_params = Vec::new();
         self.write_inst_header(&rifmux.type_name, "rifmux", &comp_params);
-        self.write_port_bind(sw_clk, sw_clk, false);
-        self.write_port_bind(sw_rst, sw_rst, false);
+        if rifmux_has_clk_rst {
+            self.write_port_bind(sw_clk, sw_clk, false);
+            self.write_port_bind(sw_rst, sw_rst, false);
+        }
         let intf_ports = RifIntfPorts::new(&rifmux.interface, Self::SUPPORT_INTF);
         for port in intf_ports.iter() {
             self.write_port_bind(port.name(), port.name(), false);
