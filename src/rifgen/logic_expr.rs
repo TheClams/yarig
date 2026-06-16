@@ -438,6 +438,7 @@ impl LogicExpr {
             LogicExpr::Eq(_,_)  |
             LogicExpr::Neq(_,_)  |
             LogicExpr::Gte(_,_)  |
+            LogicExpr::Gt(_,_)   |
             LogicExpr::Lte(_,_)  |
             LogicExpr::Lt(_,_)   => true,
             LogicExpr::Or(vec)  |

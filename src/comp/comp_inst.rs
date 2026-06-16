@@ -919,7 +919,7 @@ impl RifRegInst {
         let array =  if let RegInstArgs::Arr(idx) = &args {idx} else {&ArrayIdx::Def(0,0)};
         let optional = if let ArrayIdx::Gen(_,range,gen_name) = &array {
             if array.idx() > range.min {
-                Some((LogicExpr::gte(gen_name.to_owned().into(), (array.idx(), range.max).into()), def.optional_acc))
+                Some((LogicExpr::gt(gen_name.to_owned().into(), (array.idx(), range.max).into()), def.optional_acc))
             } else {
                 None
             }
