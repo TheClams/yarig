@@ -1,6 +1,17 @@
 # Change Log
 
 
+## [0.24.0] - UNRELEASED
+
+### Fix
+  - Parser: now check enum value verus field width (only for non generic/parameter width)
+
+## [0.23.3] - 2026-06-16
+
+### Fix
+  - Generator RTL: fix condition to handle generic field width or generic array size
+  - Generator AsciiDoc: Add config option to add unbreakable to table
+
 ## [0.23.2] - 2026-05-28
 
 ### Fix

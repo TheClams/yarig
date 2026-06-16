@@ -8,13 +8,13 @@ use serde_derive::Deserialize;
 use winnow::Parser;
 
 use crate::error::{RifError, RifErrorKind, ERROR_CONTEXT};
-use crate::parser::parser_expr::parse_expr;
+use crate::parser::parser_expr::{ParamValues, parse_expr};
 use crate::parser::{
     bool_or_default, clk_en, enum_kind, generic_def, intr_desc, is_hidden, limit_def, password_info, path_val,
     reg_incl_or_decl, reg_inst_array_properties, reg_inst_properties, reg_pulse_info, rif_inst_suffix, rifmux_group, rifmux_map, signal_or_expr, val_isize, val_u16
 };
 use crate::rifgen::{
-    Access, AddressOffset, ClockingInfo, Context, DataWidth, EnumDef, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, InstMode, Interface, InterruptInfo, Lock, LogicExpr, OverrideIndex, RegDef, RegDefOrIncl, RegInst, RegPulseKind, ResetDef, Rif, RifPage, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility, Width
+    Access, AddressOffset, ClockingInfo, Context, DataWidth, EnumDef, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, GenericValues, InstMode, Interface, InterruptInfo, Lock, LogicExpr, OverrideIndex, RegDef, RegDefOrIncl, RegInst, RegPulseKind, ResetDef, Rif, RifPage, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility, Width
 };
 
 use super::{
@@ -196,6 +196,8 @@ impl RifGenSrc {
         let mut last_enum : Option<String> = None;
         let mut ovr_idx = OverrideIndex::default();
         let mut sw_clk_defined = (false,false);
+        let empty_params   = ParamValues::new();
+        let empty_generics = GenericValues::new();
         while let Some(Ok(l)) = lines.next() {
             let mut l = l.as_str();
             line_num += 1;
@@ -712,6 +714,11 @@ impl RifGenSrc {
                 Context::Enum => {
                     if let Some(name) = &last_enum {
                         let entry = enum_entry(l)?;
+                        if let Ok(field_width) = self.last_field().width((&empty_params, &empty_generics)) {
+                            if entry.value as u16 >= (1<<field_width) {
+                                return Err(RifError::generic(&format!("Enum value {name}.{} = {}, does not fit the field width {field_width}", entry.name, entry.value)));
+                            }
+                        }
                         self.last_rif_mut().add_enum_entry(name, entry)?;
                     }
                 }
