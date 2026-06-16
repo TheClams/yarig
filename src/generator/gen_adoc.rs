@@ -12,6 +12,8 @@ use super::{
 pub struct GeneratorAdoc {
     /// Currrent component full name
     comp_fname: String,
+    /// Table kinds where [%unbreakable] is emitted before the table block
+    unbreakable: Vec<TableKind>,
 }
 
 impl GeneratorAdoc {
@@ -29,6 +31,7 @@ impl GeneratorAdoc {
         GeneratorAdoc {
             core,
             comp_fname: "".to_owned(),
+            unbreakable: cfg.unbreakable.unwrap_or_default(),
         }
     }
 }
@@ -131,14 +134,18 @@ impl GeneratorDoc for GeneratorAdoc {
 
         self.write(".");
         self.write(&caption);
-        self.write("\n[grid=rows,frame=none]\n");
-        self.write("[%header, cols=\"");
+        self.write("\n");
+        self.write("[grid=rows,frame=none]\n[");
+        if self.unbreakable.contains(&kind) {
+            self.write("%unbreakable,");
+        }
+        self.write("%header, cols=\"");
         match kind {
             TableKind::Rifmux  => self.write("2,4,9"),
             TableKind::RifInst => self.write("2,4,9"),
             TableKind::Page    => self.write("2,4,9"),
             TableKind::RegInst => self.write("2,3,2,9"),
-            TableKind::Field   => self.write("1,3,1,2,8"),
+            TableKind::Field   => self.write("1,3,2,2,8"),
             _  => self.write("}"),
         }
         self.write("\"]\n");

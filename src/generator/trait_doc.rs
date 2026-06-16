@@ -1,4 +1,6 @@
-use std::ops::Deref;
+use std::{ops::Deref, str::FromStr};
+
+use serde::Deserialize;
 
 use crate::{
     comp::comp_inst::{ArrayIdx, Comp, CompInst, FieldWidth, RifFieldInst, RifInst, RifRegInst, RifmuxGroupInst, val_str},
@@ -26,6 +28,67 @@ pub enum TableKind {
     Field,
     /// Reserved Field
     FieldRsvd
+}
+
+impl TableKind {
+    pub const ALL: [Self; 7] = [
+        Self::Rifmux,
+        Self::RifInst,
+        Self::Page,
+        Self::RegInst,
+        Self::Layout,
+        Self::Field,
+        Self::FieldRsvd,
+    ];
+
+    /// Parse a list of table kind names. A single `"*"` entry selects all kinds.
+    pub fn from_list(items: &[String]) -> Result<Vec<Self>, String> {
+        if items.len() == 1 && items[0] == "*" {
+            Ok(Self::ALL.to_vec())
+        } else {
+            items.iter().map(|s| Self::from_str(s)).collect()
+        }
+    }
+}
+
+impl FromStr for TableKind {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s_lc = s.to_lowercase();
+        match s_lc.as_str() {
+            "rifmux" | "rif_mux" => Ok(Self::Rifmux),
+            "rifinst" | "rif_inst" => Ok(Self::RifInst),
+            "page" => Ok(Self::Page),
+            "reginst" | "reg_inst" => Ok(Self::RegInst),
+            "layout" => Ok(Self::Layout),
+            "field" => Ok(Self::Field),
+            "fieldrsvd" | "field_rsvd" | "field_reserved" => Ok(Self::FieldRsvd),
+            _ => Err(format!("Invalid table kind `{s}`")),
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for TableKind {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        Self::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+pub fn deserialize_table_kinds_option<'de, D>(
+    deserializer: D,
+) -> Result<Option<Vec<TableKind>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let opt = Option::<Vec<String>>::deserialize(deserializer)?;
+    match opt {
+        None => Ok(None),
+        Some(items) => TableKind::from_list(&items)
+            .map(Some)
+            .map_err(serde::de::Error::custom),
+    }
 }
 
 /// Categories of cells inside a table

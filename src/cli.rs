@@ -127,6 +127,9 @@ pub struct RifGenArgs{
     /// List of element to skip in generators (ADOC only at the moment): RifTitle, RifmuxTitle
     #[arg(long, num_args = 1..)]
     pub skip: Vec<Skippable>,
+    /// Table kinds where ADOC generator adds [%unbreakable] (use "*" for all)
+    #[arg(long, num_args = 1..)]
+    pub adoc_unbreakable: Vec<String>,
 }
 
 /// Parse a single key-value pair

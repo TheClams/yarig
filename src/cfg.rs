@@ -59,7 +59,7 @@ use toml;
 use crate::{
     cli::RifGenArgs, comp::comp_inst::{Comp, RifFieldInst},
     generator::{
-        casing::Casing, gen_adoc::GeneratorAdoc, trait_doc::GeneratorDoc, trait_hw::GeneratorHw, trait_sw::GeneratorSw,
+        casing::Casing, gen_adoc::GeneratorAdoc, trait_doc::{GeneratorDoc, TableKind}, trait_hw::GeneratorHw, trait_sw::GeneratorSw,
         gen_c::GeneratorC, gen_common::{GeneratorBaseSetting, Skippable}, gen_html::GeneratorHtml,
         gen_ipxact::GeneratorIpXact, gen_json::GeneratorJson, gen_latex::GeneratorLatex, gen_mif::GeneratorMif, gen_py::{GeneratorPy, PyVersion},
         gen_ral::GeneratorRal, gen_sv::GeneratorSv, gen_svd::GeneratorSvd, gen_vhdl::GeneratorVhdl,
@@ -373,6 +373,9 @@ pub struct CfgAdoc {
     pub subdir: Option<String>,
     /// List of element to skip in the generation
     pub skip: Option<Vec<Skippable>>,
+    /// Table kinds where [%unbreakable] is added (use ["*"] for all)
+    #[serde(default, deserialize_with = "crate::generator::trait_doc::deserialize_table_kinds_option")]
+    pub unbreakable: Option<Vec<TableKind>>,
 }
 
 /// Configuration specific to LaTeX target
@@ -653,6 +656,13 @@ impl YarigCfg {
 
         if !args.skip.is_empty() {
             self.adoc.skip = Some(args.skip.clone());
+        }
+
+        if !args.adoc_unbreakable.is_empty() {
+            match TableKind::from_list(&args.adoc_unbreakable) {
+                Ok(kinds) => self.adoc.unbreakable = Some(kinds),
+                Err(e) => eprintln!("Invalid adoc unbreakable table kind: {e}"),
+            }
         }
 
         for t in args.split.iter() {

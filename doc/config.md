@@ -190,6 +190,11 @@ subdir = "subdir_name"
 
 # Optional: casing of register/field
 casing = "Snake"
+
+# Optional: table kinds where [%unbreakable] is added to prevent page breaks
+# Valid values: rifmux, rif_inst, page, reg_inst, layout, field, field_rsvd
+# Use ["*"] to apply to all table kinds
+unbreakable = ["field", "reg_inst"]
 ```
 
 ### C Header Generation
