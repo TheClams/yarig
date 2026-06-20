@@ -392,6 +392,8 @@ For each RIF instance it is possible to override :
  - `optional : <condition>` : Indicate that the component is instantiated only if the _condition_ is true.
   The condition should be a valid arithemtic expression where parameters can be used: this supports standard math operation (+,-,\*,\%,<<,>>) or comparison operator (==,!=,>,<,...).
   The condition can also simply the name of a generic.
+  If the condition is set to external, this add ports on the RIFmux with a structure of enable for each RIF instance. When the corresponding enable signal is low,
+  the rif_en signal of the corresponding RIF instance is forced to 0.
 
 
 You can also use external RIF (to access memory-like block) with the syntax:

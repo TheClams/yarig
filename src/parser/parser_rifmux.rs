@@ -3,7 +3,7 @@ use winnow::{
   error::StrContext, Parser
 };
 
-use crate::rifgen::{Context, RifmuxItem, RifType, RifmuxGroup, SuffixInfo};
+use crate::rifgen::{Context, ItemOptional, RifType, RifmuxGroup, RifmuxItem, SuffixInfo};
 
 use super::{Res, ResF, address, identifier, path_name, quoted_string, val_u8, ws};
 
@@ -102,6 +102,10 @@ pub fn rif_inst_suffix(input: &str) -> ResF<'_, (Option<&str>, SuffixInfo)> {
     opt(terminated(path_name,"=")),
     suffix_info_l
   ).parse(input)
+}
+
+pub fn rif_inst_optional_en(input: &str) -> ResF<'_, ItemOptional> {
+    ws("enable").value(ItemOptional::Enable).parse(input)
 }
 
 pub fn rifmux_group(input: &str) -> ResF<'_, RifmuxGroup> {

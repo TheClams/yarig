@@ -207,15 +207,15 @@ impl Display for RifError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.kind {
             RifErrorKind::Io            => write!(f, "IO exception: {}", self.txt),
-            RifErrorKind::Parse         => write!(f, "{}.{} | {}", self.name, self.line_num, self.txt),
-            RifErrorKind::AddrWidth     => write!(f, "{}.{} | Address width must be a power of 2 * 8 bits", self.name, self.line_num),
-            RifErrorKind::AddrUnaligned => write!(f, "{}.{} | Address not aligned with data width", self.name, self.line_num),
-            RifErrorKind::FieldKind     => write!(f, "{}.{} | incompatible field kind {}", self.name, self.line_num, self.txt),
-            RifErrorKind::NotIntr       => write!(f, "{}.{} | Trying to set interrupt properties while register is not an interrupt", self.name, self.line_num),
-            RifErrorKind::MissingDef    => write!(f, "{}.{} | Missing register definition for {}", self.name, self.line_num, self.txt),
-            RifErrorKind::Unsupported   => write!(f, "{}.{} | Unsupported feature {}", self.name, self.line_num, self.txt),
-            RifErrorKind::Duplicated    => write!(f, "{}.{} | {} duplicated !", self.name, self.line_num, self.txt),
-            RifErrorKind::Keyword       => write!(f, "{}.{} | Register/Field name '{}' is a reserved keyword !", self.name, self.line_num, self.txt),
+            RifErrorKind::Parse         => write!(f, "{}:{} | {}", self.name, self.line_num, self.txt),
+            RifErrorKind::AddrWidth     => write!(f, "{}:{} | Address width must be a power of 2 * 8 bits", self.name, self.line_num),
+            RifErrorKind::AddrUnaligned => write!(f, "{}:{} | Address not aligned with data width", self.name, self.line_num),
+            RifErrorKind::FieldKind     => write!(f, "{}:{} | incompatible field kind {}", self.name, self.line_num, self.txt),
+            RifErrorKind::NotIntr       => write!(f, "{}:{} | Trying to set interrupt properties while register is not an interrupt", self.name, self.line_num),
+            RifErrorKind::MissingDef    => write!(f, "{}:{} | Missing register definition for {}", self.name, self.line_num, self.txt),
+            RifErrorKind::Unsupported   => write!(f, "{}:{} | Unsupported feature {}", self.name, self.line_num, self.txt),
+            RifErrorKind::Duplicated    => write!(f, "{}:{} | {} duplicated !", self.name, self.line_num, self.txt),
+            RifErrorKind::Keyword       => write!(f, "{}:{} | Register/Field name '{}' is a reserved keyword !", self.name, self.line_num, self.txt),
             RifErrorKind::Generic       => write!(f, "{}", self.txt),
         }
     }

@@ -1801,6 +1801,22 @@ pub trait GeneratorHw : GeneratorBase {
         self.write_file_header();
         self.write_rifmux_pkg_header(rifmux);
         let w = ((rifmux.addr_width+3)>>2) as usize;
+        let rifs_en : Vec<SignalDecl> = rifmux.components.iter()
+            .filter_map(|c|
+                if let Some(LogicExpr::Id(id)) = &c.optional && id.name=="rifs_en" && let Some(f)= &id.field {
+                    Some(SignalDecl::new_bit(f.to_owned(), format!("High when instance {} is enabled", c.get_name())))
+                }
+                else {None}
+            ).collect();
+        if !rifs_en.is_empty() {
+            let type_name = format!("t_{}_rifs_en", rifmux.type_name_short().to_casing(Snake));
+            self.write_struct_header(&type_name, &rifs_en);
+            let mut fields = rifs_en.iter().peekable();
+            while let Some(f) = fields.next() {
+                self.write_struct_field(f, fields.peek().is_none());
+            }
+            self.write_struct_footer(&type_name);
+        }
         for comp in rifmux.components.iter() {
             let pad = name_len - comp.get_name().len();
             let name = format!("{}_BASE_ADDR{:<pad$}", comp.get_name().to_uppercase(), "");
@@ -1832,6 +1848,7 @@ pub trait GeneratorHw : GeneratorBase {
     fn gen_rifmux(&mut self, rifmux: &RifmuxInst) -> Result<(), RifGenError> {
         let rifmux_name = self.casing(&rifmux.type_name);
         let name_len = rifmux.components.iter().map(|c| c.get_name().len()).max().unwrap_or(0);
+        let pkg_name = format!("{}_pkg", rifmux.type_name);
         self.set_comp(rifmux.into(), true);
         self.set_rifmux_info(rifmux);
         self.write_file_header();
@@ -1852,6 +1869,13 @@ pub trait GeneratorHw : GeneratorBase {
             self.write_port_decl(&PortInfo::new_in(
                 rifmux.sw_clocking.rst.name.to_owned(),
                 format!("Bridge reset : {}", rifmux.sw_clocking.rst.desc())), None, false);
+        }
+        // Add rif enable structure if needed
+        if rifmux.components.iter().any(|c| c.has_enable()) {
+            let type_name = format!("t_{}_rifs_en", rifmux.type_name_short().to_casing(Snake));
+            let en_type = SignalKind::Custom((Some(pkg_name),type_name));
+            let rif_en = PortInfo::new_basic("rifs_en".to_owned(), en_type, PortDir::In,  "RIF enables".to_owned());
+            self.write_port_decl(&rif_en, None, false);
         }
         // Add RIF interface for each component
         for comp in rifmux.components.iter() {
@@ -1898,15 +1922,19 @@ pub trait GeneratorHw : GeneratorBase {
             );
             self.write_comment(1, &name.to_casing(Casing::Title));
             // Add generate if needed
-            if let Some(opt) = &comp.optional {
+            if !comp.has_enable() && let Some(opt) = &comp.optional {
                 self.write_generate_if(opt.to_owned(), format!("gen_{name}"));
             }
             let pad = name_len + 7 - name.len();
             // Enable: rif_en & addr_v
             let en : ExprId = (format!("if_{name}"),"en".to_owned()).into();
+            let mut rif_en_conds = vec![("if_rif","en").into(), addr_v.clone()];
+            if comp.has_enable() && let Some(opt) = &comp.optional {
+                rif_en_conds.push(LogicExpr::eq(opt.clone(), LogicExpr::ValueU(1,1)));
+            }
             self.write_assign(
                 en.with_path(format!("{:<pad$}","en"), None),
-                LogicExpr::And(vec![("if_rif","en").into(), addr_v.clone()]));
+                LogicExpr::And(rif_en_conds));
             // Force address to 0 when not valid
             self.write_assign(
                 en.with_path(format!("{:<pad$}","addr"), None),
@@ -1924,7 +1952,7 @@ pub trait GeneratorHw : GeneratorBase {
                 en.with_path(format!("{:<pad$}","rd_wrn"), None),
                 ("if_rif","rd_wrn").into());
             // Close generic
-            if comp.optional.is_some() {
+            if !comp.has_enable() && comp.optional.is_some() {
                 self.write_generate_else(format!("gen_no_{name}"));
                 self.write_assign(en.with_path("en     ".to_owned(), None), LogicExpr::ValueU(0, 1));
                 self.write_assign(en.with_path("addr   ".to_owned(), None), LogicExpr::ValueU(0, width.into()));

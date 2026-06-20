@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use crate::{
     cfg::{RtlLimit, RtlLimitCfg}, parser::{RifGenSrc, RifGenTop, get_rif, parser_expr::{ExprValue, ParamValues}}, rifgen::{
-        Access, Address, AddressKind, ClockingInfo, CounterInfo, DescIdx, Description, EnumDef, EnumDefs, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, GenericRange, GenericValues, Interface, InterruptRegKind, InterruptTrigger, Limit, LogicExpr, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegPulseKind, ResetVal, ResetValOverride, Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SignalRange, SuffixInfo, Visibility, Width, order_dict::{OrderDict, OrderedDictIterV}
+        Access, Address, AddressKind, ClockingInfo, CounterInfo, DescIdx, Description, EnumDef, EnumDefs, EnumKind, ExprId, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, GenericRange, GenericValues, Interface, InterruptRegKind, InterruptTrigger, Limit, LogicExpr, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegPulseKind, ResetVal, ResetValOverride, Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SignalRange, SuffixInfo, Visibility, Width, order_dict::{OrderDict, OrderedDictIterV}
     }
 };
 
@@ -174,6 +174,13 @@ impl CompInst {
             Comp::Rifmux(rifmux) => Some(rifmux),
             _ => None
         }
+    }
+
+    /// Check if the optional instance deifntion corresponds to an enable
+    pub fn has_enable(&self) -> bool {
+        self.optional.as_ref()
+            .map(|o| o.is_id("rifs_en"))
+            .unwrap_or(false)
     }
 
 }
@@ -1794,8 +1801,13 @@ impl RifmuxInst {
         let mut inst_addr = InstAddr::new(0);
         for i in &rifmux.items {
             let mut optional = None;
-            if !i.optional.is_empty() {
-                match i.optional.eval_with_gen(&params, &rifmux.generics)? {
+            // When option is controlled by an enable signal, the enable signal is simply a field with the instance name in the rifs_en structure
+            if i.optional.is_enable() {
+                let name = i.name.strip_prefix("rif_").unwrap_or(&i.name).to_owned();
+                optional = Some(ExprId::new_field_range("rifs_en".to_owned(), None, name, None).into());
+            }
+            else if let Some(e) = i.optional.expr() {
+                match e.eval_with_gen(&params, &rifmux.generics)? {
                     ExprValue::Value(v) => if v==0 {continue;}
                     ExprValue::Range(name, _) => {
                         optional = Some(LogicExpr::eq(name.into(),LogicExpr::ValueU(1, 1)));
@@ -1844,6 +1856,13 @@ impl RifmuxInst {
             rm.components.sort_unstable_by_key(|k| k.full_addr(&rm.groups));
         }
         Ok(rm)
+    }
+
+    /// Return type name without rif prefix/suffix
+    pub fn type_name_short(&self) -> &str {
+        &self.type_name.strip_prefix("rif_")
+            .unwrap_or_else(|| &self.type_name.strip_suffix("_rif")
+            .unwrap_or_else(|| self.type_name.as_str()))
     }
 }
 

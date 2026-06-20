@@ -177,6 +177,7 @@ pub fn parse_logic_expr(input: &str) -> Result<LogicExpr,RifError> {
     let mut s = input;
 
     while !s.is_empty() {
+
         let token = match state {
             ExprState::Operand => alt((name, number, paren_l, curly_l, operator_one, dot)).parse_next(&mut s)?,
             ExprState::Operator => match cntxt.last() {

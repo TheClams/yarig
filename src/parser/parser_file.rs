@@ -10,11 +10,10 @@ use winnow::Parser;
 use crate::error::{RifError, RifErrorKind, ERROR_CONTEXT};
 use crate::parser::parser_expr::{ParamValues, parse_expr};
 use crate::parser::{
-    bool_or_default, clk_en, enum_kind, generic_def, intr_desc, is_hidden, limit_def, password_info, path_val,
-    reg_incl_or_decl, reg_inst_array_properties, reg_inst_properties, reg_pulse_info, rif_inst_suffix, rifmux_group, rifmux_map, signal_or_expr, val_isize, val_u16
+    bool_or_default, clk_en, enum_kind, generic_def, intr_desc, is_hidden, limit_def, password_info, path_val, reg_incl_or_decl, reg_inst_array_properties, reg_inst_properties, reg_pulse_info, rif_inst_optional_en, rif_inst_suffix, rifmux_group, rifmux_map, signal_or_expr, val_isize, val_u16
 };
 use crate::rifgen::{
-    Access, AddressOffset, ClockingInfo, Context, DataWidth, EnumDef, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, GenericValues, InstMode, Interface, InterruptInfo, Lock, LogicExpr, OverrideIndex, RegDef, RegDefOrIncl, RegInst, RegPulseKind, ResetDef, Rif, RifPage, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility, Width
+    Access, AddressOffset, ClockingInfo, Context, DataWidth, EnumDef, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, GenericValues, InstMode, Interface, InterruptInfo, ItemOptional, Lock, LogicExpr, OverrideIndex, RegDef, RegDefOrIncl, RegInst, RegPulseKind, ResetDef, Rif, RifPage, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility, Width
 };
 
 use super::{
@@ -914,8 +913,9 @@ impl RifGenSrc {
                         }
                         Context::Parameters => context_stack.push((Context::Parameters, ilvl + 1)),
                         Context::Optional => {
-                            let expr = parse_expr(l)?;
-                            self.last_rif_inst().optional = expr;
+                            let o = if let Ok(en) = rif_inst_optional_en(l) {en}
+                                else {ItemOptional::Expr(parse_expr(l)?)};
+                            self.last_rif_inst().optional = o;
                         }
                         _ => {
                             return Err(RifError::unsupported(info, l));

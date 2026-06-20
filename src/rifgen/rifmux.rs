@@ -73,8 +73,6 @@ impl Rifmux {
 
 }
 
-
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq)]
 pub enum RifType {Rif(String), Ext(u8)}
 /// Tuple from parser
@@ -108,6 +106,24 @@ impl FromStr for SuffixInfo {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum ItemOptional {None, Enable, Expr(ExprTokens)}
+
+impl ItemOptional {
+    /// Get Expression token when type is Expr
+    pub fn expr(&self) -> Option<&ExprTokens> {
+        match self {
+            ItemOptional::Expr(e) => Some(e),
+            _ => None
+        }
+    }
+
+    /// Check if optional is Enable
+    pub fn is_enable(&self) -> bool {
+        matches!(self, &ItemOptional::Enable)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 /// Item inside a Rifmux
 pub struct RifmuxItem {
     /// Name of the RIF instance
@@ -125,7 +141,7 @@ pub struct RifmuxItem {
     /// Suffix to add to the name of the generated files
     pub suffixes: HashMap<String,SuffixInfo>,
     /// Indicates the page instance is controlled by a parameter or generic
-    pub optional: ExprTokens,
+    pub optional: ItemOptional,
 
 }
 
@@ -138,7 +154,7 @@ impl RifmuxItem {
             group: group.to_owned(),
             rif_type: info.1,
             addr: addr_info,
-            optional: ExprTokens::new(0),
+            optional: ItemOptional::None,
             description: info.3.unwrap_or("").into(),
             parameters: OrderDict::new(),
             suffixes: HashMap::new(),
@@ -160,7 +176,9 @@ impl RifmuxItem {
 
     /// High when register instance is deactivated
     pub fn is_disabled(&self, params: &ParamValues) -> bool {
-        !self.optional.is_empty() && (self.optional.eval(params) == Ok(0))
+        if self.optional.is_enable() {false}
+        else if let Some(e) = self.optional.expr() {e.eval(params) == Ok(0)}
+        else {false}
     }
 
 }
