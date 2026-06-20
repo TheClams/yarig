@@ -176,6 +176,7 @@ impl RifGenSrc {
         Ok(src)
     }
 
+    /// Parse content of a RIF file, returning a list of included/reference RIF
     pub fn parse_file<P>(&mut self, filename: P, cfg: &ParserCfg) -> Result<HashSet<String>, RifError>
     where
         P: AsRef<Path>,
@@ -714,10 +715,8 @@ impl RifGenSrc {
                 Context::Enum => {
                     if let Some(name) = &last_enum {
                         let entry = enum_entry(l)?;
-                        if let Ok(field_width) = self.last_field().width((&empty_params, &empty_generics)) {
-                            if entry.value as u16 >= (1<<field_width) {
-                                return Err(RifError::generic(&format!("Enum value {name}.{} = {}, does not fit the field width {field_width}", entry.name, entry.value)));
-                            }
+                        if let Ok(field_width) = self.last_field().width((&empty_params, &empty_generics)) && entry.value as u16 >= (1<<field_width) {
+                            return Err(RifError::generic(&format!("Enum value {name}.{} = {}, does not fit the field width {field_width}", entry.name, entry.value)));
                         }
                         self.last_rif_mut().add_enum_entry(name, entry)?;
                     }

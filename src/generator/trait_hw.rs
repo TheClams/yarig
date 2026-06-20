@@ -112,13 +112,13 @@ pub trait GeneratorHw : GeneratorBase {
                 let Some(ctrl) = hw_reg.regs_ctrl.get(f.ctrl_idx) else {
                     return Err(format!("Field {}.{name} points to ctrl {} but max is {}",hw_reg.name, f.ctrl_idx, hw_reg.regs_ctrl.len()).into())
                 };
-                let kind : SignalKind = match &f.enum_kind {
+                let field_kind : SignalKind = match &f.enum_kind {
                     EnumKind::Type(n) => SignalKind::Custom((None, n.to_owned())),
                     _ => if f.signed {SignalKind::Signed(width)} else {SignalKind::Unsigned(width)}
                 };
                 let field_name = if f.sw_kind.is_password() {format!("{name}_locked")} else {name.to_owned()};
                 let field_decl = SignalDecl::new(
-                    SignalDef::new_arr(field_name, kind, f.array.value().into()),
+                    SignalDef::new_arr(field_name, field_kind.clone(), f.array.value().into()),
                     f.description.get_short(false)
                 );
                 // Add field to SW structure writable by firmware or readable by hardware
@@ -171,6 +171,15 @@ pub trait GeneratorHw : GeneratorBase {
                                 format!("Pulse high when {name} wrap/saturate")));
                         }
                     }
+                }
+                // External limit signals
+                if f.limit.is_ext() {
+                    let sw_check_def = SignalDef::new_arr(format!("{name}__next" ), field_kind.clone(), f.array.value().into());
+                    let sw_check = SignalDecl::new(sw_check_def, "Value about to be written for the field".to_owned());
+                    let hw_check_def = SignalDef::new_bus(format!("{name}__check"), f.array.value(), false);
+                    let hw_check = SignalDecl::new(hw_check_def, format!("High when {name}__next is a valid value"));
+                    hw_fields.push(hw_check);
+                    sw_fields.push(sw_check);
                 }
                 if let FieldSwKind::Password(info) = &f.sw_kind && info.has_hold() {
                     sw_fields.push(SignalDecl::new_bit(
@@ -479,7 +488,7 @@ pub trait GeneratorHw : GeneratorBase {
             }
             // Add signal to handle out-of-limit check
             if limit_cfg.0 == RtlLimit::Hardware {
-                for limit in hw_reg.limits.iter() {
+                for limit in hw_reg.limits.iter().filter_map(|l| if !l.1 {Some(&l.0)} else {None}) {
                     self.write_signal_decl(&SignalDef::new_bit(format!("{limit}__check")).into());
                 }
             }
@@ -705,11 +714,11 @@ pub trait GeneratorHw : GeneratorBase {
                 self.write_match_case_header(LogicExpr::ValueU(addr, addr_l_w));
                 // Set the decode signal high when matching address
                 // and the register contains no field with limit or all limit check pass
-                let field_limit: Vec<(String, String)> = reg
+                let field_limit: Vec<(String, String, bool)> = reg
                     .fields
                     .iter()
                     .filter(|field| field.has_hw_limit(limit_cfg))
-                    .map(|field| (field.name.to_owned(), field.limit.bypass.to_owned()))
+                    .map(|field| (field.name.to_owned(), field.limit.bypass.to_owned(), field.limit.is_ext()))
                     .collect();
                 if reg.has_decode() {
                     let name = self.casing(&format!("{}__decode", reg.name()));
@@ -717,9 +726,10 @@ pub trait GeneratorHw : GeneratorBase {
                         if field_limit.is_empty() {
                             reg.optional.as_ref().map(|r| &r.0).unwrap_or(&LogicExpr::ValueU(1, 1)).to_owned()
                         } else {
-                            let checks : Vec<LogicExpr> = field_limit.iter().map(|(n,bypass)| {
+                            let checks : Vec<LogicExpr> = field_limit.iter().map(|(n, bypass, is_ext)| {
                                 let idx = reg.array.idx_str(false);
-                                let check : LogicExpr = format!("{group_name}{idx}_{n}__check").into();
+                                let sep = if *is_ext {"."} else {"_"};
+                                let check : LogicExpr = format!("{group_name}{idx}{sep}{n}__check").into();
                                 if bypass.is_empty() {check}
                                 else {LogicExpr::or(check, bypass.as_str().into())}
                             }).collect();
@@ -921,7 +931,7 @@ pub trait GeneratorHw : GeneratorBase {
 
                     let w = field.width() as u8;
                     // Add logic for field with limit
-                    if field.has_limit() || (field.enum_kind.is_type() && limit_cfg.has_force() && field.is_sw_write()) {
+                    if (field.has_limit() || (field.enum_kind.is_type() && limit_cfg.has_force() && field.is_sw_write())) && !field.limit.is_ext() {
                         let check_sig : ExprId = format!("{reg_field_name}__check").into();
                         let limit_value = if field.has_limit() {&field.limit.value} else {&LimitValue::Enum};
                         let check_expr = match limit_value {
@@ -954,6 +964,7 @@ pub trait GeneratorHw : GeneratorBase {
                                     .collect();
                                 LogicExpr::Or(v)
                             }
+                            LimitValue::External => unreachable!(),
                             LimitValue::None => unreachable!(),
                         };
                         if field.has_hw_limit(limit_cfg) {
@@ -1195,7 +1206,7 @@ pub trait GeneratorHw : GeneratorBase {
                             let val = match &field.sw_kind {
                                 // Basic write
                                 FieldSwKind::ReadWrite |
-                                FieldSwKind::WriteOnly => wr_data,
+                                FieldSwKind::WriteOnly => wr_data.clone(),
                                 //
                                 FieldSwKind::ReadClr => {
                                     if field.is_signed() {
@@ -1207,28 +1218,28 @@ pub trait GeneratorHw : GeneratorBase {
                                 // Write 1 Clear: set to 0 all bit being 1 in the write data bus
                                 FieldSwKind::W1Clr => {
                                     if field.width()==1 {
-                                        cond.push(wr_data);
+                                        cond.push(wr_data.clone());
                                         LogicExpr::ValueU(0, 1)
                                     } else {
-                                        LogicExpr::and_b(field_id.clone().into() , LogicExpr::not_b(wr_data))
+                                        LogicExpr::and_b(field_id.clone().into() , LogicExpr::not_b(wr_data.clone()))
                                     }
                                 }
                                 // Write 0 Clear: set to 0 all bit being 0 in the write data bus
                                 FieldSwKind::W0Clr => {
                                     if field.width()==1 {
-                                        cond.push(LogicExpr::not(wr_data));
+                                        cond.push(LogicExpr::not(wr_data.clone()));
                                         LogicExpr::ValueU(0, 1)
                                     } else {
-                                        LogicExpr::and_b(field_id.clone().into() , wr_data)
+                                        LogicExpr::and_b(field_id.clone().into() , wr_data.clone())
                                     }
                                 }
                                 // Write 1 Set or Pulse: set to 1 all bit being 1 in the write data bus
                                 FieldSwKind::W1Set |
                                 FieldSwKind::W1Pulse(_,_) => {
                                     if field.width()==1 {
-                                        wr_data
+                                        wr_data.clone()
                                     } else {
-                                        LogicExpr::or_b(field_id.clone().into(), wr_data)
+                                        LogicExpr::or_b(field_id.clone().into(), wr_data.clone())
                                     }
                                 }
                                 // Write 1 Toggle: flip all bits being 1 in write data bus
@@ -1236,7 +1247,7 @@ pub trait GeneratorHw : GeneratorBase {
                                     if field.width()==1 {
                                         LogicExpr::not_b(field_id.clone().into())
                                     } else {
-                                        LogicExpr::xor(field_id.clone().into() , wr_data)
+                                        LogicExpr::xor(field_id.clone().into() , wr_data.clone())
                                     }
                                 }
                                 // Password:
@@ -1320,6 +1331,13 @@ pub trait GeneratorHw : GeneratorBase {
                         };
 
                         self.write_assign(field_next_id.clone(), LogicExpr::Ite(if_then, Box::new(val_default)));
+                        // Assign external limit signals if needed
+                        if field.limit.is_ext() {
+                            // let idx = "";
+                            let ext_val = sw_groupd_id.with_path(format!("{field_name}__next"), field_range.clone());
+                            self.write_assign(ext_val, wr_data.clone());
+                        }
+                        // Handle field with geenric width or geenric array depth
                         if let FieldWidth::Generic((n,r)) = &field.width {
                             cond_assign.push(field_next_id);
                             self.write_cond_generic_field(&reg_field_name, n.as_ref(), r, &cond_assign);

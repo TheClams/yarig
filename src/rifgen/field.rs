@@ -752,6 +752,7 @@ pub enum LimitValueP {
     MinMax(ResetValP, ResetValP),
     List(Vec<ResetValP>),
     Enum,
+    External,
 }
 pub type PairResetVal = (Option<ResetValP>,Option<ResetValP>);
 impl From<PairResetVal> for LimitValueP {
@@ -773,6 +774,7 @@ pub enum LimitValue {
     MinMax(ResetVal, ResetVal),
     List(Vec<ResetVal>),
     Enum,
+    External,
 }
 
 
@@ -815,6 +817,10 @@ impl Limit {
     pub fn is_none(&self) -> bool {
         self.value == LimitValue::None
     }
+
+    pub fn is_ext(&self) -> bool {
+        self.value == LimitValue::External
+    }
 }
 
 impl LimitValueP {
@@ -835,6 +841,7 @@ impl LimitValueP {
                 Ok(LimitValue::List(nv))
             }
             LimitValueP::Enum => Ok(LimitValue::Enum),
+            LimitValueP::External => Ok(LimitValue::External),
             LimitValueP::None => Ok(LimitValue::None),
             // _ => Ok(self.clone()),
         }

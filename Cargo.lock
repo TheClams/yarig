@@ -299,7 +299,7 @@ dependencies = [
 
 [[package]]
 name = "yarig"
-version = "0.23.3"
+version = "0.24.0"
 dependencies = [
  "clap",
  "latex2mathml",

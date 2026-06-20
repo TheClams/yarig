@@ -240,8 +240,8 @@ The optional properties of a field, indented by one level compare to the field d
   Note: the counter value is not accessible by default from hardware, but this this can be changed with `hw rw` property which must be placed after the counter declaration.
  - `partial <lsb_pos>` : Indicates that this field is larger than the register and that the LSB correspond to the bit _lsb_pos_ of a larger field. The field name must be identical in each register definition.
  - `interrupt high|low|rising|falling|edge [en=<val_enable>] [mask=<val_mask>] [rclr|wclr|w0clr|w1clr|hwclr]` : override default interrupt settings.
- - `limit ([<min>:<max>]|{<v0>,<v1>,<...>}|enum) [<bypass_signal>]` : Limit valid write value for a field.
-    The limit can be a range in the form of `[min:max]` (min & max included, one can be omitted), a set of value with `{v0,v1,v2}`
+ - `limit ([<min>:<max>]|{<v0>,<v1>,<...>}|enum|external) [<bypass_signal>]` : Limit valid write value for a field.
+    The limit can be a range in the form of `[min:max]` (min & max included, one can be omitted), a set of value with `{v0,v1,v2}`, an external logic (keyword `external`)
     or, when the field is an enum using the keyword `enum` will automatically limit the value to the enumerated values.
     When writing an invalid value, the register will not be updated and an access error will be raised on the control bus.
     If a bypass signal is provided, when the signal is high the limit is ignored.

@@ -323,6 +323,9 @@ pub fn limit_def(input: &str) -> ResF<'_, LimitP> {
             reset_val_arr.map(LimitValueP::List),
             // Enum
             ws("enum").value(LimitValueP::Enum),
+            // Enum
+            ws("external").value(LimitValueP::External),
+            ws("ext").value(LimitValueP::External),
         )),
         opt(ws(signal_name)),
     ).context(StrContext::Label("limit definition"))
@@ -595,6 +598,20 @@ mod tests_parsing {
             limit_def("enum"),
             Ok(LimitP {
                 value: LimitValueP::Enum,
+                bypass: "".to_string()
+            })
+        );
+        assert_eq!(
+            limit_def("ext"),
+            Ok(LimitP {
+                value: LimitValueP::External,
+                bypass: "".to_string()
+            })
+        );
+        assert_eq!(
+            limit_def("external"),
+            Ok(LimitP {
+                value: LimitValueP::External,
                 bypass: "".to_string()
             })
         );

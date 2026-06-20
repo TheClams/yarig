@@ -6,6 +6,9 @@
 ### Fix
   - Parser: now check enum value verus field width (only for non generic/parameter width)
 
+### Added
+  - Parser: "limit" now support "external" to indicate that the the limit check logic is external to the RIF
+
 ## [0.23.3] - 2026-06-16
 
 ### Fix

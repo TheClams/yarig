@@ -621,12 +621,12 @@ pub struct HwRegInst {
     /// Missing fields
     pub missing_fields: BTreeMap<String, MissingFieldInfo>,
     /// Fields with limit: usefull to collect
-    pub limits: Vec<String>
+    pub limits: Vec<(String,bool)>
 }
 
 impl HwRegInst {
     // pub fn new(group: String, array_idx: &ArrayIdx, port: RegPortKind, intr_derived: bool, missing_fields: BTreeMap<String, MissingFieldInfo>, limits: Vec<String>) -> Self {
-    pub fn new(reg: &RifRegInst, port: RegPortKind, missing_fields: BTreeMap<String, MissingFieldInfo>, limits: Vec<String>) -> Self {
+    pub fn new(reg: &RifRegInst, port: RegPortKind, missing_fields: BTreeMap<String, MissingFieldInfo>, limits: Vec<(String,bool)>) -> Self {
         let group = reg.group_type.to_owned();
         let intr_derived = reg.intr_info.0.is_derived();
         let dim = match &reg.array {
@@ -707,7 +707,10 @@ impl HwRegs {
                     hw_reg.limits.extend(
                         reg.fields.iter()
                             .filter(|f| f.has_limit())
-                            .map(|f| format!("{}{}_{}", reg.group_name, reg.array.idx_str(false), f.name_flat()))
+                            .map(|f| {
+                                let n = format!("{}{}_{}", reg.group_name, reg.array.idx_str(false), f.name_flat());
+                                (n,f.limit.is_ext())
+                            })
                     );
                 }
             }

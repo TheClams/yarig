@@ -1585,7 +1585,7 @@ impl RifFieldInst {
         }
     }
 
-    /// Return name with index in bracket if part of an array
+    /// Return name with index without bracket if part of an array
     pub fn name_flat(&self) -> String {
         if self.array.dim() > 0 {
             format!("{}{}", self.name, self.array.idx())
