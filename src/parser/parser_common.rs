@@ -1,4 +1,4 @@
-use crate::{error::RifError, rifgen::{Context, LogicExpr, Width}};
+use crate::{error::RifError, rifgen::{Context, Width}, hdl::logic_expr::LogicExpr};
 
 use winnow::{
     ascii::{alpha1, alphanumeric1, digit0, digit1, hex_digit1, multispace0, space0, Caseless},
@@ -276,12 +276,10 @@ pub fn val_u16<'a>(input: &mut &'a str) -> Res<'a, u16> {
     .parse_next(input)
 }
 
-#[allow(dead_code)]
 pub fn param<'a>(input: &mut &'a str) -> Res<'a, &'a str> {
     preceded("$", identifier).parse_next(input)
 }
 
-#[allow(dead_code)]
 pub fn val_u8_or_param<'a>(input: &mut &'a str) -> Res<'a, Width> {
     alt((
         val_u8.map(Width::Value),

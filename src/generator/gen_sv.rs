@@ -1,5 +1,8 @@
 use crate::{
-    cfg::{CfgRtl, RtlLimit, RtlLimitCfg}, comp::{comp_inst::RifInst, hw_info::{PortDir, PortInfo, SignalDecl, SignalDef, SignalInfo, SignalKind}}, rifgen::{CastInfo, EnumEntry, ExprId, GenericRange, LogicExpr, ResetDef, SignalRange}
+    cfg::{CfgRtl, RtlLimit, RtlLimitCfg},
+    comp::{comp_inst::RifInst,},
+    hdl::{CastInfo, ExprId, LogicExpr, SignalRange, PortDir, PortInfo, SignalDecl, SignalDef, SignalInfo, SignalKind},
+    rifgen::{EnumEntry, GenericRange, ResetDef}
 };
 
 use super::{

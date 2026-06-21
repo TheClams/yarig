@@ -228,6 +228,9 @@ gen_inc = ["*"]
 # Optional: Override global local for this target
 local = ["module1", "module2"]
 
+# Optional: list of path for custom bridge implementation (relative path to this config file)
+bridge_path = ["../hdl"]
+
 # Optional: Sub-directory name for generated file which are not the top level
 subdir = "subdir_name"
 

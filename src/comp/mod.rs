@@ -27,18 +27,6 @@
 //! - [`reg_impl::FieldImpl`]: Field implementation with resolved properties
 //! - [`reg_impl::HwRegs`]: Hardware register structures (SW and HW views)
 //!
-//! ## Hardware Information
-//!
-//! The [`hw_info`] module provides HDL-agnostic abstractions:
-//! - [`hw_info::SignalKind`]: Signal types (unsigned, signed, custom, address, data)
-//! - [`hw_info::SignalDim`]: Signal dimensions (fixed or generic)
-//! - [`hw_info::SignalDef`]: Signal definition with type and dimensions
-//! - [`hw_info::PortInfo`]: Port information with direction and signal properties
-//! - [`hw_info::PortList`]: Collection of ports for a module/entity
-//!
-//! These abstractions allow generators to produce output for different HDLs (SystemVerilog,
-//! VHDL) from the same compiled representation.
-//!
 //! # Compilation Process
 //!
 //! The compilation happens in [`comp_inst::Comp::compile`]:
@@ -51,4 +39,3 @@
 
 pub mod comp_inst;
 pub mod reg_impl;
-pub mod hw_info;

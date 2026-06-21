@@ -57,7 +57,7 @@ use serde_derive::Deserialize;
 use std::{collections::HashMap, fs, path::PathBuf, str::FromStr};
 use toml;
 use crate::{
-    cli::RifGenArgs, comp::comp_inst::{Comp, RifFieldInst},
+    cli::RifGenArgs, comp::comp_inst::{Comp, RifFieldInst, RifInst, RifmuxInst},
     generator::{
         casing::Casing, gen_adoc::GeneratorAdoc, trait_doc::{GeneratorDoc, TableKind}, trait_hw::GeneratorHw, trait_sw::GeneratorSw,
         gen_c::GeneratorC, gen_common::{GeneratorBaseSetting, Skippable}, gen_html::GeneratorHtml,
@@ -410,6 +410,8 @@ pub struct CfgC {
 #[derive(Deserialize, Debug, Clone, Default)]
 #[serde(deny_unknown_fields)]
 pub struct CfgRtl {
+    /// List of path to search for custom bridge implementation
+    pub bridge_path: Option<Vec<String>>,
     /// Number of pipe level for register access (default 1 on the read value)
     pub nb_pipe: Option<u8>,
     /// List of included reference to generate (use ["*"] for all)
@@ -824,6 +826,22 @@ impl YarigCfg {
         if let Some(intf) = &self.interface {
             rif_obj.set_interface(intf);
         }
+        // Ensure custom interface RTL implementation exists
+        let base_path = self.path.as_ref();
+        let bridge_path = self.rtl.bridge_path.clone().unwrap_or_default();
+        match &mut rif_obj {
+            Comp::Rif(rif_inst) => updt_intf_path(rif_inst, &bridge_path, base_path)?,
+            Comp::Rifmux(rifmux_inst) => {
+                for comp in rifmux_inst.components.iter_mut() {
+                    match &mut comp.inst {
+                        Comp::Rifmux(inst) => updt_intf_path_rifmux(inst, &bridge_path, base_path)?,
+                        Comp::Rif(inst) =>  updt_intf_path(inst, &bridge_path, base_path)?,
+                        Comp::External(_) => {},
+                    }
+                }
+            }
+            _ => {}
+        }
         //
         let base_setting = GeneratorBaseSetting::new(self);
         for target in self.targets.iter() {
@@ -909,4 +927,43 @@ impl YarigCfg {
         Ok((rif_obj, rif_src.paths))
     }
 
+}
+
+pub fn updt_intf_path(inst: &mut RifInst, bridge_path: &[String], base_path: Option<&String>) -> Result<(),String> {
+    let mut new_path : Option<PathBuf> = None;
+    if let Some(p) = inst.interface.get_path() {
+        let intf_path_base : PathBuf = p.to_owned().into();
+        if !intf_path_base.exists() {
+            for rtl_path in bridge_path.iter() {
+                let mut path : PathBuf = rtl_path.clone().into();
+                if path.is_relative() && !path.exists() && let Some(base) = base_path {
+                    path = [rtl_path, base].iter().collect();
+                }
+                path.push(intf_path_base.clone());
+                if path.exists() {
+                    new_path = Some(path);
+                    break;
+                }
+            }
+            if new_path.is_none() {
+                return Err(format!("Unable to locate RTL implementation for {p}"));
+            }
+        }
+    }
+    if let Some(p) = new_path {
+        let path_str = p.to_str().expect("Converting path to string");
+        inst.interface.set_path(path_str);
+    }
+    Ok(())
+}
+
+pub fn updt_intf_path_rifmux(inst: &mut RifmuxInst, bridge_path: &[String], base_path: Option<&String>) -> Result<(), String> {
+    for comp in inst.components.iter_mut() {
+        match &mut comp.inst {
+            Comp::Rifmux(rifmux_inst) => updt_intf_path_rifmux(rifmux_inst, bridge_path, base_path)?,
+            Comp::Rif(rif_inst) =>  updt_intf_path(rif_inst, bridge_path, base_path)?,
+            Comp::External(_) => {},
+        }
+    }
+    Ok(())
 }

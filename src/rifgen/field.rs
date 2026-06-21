@@ -1,10 +1,9 @@
 use std::{collections::HashMap, fmt::Display, ops::{Add, Sub}};
 
 use crate::{error::RifError, parser::parser_expr::{ExprTokens, ParamValues}, rifgen::GenericValues};
+use crate::hdl::LogicExpr;
 
-use super::{
-    Context, Description, InterruptClr, InterruptDesc, InterruptInfoField, InterruptTrigger, LogicExpr,
-};
+use super::{Context, Description, InterruptClr, InterruptDesc, InterruptInfoField, InterruptTrigger};
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq)]

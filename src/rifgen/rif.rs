@@ -55,7 +55,7 @@ pub enum Interface { #[default]
     /// Auxiliary peripheral bus
     Uaux,
     /// Custom interface
-    Custom(String)
+    Custom(String,String)
 }
 
 
@@ -63,11 +63,49 @@ impl From<&str> for Interface {
 
     fn from(s: &str) -> Self {
         match s.to_lowercase().as_str() {
-            "default" => Interface::Default,
-            "apb"     => Interface::Apb,
-            "uaux"    => Interface::Uaux,
-            custom    => Interface::Custom(custom.to_owned()),
+            "apb"  => Interface::Apb,
+            "uaux" => Interface::Uaux,
+            _      => Interface::Default,
         }
+    }
+}
+
+impl Interface {
+    /// Create a custom interface with a name and path to an RTL implementation
+    pub fn new_custom(name: &str, filename: &str) -> Self {
+        Self::Custom(name.to_owned(), filename.to_owned())
+    }
+
+    /// Update the path of a custom interface
+    pub fn set_path(&mut self, path: &str) {
+        if let Interface::Custom(_, path_l) = self {
+            path_l.clear();
+            path_l.push_str(path);
+        }
+    }
+
+    /// Retrieve path of custom interface
+    pub fn get_path(&self) -> Option<&str> {
+        if let Interface::Custom(_, path) = &self {
+            Some(path.as_str())
+        } else {
+            None
+        }
+    }
+
+    /// Return interface as a name
+    pub fn name(&self) -> &str {
+        match &self {
+            Interface::Default => "rif",
+            Interface::Apb     => "apb",
+            Interface::Uaux    => "uaux",
+            Interface::Custom(n, _) => n,
+        }
+    }
+
+    /// Check if inertface variant is Default
+    pub fn is_default(&self) -> bool {
+        *self==Interface::Default
     }
 }
 
@@ -75,22 +113,6 @@ impl<'de> serde::Deserialize<'de> for Interface {
     fn deserialize<D: serde::Deserializer<'de> >(d: D) -> Result<Self, D::Error> {
         let s = String::deserialize(d)?;
         Ok(Interface::from(s.as_ref()))
-    }
-}
-
-
-impl Interface {
-    pub fn name(&self) -> &str {
-        match self {
-            Interface::Default => "rif",
-            Interface::Apb => "apb",
-            Interface::Uaux => "uaux",
-            Interface::Custom(n) => n,
-        }
-    }
-
-    pub fn is_default(&self) -> bool {
-        *self==Interface::Default
     }
 }
 

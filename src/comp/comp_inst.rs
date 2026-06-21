@@ -1,12 +1,19 @@
 use std::collections::{BTreeMap, HashMap};
 
 use crate::{
-    cfg::{RtlLimit, RtlLimitCfg}, parser::{RifGenSrc, RifGenTop, get_rif, parser_expr::{ExprValue, ParamValues}}, rifgen::{
-        Access, Address, AddressKind, ClockingInfo, CounterInfo, DescIdx, Description, EnumDef, EnumDefs, EnumKind, ExprId, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, GenericRange, GenericValues, Interface, InterruptRegKind, InterruptTrigger, Limit, LogicExpr, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegPulseKind, ResetVal, ResetValOverride, Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SignalRange, SuffixInfo, Visibility, Width, order_dict::{OrderDict, OrderedDictIterV}
+    cfg::{RtlLimit, RtlLimitCfg}, hdl::ExprId,
+    parser::{RifGenSrc, RifGenTop, get_rif, parser_expr::{ExprValue, ParamValues}},
+    rifgen::{
+        Access, Address, AddressKind, ClockingInfo, CounterInfo, DescIdx, Description, EnumDef, EnumDefs, EnumKind,
+        ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, GenericRange, GenericValues, Interface, InterruptRegKind,
+        InterruptTrigger, Limit, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegPulseKind, ResetVal, ResetValOverride,
+        Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SuffixInfo, Visibility, Width,
+        order_dict::{OrderDict, OrderedDictIterV}
     }
 };
+use crate::hdl::{LogicExpr, SignalRange, PortList};
 
-use super::{hw_info::PortList, reg_impl::{HwRegs, RegImpl, RegImplDict}};
+use super::reg_impl::{HwRegs, RegImpl, RegImplDict};
 
 #[derive(Clone, Debug)]
 /// Instance of Rifmux

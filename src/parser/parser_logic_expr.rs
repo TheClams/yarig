@@ -1,7 +1,7 @@
 use winnow::{combinator::alt, Parser};
 
 // use crate::{error::RifError, parser::ws};
-use crate::{error::RifError, parser::ws, rifgen::{LogicExpr, SignalRange}};
+use crate::{error::RifError, parser::ws, hdl::{LogicExpr, SignalRange}};
 
 use super::{identifier, val_isize, Res};
 
@@ -403,7 +403,7 @@ pub fn parse_logic_expr(input: &str) -> Result<LogicExpr,RifError> {
 
 #[cfg(test)]
 mod tests_parsing {
-    use crate::rifgen::{ExprId, SignalRange};
+    use crate::hdl::{ExprId, SignalRange};
 
     use super::*;
 

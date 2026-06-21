@@ -257,6 +257,17 @@ impl std::error::Error for RifGenError {
     }
 }
 
+impl From< winnow::error::ErrMode<winnow::error::ContextError> > for RifGenError {
+    fn from(cause: winnow::error::ErrMode<winnow::error::ContextError> ) -> RifGenError {
+        let err = match cause {
+            winnow::error::ErrMode::Incomplete(_) => None,
+            winnow::error::ErrMode::Backtrack(e) => e.context().last().cloned(),
+            winnow::error::ErrMode::Cut(e) => e.context().last().cloned(),
+        };
+        RifGenError::Msg(format!("Parsing error: {}", err.unwrap_or(winnow::error::StrContext::Label(""))))
+    }
+}
+
 impl Display for RifGenError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

@@ -1,11 +1,10 @@
-use crate::{
-    generator::casing::{Casing, ToCasing},
-    rifgen::{ClkEn, ExprId, FieldHwKind, Interface, LogicExpr, Rif, SuffixInfo}
-};
+use std::path::PathBuf;
 
-use super::{
-    comp_inst::RifPageInst,
-    reg_impl::{FieldImpl, HwRegs, RegImplDict}
+use crate::{
+    comp::{comp_inst::RifPageInst, reg_impl::{FieldImpl, HwRegs, RegImplDict}},
+    error::RifGenError, generator::casing::{Casing, ToCasing},
+    hdl::{ExprId,LogicExpr, parser_sv::sv_module_decl},
+    rifgen::{ClkEn, FieldHwKind, Interface, Rif, SuffixInfo}
 };
 
 /// Signal type: either a bit vector (signed or unsigned) or a custom type
@@ -67,7 +66,7 @@ impl SignalKind {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum SignalDim {
     Fixed(u16),
     Generic(String, u16)
@@ -88,7 +87,13 @@ impl SignalDim {
             SignalDim::Generic(_, d) => *d,
         }
     }
+}
 
+// Default dimension to single dimension
+impl Default for SignalDim {
+    fn default() -> Self {
+        SignalDim::Fixed(0)
+    }
 }
 
 impl std::fmt::Display for SignalDim {
@@ -175,6 +180,13 @@ impl SignalDef {
     }
 }
 
+impl PartialEq for SignalDef {
+    fn eq(&self, other: &Self) -> bool {
+        self.name.trim() == other.name.trim() &&
+        self.kind == other.kind &&
+        self.dim == other.dim
+    }
+}
 
 /// Signal declaration info: contains both name and type
 #[derive(Clone, Debug)]
@@ -307,6 +319,14 @@ impl PortInfo {
         }
     }
 
+    pub fn new_rif_intf() -> Self {
+        PortInfo {
+            def: SignalDef::new("if_rif".to_owned(), SignalKind::Custom((None,"rif_if".to_owned()))),
+            dir: PortDir::Modport("ctrl".to_owned()),
+            desc: "SW register interface".to_owned(),
+        }
+    }
+
     pub fn new(name: String, kind: SignalKind, dir: PortDir, dim: SignalDim, desc: String) -> Self {
         PortInfo {
             def: SignalDef::new_arr(name, kind, dim),
@@ -350,6 +370,14 @@ impl PortInfo {
             SignalKind::Data        => data_w as u16,
             SignalKind::Custom(_)   => 0,
         }
+    }
+}
+
+impl PartialEq for PortInfo {
+    fn eq(&self, other: &Self) -> bool {
+        self.def == other.def &&
+        self.dir == other.dir &&
+        self.desc.trim() == other.desc.trim()
     }
 }
 
@@ -536,58 +564,35 @@ impl RifIntfPorts {
     pub fn new(intf: &Interface, use_intf: bool) -> Self {
         let ports =
         match intf {
-            Interface::Default => {
-                if use_intf {
-                    vec![
-                        PortInfo::new_intf(
-                            "if_rif".to_owned(),
-                            "rif_if".to_owned(), "rif".to_owned(),
-                            "SW register interface".to_owned())
-                    ]
-                } else {
-                    vec![
-                        PortInfo::new_basic(    "reg_addr           ".to_owned(), SignalKind::Address, PortDir::In, "Register address".to_owned()),
-                        PortInfo::new_in( "reg_en             ".to_owned(), "Register enable".to_owned()),
-                        PortInfo::new_in( "reg_rd_wrn         ".to_owned(), "Register write/not read".to_owned()),
-                        PortInfo::new_basic(    "reg_wr_data        ".to_owned(), SignalKind::Data, PortDir::In , "Register write data".to_owned()),
-                        PortInfo::new_basic(    "reg_rd_data        ".to_owned(), SignalKind::Data, PortDir::Out, "Register read data".to_owned()),
-                        PortInfo::new_out("reg_done           ".to_owned(), "Register ready".to_owned()),
-                        PortInfo::new_out("reg_done_next      ".to_owned(), "Register ready next".to_owned()),
-                        PortInfo::new_out("reg_err_addr       ".to_owned(), "Register address error".to_owned()),
-                        PortInfo::new_out("reg_err_addr_next  ".to_owned(), "Register address error (combinatorial)".to_owned()),
-                        PortInfo::new_out("reg_err_access     ".to_owned(), "Register access error".to_owned()),
-                        PortInfo::new_out("reg_err_access_next".to_owned(), "Register access error (combinatorial)".to_owned()),
-                    ]
-                }
-            },
+            Interface::Default => Self::default_ports(use_intf),
             Interface::Apb => vec![
-                PortInfo::new_basic(    "paddr  ".to_owned(), SignalKind::Address, PortDir::In, "APB Address".to_owned()),
-                PortInfo::new_in( "psel   ".to_owned(), "APB Select".to_owned()),
-                PortInfo::new_in( "penable".to_owned(), "APB Enable".to_owned()),
-                PortInfo::new_in( "pwrite ".to_owned(), "APB Write".to_owned()),
-                PortInfo::new_basic(    "pwdata ".to_owned(), SignalKind::Data, PortDir::In, "APB Write Data".to_owned()),
-                PortInfo::new_basic(    "prdata ".to_owned(), SignalKind::Data, PortDir::Out, "APB Read Data".to_owned()),
-                PortInfo::new_out("pready ".to_owned(), "APB Ready".to_owned()),
-                PortInfo::new_out("pslverr".to_owned(), "APB Slave Error".to_owned()),
+                PortInfo::new_basic("paddr  ".to_owned(), SignalKind::Address, PortDir::In, "APB Address".to_owned()),
+                PortInfo::new_in(   "psel   ".to_owned(), "APB Select".to_owned()),
+                PortInfo::new_in(   "penable".to_owned(), "APB Enable".to_owned()),
+                PortInfo::new_in(   "pwrite ".to_owned(), "APB Write".to_owned()),
+                PortInfo::new_basic("pwdata ".to_owned(), SignalKind::Data, PortDir::In, "APB Write Data".to_owned()),
+                PortInfo::new_basic("prdata ".to_owned(), SignalKind::Data, PortDir::Out, "APB Read Data".to_owned()),
+                PortInfo::new_out(  "pready ".to_owned(), "APB Ready".to_owned()),
+                PortInfo::new_out(  "pslverr".to_owned(), "APB Slave Error".to_owned()),
             ],
             Interface::Uaux => vec![
-                PortInfo::new_basic(   "uaux_addr      ".to_owned(), SignalKind::Address, PortDir::In, "AUX address".to_owned()),
-                PortInfo::new_in("uaux_en        ".to_owned(), "AUX enable".to_owned()),
-                PortInfo::new_in("uaux_cmt_phase ".to_owned(), "AUX commit status".to_owned()),
-                PortInfo::new_in("uaux_cmt_valid ".to_owned(), "AUX commit Valid".to_owned()),
-                PortInfo::new_in("uaux_read      ".to_owned(), "AUX read".to_owned()),
-                PortInfo::new_in("uaux_write     ".to_owned(), "AUX write".to_owned()),
-                PortInfo::new_basic(   "uaux_wdata     ".to_owned(), SignalKind::Data, PortDir::In, "AUX write Data".to_owned()),
-                PortInfo::new_basic(   "uaux_rdata     ".to_owned(), SignalKind::Data, PortDir::Out, "AUX read Data".to_owned()),
-                PortInfo::new_out("uaux_busy     ".to_owned(), "AUX busy".to_owned()),
-                PortInfo::new_out("uaux_illegal  ".to_owned(), "SR/LR illegal".to_owned()),
-                PortInfo::new_out("uaux_k_rd     ".to_owned(), "AUX read privilege violation".to_owned()),
-                PortInfo::new_out("uaux_k_wr     ".to_owned(), "AUX write privilege violation".to_owned()),
-                PortInfo::new_out("uaux_unimpl   ".to_owned(), "AUX unimplemented address".to_owned()),
-                PortInfo::new_out("uaux_serial_sr".to_owned(), "AUX SR group flush ".to_owned()),
-                PortInfo::new_out("uaux_strict_sr".to_owned(), "AUX SR single flush".to_owned()),
+                PortInfo::new_basic("uaux_addr     ".to_owned(), SignalKind::Address, PortDir::In, "AUX address".to_owned()),
+                PortInfo::new_in(   "uaux_en       ".to_owned(), "AUX enable".to_owned()),
+                PortInfo::new_in(   "uaux_cmt_phase".to_owned(), "AUX commit status".to_owned()),
+                PortInfo::new_in(   "uaux_cmt_valid".to_owned(), "AUX commit valid".to_owned()),
+                PortInfo::new_in(   "uaux_read     ".to_owned(), "AUX read".to_owned()),
+                PortInfo::new_in(   "uaux_write    ".to_owned(), "AUX write".to_owned()),
+                PortInfo::new_basic("uaux_wdata    ".to_owned(), SignalKind::Data, PortDir::In, "AUX write data".to_owned()),
+                PortInfo::new_basic("uaux_rdata    ".to_owned(), SignalKind::Data, PortDir::Out, "AUX read data".to_owned()),
+                PortInfo::new_out(  "uaux_busy     ".to_owned(), "AUX busy".to_owned()),
+                PortInfo::new_out(  "uaux_illegal  ".to_owned(), "SR/LR illegal".to_owned()),
+                PortInfo::new_out(  "uaux_k_rd     ".to_owned(), "AUX read privilege violation".to_owned()),
+                PortInfo::new_out(  "uaux_k_wr     ".to_owned(), "AUX write privilege violation".to_owned()),
+                PortInfo::new_out(  "uaux_unimpl   ".to_owned(), "AUX unimplemented address".to_owned()),
+                PortInfo::new_out(  "uaux_serial_sr".to_owned(), "AUX SR group flush ".to_owned()),
+                PortInfo::new_out(  "uaux_strict_sr".to_owned(), "AUX SR single flush".to_owned()),
             ],
-            Interface::Custom(name) => vec![
+            Interface::Custom(name,_) => vec![
                 PortInfo::new_intf(
                     format!("if_{}", name.strip_suffix("_if").unwrap_or(name)),
                     name.to_owned(), "rif".to_owned(),
@@ -604,4 +609,142 @@ impl RifIntfPorts {
     pub fn iter_mut(&mut self) -> impl Iterator<Item=&mut PortInfo> {
         self.0.iter_mut()
     }
+
+    pub fn default_ports( use_intf: bool) -> Vec<PortInfo> {
+        if use_intf {
+            vec![
+                PortInfo::new_intf(
+                    "if_rif".to_owned(),
+                    "rif_if".to_owned(), "rif".to_owned(),
+                    "SW register interface".to_owned())
+            ]
+        } else {
+            vec![
+                PortInfo::new_basic("reg_addr           ".to_owned(), SignalKind::Address, PortDir::In, "Register address".to_owned()),
+                PortInfo::new_in(   "reg_en             ".to_owned(), "Register enable".to_owned()),
+                PortInfo::new_in(   "reg_rd_wrn         ".to_owned(), "Register write/not read".to_owned()),
+                PortInfo::new_basic("reg_wr_data        ".to_owned(), SignalKind::Data, PortDir::In , "Register write data".to_owned()),
+                PortInfo::new_basic("reg_rd_data        ".to_owned(), SignalKind::Data, PortDir::Out, "Register read data".to_owned()),
+                PortInfo::new_out(  "reg_done           ".to_owned(), "Register ready".to_owned()),
+                PortInfo::new_out(  "reg_done_next      ".to_owned(), "Register ready next".to_owned()),
+                PortInfo::new_out(  "reg_err_addr       ".to_owned(), "Register address error".to_owned()),
+                PortInfo::new_out(  "reg_err_addr_next  ".to_owned(), "Register address error (combinatorial)".to_owned()),
+                PortInfo::new_out(  "reg_err_access     ".to_owned(), "Register access error".to_owned()),
+                PortInfo::new_out(  "reg_err_access_next".to_owned(), "Register access error (combinatorial)".to_owned()),
+            ]
+        }
+    }
+
+}
+
+
+/// Hardware block parameter information: name, kind, type, default value
+#[derive(Clone, Debug, Default)]
+pub struct ParamInfo {
+    pub kind: ParamKind,
+    pub ptype: ParamType,
+    pub name: String,
+    pub value: isize,
+    pub desc: String,
+}
+
+pub type ParamDecl<'a> = (Option<ParamKind>, Option<ParamType>, &'a str, Option<isize>, Option<&'a str>);
+
+impl ParamInfo {
+    /// Create a basic ParamInfo with just a type and a name
+    pub fn basic(ptype: ParamType, name: String, value: isize) -> Self {
+        Self{kind: ParamKind::Global, ptype, name, value, desc: String::new() }
+    }
+
+    /// Update a ParamInfo from the result of paramdeclaration parsing
+    /// During parsing kind and type might be omitted and should take the value of the previous param declaration
+    pub fn set(&mut self, decl: ParamDecl) {
+        if let Some(k) = decl.0 {self.kind = k;}
+        if let Some(t) = decl.1 {self.ptype = t;}
+        self.name = decl.2.to_owned();
+        self.value = decl.3.unwrap_or_default();
+        if let Some(d) = decl.4 {self.desc = d.to_owned();}
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum ParamKind { #[default]
+    Global, Local
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum ParamType { #[default]
+    Int, Logic(u16), Bit(u16)
+}
+
+impl PartialEq for ParamInfo {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind &&
+        self.ptype == other.ptype &&
+        self.name.trim() == other.name.trim() &&
+        self.value == other.value &&
+        self.desc.trim() == other.desc.trim()
+    }
+}
+
+
+/// Hardware block parameter information: name, kind, type, default value
+#[derive(Clone, Debug)]
+pub struct ModuleInfo {
+    pub name: String,
+    pub params: Vec<ParamInfo>,
+    pub ports: Vec<PortInfo>,
+}
+
+impl ModuleInfo {
+
+    /// Create Module info from one of the non-custom supported bridge
+    pub fn new_bridge(intf: &Interface) -> Self {
+        let mut ports : Vec<PortInfo> = Vec::new();
+        if intf==&Interface::Uaux {
+            ports.push(PortInfo::new_in("clk".to_owned(), "SW Clock".to_owned()));
+            ports.push(PortInfo::new_in("rst_n".to_owned(), "SW reset asynchronous, active low".to_owned()));
+        }
+        ports.push(PortInfo::new_rif_intf());
+        if intf!=&Interface::Default {
+            ports.extend(RifIntfPorts::new(intf, true).0);
+        }
+        let params = if intf==&Interface::Default {Vec::new()}
+            else {vec![
+                ParamInfo::basic(ParamType::Int, "ADDR_W".to_owned(), 16),
+                ParamInfo::basic(ParamType::Int, "DATA_W".to_owned(), 32),
+            ]};
+        let name = format!("bridge_{}_rif", intf.name());
+        Self {name, params, ports}
+    }
+
+    /// Create Module info from one of the non-custom supported bridge
+    pub fn from_file <T : Into<PathBuf>>(path: T) -> Result<Self, RifGenError> {
+        let file_content = std::fs::read_to_string(path.into())?;
+        let mut txt = file_content.as_str();
+        let info = sv_module_decl(&mut txt)?;
+        Ok(Self {
+            name: info.0.to_owned(),
+            params: info.1,
+            ports: info.2,
+        })
+    }
+
+    /// Return software ports excluding the Clock/reset interface
+    pub fn get_ports_sw(&self) -> Vec<PortInfo> {
+        let rif_if_en = self.ports.len()==1; // Only one port os the mark of default interface
+        // Exclude port if_rif, reg_*, clk/clock, rst, reset
+        let filter = |p: &PortInfo| ((p.name()!="if_rif" && !p.name().starts_with("reg_")) || rif_if_en)
+            && !p.name().contains("clk") && !p.name().contains("clock")
+            && !p.name().contains("rst") && !p.name().contains("reset") ;
+        self.ports.iter().filter(|&p| filter(p)).cloned().collect::<Vec<_>>()
+    }
+
+    /// Check if the interface contains clock signal (naming containing clk/clock)
+    pub fn has_clk(&self) -> bool {
+        self.ports.iter().any(|p|
+            p.name().contains("clk") || p.name().contains("clock")
+        )
+    }
+
 }

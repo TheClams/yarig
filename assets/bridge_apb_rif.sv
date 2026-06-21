@@ -6,18 +6,16 @@
 //----------------------------------------------------------------------------*/
 
 module bridge_apb_rif #(parameter int ADDR_W=16,parameter int DATA_W=32) (
-   input  wire              clk    ,
-   input  wire              rst_n  ,
-   rif_if.ctrl              if_rif ,
+   rif_if.ctrl              if_rif , // SW register interface
    // APB Interface
-   input  wire [ADDR_W-1:0] paddr  ,
-   input  wire              psel   ,
-   input  wire              penable,
-   input  wire              pwrite ,
-   input  wire [DATA_W-1:0] pwdata ,
-   output wire [DATA_W-1:0] prdata ,
-   output wire              pready ,
-   output wire              pslverr
+   input  wire [ADDR_W-1:0] paddr  , // APB Address
+   input  wire              psel   , // APB Select
+   input  wire              penable, // APB Enable
+   input  wire              pwrite , // APB Write
+   input  wire [DATA_W-1:0] pwdata , // APB Write Data
+   output wire [DATA_W-1:0] prdata , // APB Read Data
+   output wire              pready , // APB Ready
+   output wire              pslverr  // APB Slave Error
 );
 
 /*------------------------------------------------------------------------------

@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
 use crate::{
-    cfg::{CfgRtl, RtlLimitCfg}, comp::{
-        comp_inst::{RifInst, RifmuxInst},
-        hw_info::{PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalDim, SignalInfo, SignalKind}
-    }, rifgen::{CastInfo, EnumEntry, ExprId, GenericRange, Interface, LogicExpr, ResetDef, SignalRange, order_dict::OrderDict}
+    cfg::{CfgRtl, RtlLimitCfg},
+    comp::comp_inst::{RifInst, RifmuxInst},
+    hdl::{CastInfo, ExprId, LogicExpr,SignalRange, PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalDim, SignalInfo, SignalKind},
+    rifgen::{ EnumEntry, GenericRange, Interface, ResetDef, order_dict::OrderDict}
 };
 
 use super::{

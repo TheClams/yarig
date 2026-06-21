@@ -1,7 +1,6 @@
 --------------------------------------------------------------------------------
 -- entity: bridge_vhd_apb_rif
 --  Bridge between RIF Gen interface and APB
---  The option ASSUM_WR_OK allows to avoid some wait cycle for the write to be fully done
 --
 --------------------------------------------------------------------------------
 library ieee;
@@ -11,9 +10,6 @@ use ieee.std_logic_misc.all;
 entity bridge_vhd_apb_rif is
   generic (ADDR_W : natural := 16; DATA_W : natural := 32);
   port (
-    clk : in std_logic; -- Clock
-    -- Input signals
-    rst_n : in std_logic;
     -- RIF  
     reg_addr         : out std_logic_vector(ADDR_W-1 downto 0); --Register Address
     reg_en           : out std_logic                    ; --Register Enable

@@ -1,7 +1,7 @@
-use crate::rifgen::{Context, Interface, ResetDef, GenericRange};
+use crate::{parser::take_until_unbalanced, rifgen::{Context, GenericRange, Interface, ResetDef}};
 
 use winnow::{
-  ascii::Caseless, combinator::{alt, opt, preceded, separated_pair, terminated}, error::StrContext, Parser
+  Parser, ascii::Caseless, combinator::{alt, delimited, opt, preceded, separated_pair, terminated}, error::StrContext
 };
 
 use super::{identifier, item_cntxt, parse_binary, parse_range, quoted_string, ws, Res, ResF};
@@ -67,9 +67,12 @@ pub fn rif_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
 pub fn rif_properties_or_item<'a>(input: &mut &'a str) -> Res<'a, Context> {
   alt((rif_properties, item_cntxt)).parse_next(input)
 }
-
 pub fn val_intf<'a>(input: &mut &'a str) -> Res<'a, Interface> {
-  identifier.map(Interface::from).parse_next(input)
+  alt((
+    (identifier, delimited("(",take_until_unbalanced('(', ')'),")") ).map(|(name, fname)| Interface::new_custom(name, fname)),
+    alt((Caseless("default"), Caseless("rif"), Caseless("apb"), Caseless("uaux"))).map(Interface::from),
+  )).context(StrContext::Label("Interface name: default, apb, uaux or user_bridge(filename)"))
+  .parse_next(input)
 }
 
 
@@ -149,7 +152,7 @@ mod tests_parsing {
     assert_eq!(val_intf(&mut "Default "), Ok(Interface::Default) );
     assert_eq!(val_intf(&mut "apb"), Ok(Interface::Apb));
     assert_eq!(val_intf(&mut "Apb "), Ok(Interface::Apb));
-    assert_eq!(val_intf(&mut "my_intf5"), Ok(Interface::Custom("my_intf5".to_owned())));
+    assert_eq!(val_intf(&mut "my_intf5(file.sv)"), Ok(Interface::Custom("my_intf5".to_owned(), "file.sv".to_owned())));
     assert!(val_intf(&mut "543 ").is_err());
     // assert_eq!(val_intf(&mut "543 "), Err(ErrMode::Backtrack(winnow::error::InputError{input:"543 ", kind:ErrorKind::Tag})) );
     assert!(val_intf(&mut "// bad ").is_err());

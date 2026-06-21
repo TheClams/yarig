@@ -3,11 +3,13 @@
 
 ## [0.24.0] - UNRELEASED
 
+### Added
+  - Support for custom bridge to rif_if
+  - Parser: "limit" now support "external" to indicate that the the limit check logic is external to the RIF
+
 ### Fix
   - Parser: now check enum value verus field width (only for non generic/parameter width)
-
-### Added
-  - Parser: "limit" now support "external" to indicate that the the limit check logic is external to the RIF
+  - APB Bridge: remove clk/rst_n from connection (does not exists i nthe new bridge version)
 
 ## [0.23.3] - 2026-06-16
 

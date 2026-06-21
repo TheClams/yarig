@@ -1,7 +1,6 @@
 use crate::comp::{comp_inst::RifFieldInst, reg_impl::MissingFieldInfo};
 
-use super::ResetVal;
-
+use crate::rifgen::ResetVal;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SignalRange {

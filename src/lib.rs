@@ -65,3 +65,4 @@ pub mod comp;
 pub mod generator;
 pub mod cfg;
 pub mod cli;
+pub mod hdl;

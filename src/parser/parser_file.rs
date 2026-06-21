@@ -13,8 +13,12 @@ use crate::parser::{
     bool_or_default, clk_en, enum_kind, generic_def, intr_desc, is_hidden, limit_def, password_info, path_val, reg_incl_or_decl, reg_inst_array_properties, reg_inst_properties, reg_pulse_info, rif_inst_optional_en, rif_inst_suffix, rifmux_group, rifmux_map, signal_or_expr, val_isize, val_u16
 };
 use crate::rifgen::{
-    Access, AddressOffset, ClockingInfo, Context, DataWidth, EnumDef, EnumKind, ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, GenericValues, InstMode, Interface, InterruptInfo, ItemOptional, Lock, LogicExpr, OverrideIndex, RegDef, RegDefOrIncl, RegInst, RegPulseKind, ResetDef, Rif, RifPage, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility, Width
+    Access, AddressOffset, ClockingInfo, Context, DataWidth, EnumDef, EnumKind, ExternalKind, 
+    Field, FieldHwKind, FieldPos, FieldSwKind, GenericValues, InstMode, Interface, InterruptInfo, ItemOptional, 
+    Lock, OverrideIndex, RegDef, RegDefOrIncl, RegInst, RegPulseKind, ResetDef, 
+    Rif, RifPage, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility, Width
 };
+use crate::hdl::LogicExpr;
 
 use super::{
     comment, counter_def, decl_top, desc, enum_entry, field_decl, field_acc, field_interrupt,

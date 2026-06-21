@@ -3,14 +3,14 @@ use std::collections::BTreeMap;
 use crate::{
     parser::get_rif,
     rifgen::{
-        order_dict::{OrderDict, OrderedDictIterV}, Access, CastInfo, ClkEn, Description, EnumKind, ExternalKind, Field, FieldHwKind, FieldSwKind, InterruptDesc, InterruptInfo, Limit, Lock, LogicExpr, RegDef, RegDefOrIncl, RegIncludePath, RegPulseKind, ResetVal, Rif
+        order_dict::{OrderDict, OrderedDictIterV},
+        Access, ClkEn, Description, EnumKind, ExternalKind, Field, FieldHwKind, FieldSwKind, InterruptDesc, InterruptInfo,
+        Limit, Lock, RegDef, RegDefOrIncl, RegIncludePath, RegPulseKind, ResetVal, Rif
     }
 };
+use crate::hdl::{CastInfo, SignalDim, LogicExpr};
 
-use super::{
-    comp_inst::{ArrayIdx, PartialFieldInfos, RifPageInst, RifRegInst, RifsInfo, FieldWidth},
-    hw_info::SignalDim,
-};
+use super::comp_inst::{ArrayIdx, PartialFieldInfos, RifPageInst, RifRegInst, RifsInfo, FieldWidth};
 
 /// Field Implementation
 /// Contains all information for the hardware field after compilation

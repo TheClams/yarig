@@ -1,16 +1,11 @@
 use std::{collections::HashSet, ops::Deref};
 
 use crate::{
-    cfg::{RtlLimit, RtlLimitCfg},
-    comp::{
-        comp_inst::{Comp, CompInst, FieldWidth, RifInst, RifmuxInst},
-        hw_info::{PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalInfo, SignalKind}
-    },
-    error::RifGenError,
-    parser::parser_expr::ParamValues,
-    rifgen::{
-        Access, CastInfo, ClkEn, ClockingInfo, EnumEntry, EnumKind, ExprId, ExternalKind, FieldHwKind, FieldSwKind, GenericRange, Interface, InterruptClr, InterruptRegKind, InterruptTrigger, LimitValue, LogicExpr, RegPulseKind, ResetDef, SignalRange, order_dict::OrderDict,
-    },
+    cfg::{RtlLimit, RtlLimitCfg}, comp::comp_inst::{Comp, CompInst, FieldWidth, RifInst, RifmuxInst}, error::RifGenError, hdl::{CastInfo, ExprId, LogicExpr, ModuleInfo, PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalInfo, SignalKind, SignalRange}, parser::parser_expr::ParamValues, rifgen::{
+        Access, ClkEn, ClockingInfo, EnumEntry, EnumKind, ExternalKind, FieldHwKind, FieldSwKind,
+        GenericRange, Interface, InterruptClr, InterruptRegKind, InterruptTrigger, LimitValue,
+        RegPulseKind, ResetDef,  order_dict::OrderDict,
+    }
 };
 
 use super::{
@@ -446,7 +441,14 @@ pub trait GeneratorHw : GeneratorBase {
         if !Self::SUPPORT_INTF {
             self.write_comment(1, "Register SW interface");
         }
-        self.write_intf_ports(&rif.interface);
+        let bridge = if let Interface::Custom(_,path) = &rif.interface {
+            ModuleInfo::from_file(path)?
+        } else {
+            ModuleInfo::new_bridge(&rif.interface)
+        };
+        let intf_ports = if rif.interface.is_default() {RifIntfPorts::default_ports(Self::SUPPORT_INTF)}
+            else {bridge.get_ports_sw()};
+        self.write_intf_ports(&intf_ports);
         self.write_module_decl_footer(&rif_name);
 
         // Signals declaration
@@ -638,7 +640,8 @@ pub trait GeneratorHw : GeneratorBase {
 
         // Add interface bridge to the internal rif_if
         // Nothing is done if already using rif_if
-        self.write_intf_bridge(&rif.interface, &comp_info, &rif.sw_clocking.clk, &rif.sw_clocking.rst.name);
+        let sw_clk_rst = if bridge.has_clk() {Some((rif.sw_clocking.clk.as_str(), rif.sw_clocking.rst.name.as_str()))} else {None};
+        self.write_intf_bridge(&rif.interface, &comp_info, sw_clk_rst);
 
         // Connect interface to internal logic
         self.write_comment_box("Interface handling");
@@ -1849,6 +1852,13 @@ pub trait GeneratorHw : GeneratorBase {
         let rifmux_name = self.casing(&rifmux.type_name);
         let name_len = rifmux.components.iter().map(|c| c.get_name().len()).max().unwrap_or(0);
         let pkg_name = format!("{}_pkg", rifmux.type_name);
+        let bridge = if let Interface::Custom(_,path) = &rifmux.interface {
+            ModuleInfo::from_file(path)?
+        } else {
+            ModuleInfo::new_bridge(&rifmux.interface)
+        };
+        let intf_ports = bridge.get_ports_sw();
+        let rifmux_has_clk_rst = bridge.has_clk() || self.rifmux_pipe_invalid();
         self.set_comp(rifmux.into(), true);
         self.set_rifmux_info(rifmux);
         self.write_file_header();
@@ -1863,7 +1873,7 @@ pub trait GeneratorHw : GeneratorBase {
         }
         self.write_module_port_header();
         // Add port/reset port if not default interface
-        if !rifmux.interface.is_default() || self.rifmux_pipe_invalid() {
+        if rifmux_has_clk_rst {
             self.write_port_decl(&PortInfo::new_in(
                 rifmux.sw_clocking.clk.to_owned(), "Bridge clock".to_owned()), None, false);
             self.write_port_decl(&PortInfo::new_in(
@@ -1888,7 +1898,7 @@ pub trait GeneratorHw : GeneratorBase {
         }
         self.set_addr_width(rifmux.addr_width);
         // Add top interface and close module declaration
-        self.write_intf_ports(&rifmux.interface);
+        self.write_intf_ports(&intf_ports);
         self.write_module_decl_footer(&rifmux_name);
         self.write("\n");
         // Signals declaration
@@ -1905,7 +1915,8 @@ pub trait GeneratorHw : GeneratorBase {
         }
         self.write_signal_decl_footer(false);
         // Add interface bridge when not default
-        self.write_intf_bridge(&rifmux.interface, &comp_info, &rifmux.sw_clocking.clk, &rifmux.sw_clocking.rst.name);
+        let sw_clk_rst = if bridge.has_clk() {Some((rifmux.sw_clocking.clk.as_str(), rifmux.sw_clocking.rst.name.as_str()))} else {None};
+        self.write_intf_bridge(&rifmux.interface, &comp_info, sw_clk_rst);
 
         // Address demultiplexing
         self.write_comment_box("Demux access");
@@ -2042,9 +2053,14 @@ pub trait GeneratorHw : GeneratorBase {
 
         let sw_clk = &rifmux.sw_clocking.clk;
         let sw_rst = &rifmux.sw_clocking.rst.name;
-        let intf_ports = RifIntfPorts::new(&rifmux.interface, Self::SUPPORT_INTF);
+        let bridge = if let Interface::Custom(_,path) = &rifmux.interface {
+            ModuleInfo::from_file(path)?
+        } else {
+            ModuleInfo::new_bridge(&rifmux.interface)
+        };
+        let intf_ports = bridge.get_ports_sw();
         let mut names : Vec<String> = Vec::new();
-        let rifmux_has_clk_rst = !rifmux.interface.is_default() || self.rifmux_pipe_invalid();
+        let rifmux_has_clk_rst = bridge.has_clk() || self.rifmux_pipe_invalid();
         self.set_comp(rifmux.into(), true);
         self.set_rifmux_info(rifmux);
         self.write_file_header();
@@ -2104,7 +2120,7 @@ pub trait GeneratorHw : GeneratorBase {
         // Control interface
         self.write_comment(1, "Control interface");
         self.set_addr_width(rifmux.addr_width);
-        self.write_intf_ports(&rifmux.interface);
+        self.write_intf_ports(&intf_ports);
         self.write_module_decl_footer(&riftop_name);
 
         // Interfaces declaration
@@ -2122,7 +2138,6 @@ pub trait GeneratorHw : GeneratorBase {
             self.write_port_bind(sw_clk, sw_clk, false);
             self.write_port_bind(sw_rst, sw_rst, false);
         }
-        let intf_ports = RifIntfPorts::new(&rifmux.interface, Self::SUPPORT_INTF);
         for port in intf_ports.iter() {
             self.write_port_bind(port.name(), port.name(), false);
         }
@@ -2176,15 +2191,15 @@ pub trait GeneratorHw : GeneratorBase {
         self.save(&format!("{}.{}", riftop_name, Self::EXT), true)
     }
 
-    fn write_intf_ports(&mut self, intf: &Interface) {
-        let intf_ports = RifIntfPorts::new(intf, Self::SUPPORT_INTF);
-        let mut ports = intf_ports.iter().peekable();
-        while let Some(port) = ports.next()  {
-            self.write_port_decl(port, None, ports.peek().is_none());
+    /// Write port related to the bridge interface at the end of a module declaration
+    fn write_intf_ports(&mut self, ports: &[PortInfo]) {
+        let mut ports_iter = ports.iter().peekable();
+        while let Some(port) = ports_iter.next()  {
+            self.write_port_decl(port, None, ports_iter.peek().is_none());
         }
     }
 
-    fn write_intf_bridge(&mut self, intf: &Interface, comp: &CompInfo, sw_clk: &str, sw_rst: &str) {
+    fn write_intf_bridge(&mut self, intf: &Interface, comp: &CompInfo, sw_clk_rst: Option<(&str,&str)>) {
         if intf.is_default() {
             return;
         }
@@ -2196,8 +2211,10 @@ pub trait GeneratorHw : GeneratorBase {
             ("ADDR_W".to_owned(), comp.addr_width as isize),
             ("DATA_W".to_owned(), comp.data_width  as isize)].to_vec();
         self.write_inst_header(&name, "bridge", &params);
-        self.write_port_bind("clk"  , sw_clk, false);
-        self.write_port_bind("rst_n", sw_rst, false);
+        if let Some((sw_clk, sw_rst)) = sw_clk_rst {
+            self.write_port_bind("clk"  , sw_clk, false);
+            self.write_port_bind("rst_n", sw_rst, false);
+        }
         if Self::SUPPORT_IMPL_BIND {
             self.write_port_bind("*", "", true);
         } else {

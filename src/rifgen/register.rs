@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
 use crate::{error::RifErrorKind, parser::parser_expr::ParamValues};
+use crate::hdl::LogicExpr;
 
-use super::{Access, ClkEn, Context, Description, Field, FieldSwKind, InterruptInfo, InterruptInfoField, LogicExpr, Visibility, Width};
+use super::{Access, ClkEn, Context, Description, Field, FieldSwKind, InterruptInfo, InterruptInfoField, Visibility, Width};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum RegPulseKind {
