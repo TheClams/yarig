@@ -44,6 +44,6 @@ begin
   prdata      <= reg_rd_data; 
 
   pslverr <= reg_done and (reg_err_addr or reg_err_access);
-  pready  <= '0' when (penable = '1' and reg_done = '0') else '1';
+  pready  <= '0' when (penable = '1' and psel = '1' and reg_done = '0') else '1';
 
 end architecture;

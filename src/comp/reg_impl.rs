@@ -636,6 +636,10 @@ impl HwRegInst {
         };
         HwRegInst {group, dim, port, intr_derived, missing_fields, limits}
     }
+
+    pub fn has_ext_limit(&self) -> bool {
+        self.limits.iter().any(|(_,is_ext)| *is_ext)
+    }
 }
 
 pub type HwRegs = OrderDict<String, HwRegInst>;

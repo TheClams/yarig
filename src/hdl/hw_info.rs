@@ -319,10 +319,11 @@ impl PortInfo {
         }
     }
 
-    pub fn new_rif_intf() -> Self {
+    pub fn new_rif_intf(is_rif: bool) -> Self {
+        let modport = if is_rif {"rif"} else {"ctrl"};
         PortInfo {
             def: SignalDef::new("if_rif".to_owned(), SignalKind::Custom((None,"rif_if".to_owned()))),
-            dir: PortDir::Modport("ctrl".to_owned()),
+            dir: PortDir::Modport(modport.to_owned()),
             desc: "SW register interface".to_owned(),
         }
     }
@@ -612,12 +613,7 @@ impl RifIntfPorts {
 
     pub fn default_ports( use_intf: bool) -> Vec<PortInfo> {
         if use_intf {
-            vec![
-                PortInfo::new_intf(
-                    "if_rif".to_owned(),
-                    "rif_if".to_owned(), "rif".to_owned(),
-                    "SW register interface".to_owned())
-            ]
+            vec![PortInfo::new_rif_intf(true)]
         } else {
             vec![
                 PortInfo::new_basic("reg_addr           ".to_owned(), SignalKind::Address, PortDir::In, "Register address".to_owned()),
@@ -705,7 +701,7 @@ impl ModuleInfo {
             ports.push(PortInfo::new_in("clk".to_owned(), "SW Clock".to_owned()));
             ports.push(PortInfo::new_in("rst_n".to_owned(), "SW reset asynchronous, active low".to_owned()));
         }
-        ports.push(PortInfo::new_rif_intf());
+        ports.push(PortInfo::new_rif_intf(true));
         if intf!=&Interface::Default {
             ports.extend(RifIntfPorts::new(intf, true).0);
         }

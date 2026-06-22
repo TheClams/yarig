@@ -118,6 +118,9 @@ pub struct RifGenArgs{
     /// Controls how field limits are used
     #[arg(long, action)]
     pub rtl_limit: Option<RtlLimit>,
+    /// List of path to search for RTL module (like bridges)
+    #[arg(long, action)]
+    pub rtl_path: Vec<String>,
     /// Force generation of limits on all enums
     #[arg(long, action)]
     pub rtl_force_limit: Option<RtlLimit>,

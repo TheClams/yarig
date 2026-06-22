@@ -640,6 +640,9 @@ impl YarigCfg {
         if args.rtl_const_field {self.rtl.const_field = Some(true);}
         if args.rtl_limit.is_some() {self.rtl.limit = args.rtl_limit;}
         if args.rtl_force_limit.is_some() {self.rtl.force_limit = args.rtl_force_limit;}
+        if !args.rtl_path.is_empty() && let Some(bridge_path) = &mut self.rtl.bridge_path {
+            bridge_path.extend(args.rtl_path);
+        }
         if args.rifmux_pipe_invalid.is_some() {self.rtl.rifmux_pipe_invalid = args.rifmux_pipe_invalid;}
         if args.keyword_rename {self.keywords.error = false;}
         if args.targets.contains(&RifGenTarget::Sv) {self.keywords.sv = true;}

@@ -383,7 +383,7 @@ pub trait GeneratorHw : GeneratorBase {
                 hw_reg.dim.clone(),
                 hw_reg_def.description.get_short(false)
             );
-            if hw_reg.port.is_in() {
+            if hw_reg.port.is_in() || hw_reg.has_ext_limit() {
                 self.write_port_decl(&port, None, false);
             }
             if hw_reg.port.is_out() {
@@ -1858,6 +1858,7 @@ pub trait GeneratorHw : GeneratorBase {
             ModuleInfo::new_bridge(&rifmux.interface)
         };
         let intf_ports = bridge.get_ports_sw();
+        // println!("rifmux RIF ports  = {:?}", intf_ports);
         let rifmux_has_clk_rst = bridge.has_clk() || self.rifmux_pipe_invalid();
         self.set_comp(rifmux.into(), true);
         self.set_rifmux_info(rifmux);
