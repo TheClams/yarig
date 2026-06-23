@@ -447,7 +447,7 @@ pub trait GeneratorHw : GeneratorBase {
         let bridge = if let Interface::Custom(_,path) = &rif.interface {
             ModuleInfo::from_file(path)?
         } else {
-            ModuleInfo::new_bridge(&rif.interface)
+            ModuleInfo::new_bridge(&rif.interface, false)
         };
         let intf_ports = if rif.interface.is_default() {RifIntfPorts::default_ports(Self::SUPPORT_INTF)}
             else {bridge.get_ports_sw()};
@@ -1856,10 +1856,9 @@ pub trait GeneratorHw : GeneratorBase {
         let name_len = rifmux.components.iter().map(|c| c.get_name().len()).max().unwrap_or(0);
         let pkg_name = format!("{}_pkg", rifmux.type_name);
         let sw_clk = rifmux.sw_clocking.last().cloned().unwrap_or_default();
-        let bridge = if let Interface::Custom(_,path) = &rifmux.interface {
-            ModuleInfo::from_file(path)?
-        } else {
-            ModuleInfo::new_bridge(&rifmux.interface)
+        let bridge = match &rifmux.interface {
+            Interface::Custom(_,path) => ModuleInfo::from_file(path)?,
+            intf => ModuleInfo::new_bridge(intf, true),
         };
         let intf_ports = bridge.get_ports_sw();
         // println!("rifmux RIF ports  = {:?}", intf_ports);
@@ -2062,7 +2061,7 @@ pub trait GeneratorHw : GeneratorBase {
         let bridge = if let Interface::Custom(_,path) = &rifmux.interface {
             ModuleInfo::from_file(path)?
         } else {
-            ModuleInfo::new_bridge(&rifmux.interface)
+            ModuleInfo::new_bridge(&rifmux.interface, true)
         };
         let intf_ports = bridge.get_ports_sw();
         let mut names : Vec<String> = Vec::new();

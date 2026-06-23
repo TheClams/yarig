@@ -245,8 +245,9 @@ mod tests_sv_parsing {
         for param in parsed_ref.params.iter() {
             assert!(info_ref.params.contains(param), "Parameter mismatch");
         }
+        // println!("Searching for {:#?}", info_ref.ports);
         for port in parsed_ref.ports.iter() {
-            // println!("Searching for {}", port.name());
+            // println!("Searching for {port:?}");
             assert!(info_ref.ports.contains(port), "Port mismatch");
         }
     }
@@ -256,7 +257,7 @@ mod tests_sv_parsing {
         let mut path_file : PathBuf = env!("CARGO_MANIFEST_DIR").into();
         path_file.extend(["assets", "bridge_apb_rif.sv"]);
         let info = ModuleInfo::from_file(path_file).expect("Parsing bridge_apb_rif.sv should suceed");
-        let bridge = ModuleInfo::new_bridge(&Interface::Apb);
+        let bridge = ModuleInfo::new_bridge(&Interface::Apb, false);
         check_module_info(&bridge, &info);
     }
 
@@ -265,7 +266,7 @@ mod tests_sv_parsing {
         let mut path_file : PathBuf = env!("CARGO_MANIFEST_DIR").into();
         path_file.extend(["assets", "bridge_uaux_rif.sv"]);
         let info = ModuleInfo::from_file(path_file).expect("Parsing bridge_uaux_rif.sv should suceed");
-        let bridge = ModuleInfo::new_bridge(&Interface::Uaux);
+        let bridge = ModuleInfo::new_bridge(&Interface::Uaux, false);
         check_module_info(&bridge, &info);
     }
 

@@ -695,13 +695,13 @@ pub struct ModuleInfo {
 impl ModuleInfo {
 
     /// Create Module info from one of the non-custom supported bridge
-    pub fn new_bridge(intf: &Interface) -> Self {
+    pub fn new_bridge(intf: &Interface, is_rifmux: bool) -> Self {
         let mut ports : Vec<PortInfo> = Vec::new();
         if intf==&Interface::Uaux {
             ports.push(PortInfo::new_in("clk".to_owned(), "SW Clock".to_owned()));
             ports.push(PortInfo::new_in("rst_n".to_owned(), "SW reset asynchronous, active low".to_owned()));
         }
-        ports.push(PortInfo::new_rif_intf(true));
+        ports.push(PortInfo::new_rif_intf(is_rifmux));
         if intf!=&Interface::Default {
             ports.extend(RifIntfPorts::new(intf, true).0);
         }
