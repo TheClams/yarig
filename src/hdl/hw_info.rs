@@ -420,7 +420,6 @@ pub struct PortList {
     pub pages  : Vec<PortInfo>,
 }
 
-#[allow(dead_code)]
 impl PortList {
     pub fn new(rif: &Rif, pages_inst: &[RifPageInst], regs_impls: &RegImplDict, hw_regs: &HwRegs, suffix: &Option<SuffixInfo>) -> Self {
         let mut clocks : Vec<PortInfo> = Vec::with_capacity(2) ;
@@ -430,17 +429,18 @@ impl PortList {
         let mut regs   : Vec<PortInfo> = Vec::with_capacity(hw_regs.len());
         let mut irqs   : Vec<PortInfo> = Vec::with_capacity(2) ;
         // Software clocking
-        clocks.push(PortInfo::new_in(rif.sw_clocking.clk.to_owned(), "Software clock".to_owned()));
+        let sw_clocking = rif.sw_clocking.last().cloned().unwrap_or_default();
+        clocks.push(PortInfo::new_in(sw_clocking.clk.to_owned(), "Software clock".to_owned()));
         resets.push(PortInfo::new_in(
-            rif.sw_clocking.rst.name.to_owned(),
-            format!("Software {}", rif.sw_clocking.rst.desc())
+            sw_clocking.rst.name.to_owned(),
+            format!("Software {}", sw_clocking.rst.desc())
         ));
-        if !rif.sw_clocking.en.is_empty() {
-            clk_ens.push(PortInfo::new_in(rif.sw_clocking.en.to_owned(), "Software clock enable".to_owned()))
+        if !sw_clocking.en.is_empty() {
+            clk_ens.push(PortInfo::new_in(sw_clocking.en.to_owned(), "Software clock enable".to_owned()))
         }
-        if !rif.sw_clocking.clear.is_empty() {
+        if !sw_clocking.clear.is_empty() {
             ctrls.push(PortInfo::new_in(
-                rif.sw_clocking.clear.to_owned(),
+                sw_clocking.clear.to_owned(),
                 "Software clear".to_owned()
             ));
         }
@@ -452,7 +452,7 @@ impl PortList {
             if !resets.iter().any(|p| p.name()==hw_clk.rst.name) {
                 resets.push(PortInfo::new_in(
                     hw_clk.rst.name.to_owned(),
-                    format!("Hardware {}", rif.sw_clocking.rst.desc())));
+                    format!("Hardware {}", sw_clocking.rst.desc())));
             }
             if !hw_clk.en.is_empty() && !clk_ens.iter().any(|p| p.name()==hw_clk.en) {
                 clk_ens.push(PortInfo::new_in(hw_clk.en.to_owned(), "Hardware clock enable".to_owned()));

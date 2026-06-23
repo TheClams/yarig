@@ -27,7 +27,7 @@ pub struct RifmuxInst {
     /// Data bus width
     pub data_width: u8,
     /// Software interface clock definition
-    pub sw_clocking: ClockingInfo,
+    pub sw_clocking: Vec<ClockingInfo>,
     /// Top description
     pub description: Description,
     /// Hardware Interface
@@ -333,7 +333,7 @@ pub struct RifInst {
     /// Suffix information
     pub suffix: Option<SuffixInfo>,
     /// Software interface clock definition
-    pub sw_clocking: ClockingInfo,
+    pub sw_clocking: Vec<ClockingInfo>,
     /// Hardware interface clock definition
     pub hw_clocking: Vec<ClockingInfo>,
     /// Generic definition
@@ -1867,9 +1867,9 @@ impl RifmuxInst {
 
     /// Return type name without rif prefix/suffix
     pub fn type_name_short(&self) -> &str {
-        &self.type_name.strip_prefix("rif_")
-            .unwrap_or_else(|| &self.type_name.strip_suffix("_rif")
-            .unwrap_or_else(|| self.type_name.as_str()))
+        self.type_name.strip_prefix("rif_")
+            .unwrap_or_else(|| self.type_name.strip_suffix("_rif")
+            .unwrap_or(self.type_name.as_str()))
     }
 }
 

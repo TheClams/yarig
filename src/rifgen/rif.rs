@@ -41,9 +41,26 @@ pub struct ClockingInfo {
 }
 
 impl Default for ClockingInfo {
-    fn default() -> Self {ClockingInfo{clk:"clk".to_owned(), rst: Default::default(), en: "".to_owned(), clear: "".to_owned()}}
+    fn default() -> Self {
+        ClockingInfo{
+            clk:"clk".to_owned(),
+            rst: Default::default(),
+            en: "".to_owned(),
+            clear: "".to_owned()
+        }
+    }
 }
 
+impl ClockingInfo {
+    pub fn new_apb() -> Self{
+        ClockingInfo{
+            clk:"pclk".to_owned(),
+            rst: ResetDef::new("presetn".to_owned()),
+            en: "".to_owned(),
+            clear: "".to_owned()
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Default)]
 /// Supported processor interface kind to control register acces
@@ -169,7 +186,7 @@ pub struct Rif {
     /// Suffix also apply on package
     pub suffix_pkg: bool,
     /// Software interface clock definition
-    pub sw_clocking: ClockingInfo,
+    pub sw_clocking: Vec<ClockingInfo>,
     /// Hardware interface clock definition
     pub hw_clocking: Vec<ClockingInfo>,
     /// Register pages
@@ -192,7 +209,7 @@ impl Rif {
             description: "".into(),
             suffix_pkg: false,
             interface: Interface::Default,
-            sw_clocking: ClockingInfo::default(),
+            sw_clocking: Vec::new(),
             hw_clocking: Vec::new(),
             pages: Vec::new(),
             enum_defs: Vec::new(),
@@ -227,6 +244,38 @@ impl Rif {
         }
         def.values.push(entry);
         Ok(())
+    }
+
+    pub fn set_sw_clk(&mut self, names:Vec<&str>) {
+        if self.sw_clocking.is_empty() {
+            self.sw_clocking = names.into_iter().map(|n| ClockingInfo{ clk: n.to_owned(), ..Default::default() }).collect();
+        } else {
+            self.sw_clocking.iter_mut().zip(names).for_each(|(sw, n)| sw.clk = n.to_owned());
+        }
+    }
+
+    pub fn set_sw_clken(&mut self, names:Vec<&str>) {
+        if self.sw_clocking.is_empty() {
+            self.sw_clocking = names.into_iter().map(|n| ClockingInfo{ en: n.to_owned(), ..Default::default() }).collect();
+        } else {
+            self.sw_clocking.iter_mut().zip(names).for_each(|(sw, en)| sw.en = en.to_owned());
+        }
+    }
+
+    pub fn set_sw_clear(&mut self, names:Vec<&str>) {
+        if self.sw_clocking.is_empty() {
+            self.sw_clocking = names.into_iter().map(|clear| ClockingInfo{ clear: clear.to_owned(), ..Default::default() }).collect();
+        } else {
+            self.sw_clocking.iter_mut().zip(names).for_each(|(sw, clear)| sw.clear = clear.to_owned());
+        }
+    }
+
+    pub fn set_sw_rst(&mut self, rst: ResetDef) {
+        if self.sw_clocking.is_empty() {
+            self.sw_clocking = vec![ClockingInfo{rst, ..Default::default() }];
+        } else {
+            self.sw_clocking.iter_mut().for_each(|sw| sw.rst = rst.clone());
+        }
     }
 
     pub fn set_hw_clk(&mut self, names:Vec<&str>) {

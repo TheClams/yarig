@@ -15,7 +15,7 @@ use crate::parser::{
 use crate::rifgen::{
     Access, AddressOffset, ClockingInfo, Context, DataWidth, EnumDef, EnumKind, ExternalKind, 
     Field, FieldHwKind, FieldPos, FieldSwKind, GenericValues, InstMode, Interface, InterruptInfo, ItemOptional, 
-    Lock, OverrideIndex, RegDef, RegDefOrIncl, RegInst, RegPulseKind, ResetDef, 
+    Lock, OverrideIndex, RegDef, RegDefOrIncl, RegInst, RegPulseKind,
     Rif, RifPage, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility, Width
 };
 use crate::hdl::LogicExpr;
@@ -199,7 +199,6 @@ impl RifGenSrc {
         let mut desc_lvl = 0;
         let mut last_enum : Option<String> = None;
         let mut ovr_idx = OverrideIndex::default();
-        let mut sw_clk_defined = (false,false);
         let empty_params   = ParamValues::new();
         let empty_generics = GenericValues::new();
         while let Some(Ok(l)) = lines.next() {
@@ -282,9 +281,12 @@ impl RifGenSrc {
                         Context::Info => context_stack.push((Context::Info, ilvl + 1)),
                         Context::Interface => {
                             let intf = val_intf(&mut l)?;
-                            if intf == Interface::Apb {
-                                if !sw_clk_defined.0 {self.last_rif_mut().sw_clocking.clk = "pclk".to_owned();}
-                                if !sw_clk_defined.1 {self.last_rif_mut().sw_clocking.rst = ResetDef::new("presetn".to_owned());}
+                            let no_sw_clk = self.last_rif().sw_clocking.is_empty();
+                            if no_sw_clk {
+                                let sw_clocking = if intf == Interface::Apb {
+                                    ClockingInfo::new_apb()
+                                } else {ClockingInfo::default()};
+                                self.last_rif_mut().sw_clocking.push(sw_clocking);
                             }
                             self.last_rif_mut().interface = intf;
                         }
@@ -294,20 +296,10 @@ impl RifGenSrc {
                             self.last_rif_mut().data_width = w;
                             self.last_data_width = w;
                         }
-                        Context::SwClock => {
-                            sw_clk_defined.0 = true;
-                            self.last_rif_mut().sw_clocking.clk = identifier_last(l)?.to_owned()
-                        }
-                        Context::SwClkEn => {
-                            self.last_rif_mut().sw_clocking.en = identifier_last(l)?.to_owned()
-                        }
-                        Context::SwReset => {
-                            sw_clk_defined.1 = true;
-                            self.last_rif_mut().sw_clocking.rst = reset_def(l)?;
-                        }
-                        Context::SwClear => {
-                            self.last_rif_mut().sw_clocking.clear = identifier_last(l)?.to_owned()
-                        }
+                        Context::SwClock => self.last_rif_mut().set_sw_clk(vec_id(l)?),
+                        Context::SwReset => self.last_rif_mut().set_sw_rst(reset_def(l)?),
+                        Context::SwClkEn => self.last_rif_mut().set_sw_clken(vec_id(l)?),
+                        Context::SwClear => self.last_rif_mut().set_sw_clear(vec_id(l)?),
                         Context::HwClock => self.last_rif_mut().set_hw_clk(vec_id(l)?),
                         Context::HwClkEn => self.last_rif_mut().set_hw_clken(vec_id(l)?),
                         Context::HwReset => self.last_rif_mut().set_hw_rst(reset_def(l)?),
@@ -494,15 +486,18 @@ impl RifGenSrc {
                         Context::External => self.last_reg_mut().external = ExternalKind::ReadWrite,
                         Context::ExternalDone => self.last_reg_mut().external = ExternalKind::Done,
                         Context::RegPulseWr => {
-                            let n = reg_pulse_info(&mut l, &self.last_rif().sw_clocking.clk, true)?;
+                            let clk = self.last_rif().sw_clocking.last().map(|sw| sw.clk.as_str()).unwrap_or("clk");
+                            let n = reg_pulse_info(&mut l, clk, true)?;
                             self.last_reg_mut().pulse.push(RegPulseKind::Write(n));
                         },
                         Context::RegPulseRd => {
-                            let n = reg_pulse_info(&mut l, &self.last_rif().sw_clocking.clk, false)?;
+                            let clk = self.last_rif().sw_clocking.last().map(|sw| sw.clk.as_str()).unwrap_or("clk");
+                            let n = reg_pulse_info(&mut l, clk, false)?;
                             self.last_reg_mut().pulse.push(RegPulseKind::Read(n));
                         },
                         Context::RegPulseAcc => {
-                            let n = reg_pulse_info(&mut l, &self.last_rif().sw_clocking.clk, false)?;
+                            let clk = self.last_rif().sw_clocking.last().map(|sw| sw.clk.as_str()).unwrap_or("clk");
+                            let n = reg_pulse_info(&mut l, clk, false)?;
                             self.last_reg_mut().pulse.push(RegPulseKind::Access(n));
                         },
                         Context::Interrupt => {
@@ -749,9 +744,12 @@ impl RifGenSrc {
                         Context::Interface => {
                             let intf = val_intf(&mut l)?;
                             // Default clock/reset for APB
-                            if intf == Interface::Apb {
-                                if !sw_clk_defined.0 {self.last_rifmux().sw_clocking.clk = "pclk".to_owned();}
-                                if !sw_clk_defined.1 {self.last_rifmux().sw_clocking.rst = ResetDef::new("presetn".to_owned());}
+                            let no_sw_clk = self.last_rifmux().sw_clocking.is_empty();
+                            if no_sw_clk {
+                                let sw_clocking = if intf == Interface::Apb {
+                                    ClockingInfo::new_apb()
+                                } else {ClockingInfo::default()};
+                                self.last_rifmux().sw_clocking.push(sw_clocking);
                             }
                             self.last_rifmux().interface = intf;
                         }
@@ -763,17 +761,9 @@ impl RifGenSrc {
                         }
                         Context::Parameters => context_stack.push((Context::Parameters, ilvl + 1)),
                         Context::Generics => context_stack.push((Context::Generics, ilvl + 1)),
-                        Context::SwClock => {
-                            sw_clk_defined.0 = true;
-                            self.last_rifmux().sw_clocking.clk = identifier_last(l)?.to_owned()
-                        }
-                        Context::SwClkEn => {
-                            self.last_rifmux().sw_clocking.en = identifier_last(l)?.to_owned()
-                        }
-                        Context::SwReset => {
-                            sw_clk_defined.1 = true;
-                            self.last_rifmux().sw_clocking.rst = reset_def(l)?;
-                        }
+                        Context::SwClock => self.last_rifmux().set_sw_clk(vec_id(l)?),
+                        Context::SwClkEn => self.last_rifmux().set_sw_clken(vec_id(l)?),
+                        Context::SwReset => self.last_rifmux().set_sw_rst(reset_def(l)?),
                         Context::RifmuxMap => context_stack.push((Context::RifmuxMap, ilvl + 1)),
                         Context::RifmuxTop => {
                             self.last_rifmux().top = Some(RifmuxTop::new(identifier_last(l)?));
@@ -933,10 +923,13 @@ impl RifGenSrc {
             }
             // Potentially finish parsing end of line based on new context
         }
-        // Ensure a default Hardware clock is defined
+        // Ensure a default clocks are defined
         for rif in self.rifs.values_mut() {
             if rif.hw_clocking.is_empty() {
                 rif.hw_clocking.push(ClockingInfo::default());
+            }
+            if rif.sw_clocking.is_empty() {
+                rif.sw_clocking.push(ClockingInfo::default());
             }
         }
         Ok(refs)

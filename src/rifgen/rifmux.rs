@@ -3,6 +3,7 @@ use std::{collections::{BTreeMap, HashMap}, str::FromStr};
 use serde_derive::Deserialize;
 
 use crate::parser::{parser_expr::{ExprTokens, ParamValues}, suffix_info};
+use crate::rifgen::ResetDef;
 
 use super::{Address, ClockingInfo, DataWidth, Description, GenericRange, GenericValues, Interface, order_dict::OrderDict};
 
@@ -15,7 +16,7 @@ pub struct Rifmux {
     /// Data bus width
     pub data_width: DataWidth,
     /// Software clocking defintion (clock, reset, enable)
-    pub sw_clocking: ClockingInfo,
+    pub sw_clocking: Vec<ClockingInfo>,
     /// Hardware Interface
     pub interface: Interface,
     /// Items inside Rifmux (Rif or other rifmux)
@@ -42,7 +43,7 @@ impl Rifmux {
             addr_width: 16,
             data_width: DataWidth::default(),
             interface: Interface::Default,
-            sw_clocking: ClockingInfo::default(),
+            sw_clocking: Vec::new(),
             items: vec![],
             groups: vec![],
             description: "".into(),
@@ -68,6 +69,30 @@ impl Rifmux {
     pub fn add_top_suffix(&mut self, key: &str, val: &str) {
         if let Some(ref mut top) = self.top {
             top.prefixes.insert(key.to_owned(),val.to_owned());
+        }
+    }
+
+    pub fn set_sw_clk(&mut self, names:Vec<&str>) {
+        if self.sw_clocking.is_empty() {
+            self.sw_clocking = names.into_iter().map(|n| ClockingInfo{ clk: n.to_owned(), ..Default::default() }).collect();
+        } else {
+            self.sw_clocking.iter_mut().zip(names).for_each(|(sw, n)| sw.clk = n.to_owned());
+        }
+    }
+
+    pub fn set_sw_clken(&mut self, names:Vec<&str>) {
+        if self.sw_clocking.is_empty() {
+            self.sw_clocking = names.into_iter().map(|n| ClockingInfo{ en: n.to_owned(), ..Default::default() }).collect();
+        } else {
+            self.sw_clocking.iter_mut().zip(names).for_each(|(sw, en)| sw.en = en.to_owned());
+        }
+    }
+
+    pub fn set_sw_rst(&mut self, rst: ResetDef) {
+        if self.sw_clocking.is_empty() {
+            self.sw_clocking = vec![ClockingInfo{rst, ..Default::default() }];
+        } else {
+            self.sw_clocking.iter_mut().for_each(|sw| sw.rst = rst.clone());
         }
     }
 

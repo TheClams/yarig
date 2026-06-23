@@ -1,15 +1,16 @@
 # Change Log
 
 
-## [0.24.0] - UNRELEASED
+## [0.24.0] - 2026-06-23
 
 ### Added
   - Support for custom bridge to rif_if
+  - Support for multiple software clock definition (might be needed by some bridges)
   - Parser: "limit" now support "external" to indicate that the the limit check logic is external to the RIF
 
 ### Fix
   - Parser: now check enum value verus field width (only for non generic/parameter width)
-  - APB Bridge: remove clk/rst_n from connection (does not exists i nthe new bridge version)
+  - APB Bridge: remove clk/rst_n from connection (does not exists in the new bridge version)
 
 ## [0.23.3] - 2026-06-16
 

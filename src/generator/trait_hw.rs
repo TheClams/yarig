@@ -332,7 +332,8 @@ pub trait GeneratorHw : GeneratorBase {
     fn gen_rif(&mut self, rif: &RifInst) -> Result<(), RifGenError> {
         let rif_name = self.casing(&rif.name(false));
         let rif_pkg_name = self.casing(&rif.name(true));
-        let hw_clk = rif.hw_clocking.first().unwrap_or(&rif.sw_clocking);
+        let sw_clk = rif.sw_clocking.last().cloned().unwrap_or_default();
+        let hw_clk = rif.hw_clocking.first().unwrap_or(&sw_clk);
         let addr_shift = (rif.data_width as f32).log2().ceil() as u16 - 3; // Min data width is 8 bits
         let limit_cfg = self.limit_cfg();
         self.set_rif_info(rif);
@@ -349,9 +350,11 @@ pub trait GeneratorHw : GeneratorBase {
 
         // Clocks/Reset/Clear
         let mut list_clocking = HashSet::with_capacity(2);
-        self.add_clocking_port(&rif.sw_clocking, &mut list_clocking, false);
-        for hw_clk in rif.hw_clocking.iter() {
-            self.add_clocking_port(hw_clk, &mut list_clocking, true);
+        for clk in rif.sw_clocking.iter() {
+            self.add_clocking_port(clk, &mut list_clocking, false);
+        }
+        for clk in rif.hw_clocking.iter() {
+            self.add_clocking_port(clk, &mut list_clocking, true);
         }
         // Clock enables
         for clk_en in rif.ports.clk_ens.iter() {
@@ -633,14 +636,14 @@ pub trait GeneratorHw : GeneratorBase {
 
         // Create local rif interface if not default
         if !rif.interface.is_default() {
-            self.write_rif_decl(&comp_info, true, &rif.sw_clocking.clk, &rif.sw_clocking.rst.name);
+            self.write_rif_decl(&comp_info, true, &sw_clk.clk, &sw_clk.rst.name);
         }
 
         self.write_signal_decl_footer(true);
 
         // Add interface bridge to the internal rif_if
         // Nothing is done if already using rif_if
-        let sw_clk_rst = if bridge.has_clk() {Some((rif.sw_clocking.clk.as_str(), rif.sw_clocking.rst.name.as_str()))} else {None};
+        let sw_clk_rst = if bridge.has_clk() {Some((sw_clk.clk.as_str(), sw_clk.rst.name.as_str()))} else {None};
         self.write_intf_bridge(&rif.interface, &comp_info, sw_clk_rst);
 
         // Connect interface to internal logic
@@ -664,8 +667,8 @@ pub trait GeneratorHw : GeneratorBase {
             }
         } else {
             self.write_process_seq(
-                &rif.sw_clocking.clk,
-                &rif.sw_clocking.rst,
+                &sw_clk.clk,
+                &sw_clk.rst,
                 "proc_if_rif",
                 &signals,
             );
@@ -1390,7 +1393,7 @@ pub trait GeneratorHw : GeneratorBase {
                     // Get a default clock for the register
                     let reg_clk =
                         if let Some(n) = &reg_impl.clk {n}
-                        else if reg.sw_access.is_writable() && !reg.is_intr() {&rif.sw_clocking.clk}
+                        else if reg.sw_access.is_writable() && !reg.is_intr() {&sw_clk.clk}
                         else {&hw_clk.clk};
                     // Collect each field signal info in a hashmap indexed by a couple (clk/rst)
                     let mut signals: OrderDict<(String,String), Vec<SignalInfo> > = OrderDict::new();
@@ -1429,14 +1432,14 @@ pub trait GeneratorHw : GeneratorBase {
                             if let Some(n) = &field_impl.clk {n}
                             else if let Some(n) = &reg_impl.clk {n}
                             else if field_impl.is_hw_write() && !reg.is_intr_derived() {&hw_clk.clk}
-                            else {&rif.sw_clocking.clk};
+                            else {&sw_clk.clk};
                         // if reg.reg_name=="" {println!("Field {reg_name_i}.{field_name} : Kind={:?} hw_write={} -> {f_clk} | field:{:?} | reg:{:?}", field.hw_kind, field.is_hw_write(), field_impl.clk, reg_impl.clk);}
                         // Get reset associated with the field
                         let f_rst =
                             // TODO: Add optional reset name per field
                             if let Some(n) = &reg_impl.rst {n}
                             else if f_clk==&hw_clk.clk {&hw_clk.rst.name}
-                            else {&rif.sw_clocking.rst.name};
+                            else {&sw_clk.rst.name};
                         // Next value
                         let next : ExprId = format!("{reg_field_name}__next").into();
                         let value : LogicExpr = if field.is_password() {
@@ -1466,7 +1469,7 @@ pub trait GeneratorHw : GeneratorBase {
                         } else if field.is_hw_write() {
                             hw_clk.en.clone()
                         } else {
-                            rif.sw_clocking.en.clone()
+                            sw_clk.en.clone()
                         };
                         let mut enable_expr : Option<LogicExpr> = if enable.is_empty() {None} else {Some(enable.clone().into())};
                         // Prevent counter update on saturation when increment/decrement is 1
@@ -1559,12 +1562,12 @@ pub trait GeneratorHw : GeneratorBase {
                         if clk!=reg_clk && signals.len() > 1 {
                             proc_name.push_str(&format!("_{clk}"));
                         }
-                        let mut rst = if clk==&rif.sw_clocking.clk || rif.hw_clocking.is_empty() {&rif.sw_clocking.rst} else {&rif.hw_clocking.first().unwrap().rst};
+                        let mut rst = if clk==&sw_clk.clk || rif.hw_clocking.is_empty() {&sw_clk.rst} else {&rif.hw_clocking.first().unwrap().rst};
                         // Find the full reset definition in the sw_clock or hw_clocking
                         if rst_name!=&rst.name {
                             proc_name.push_str(&format!("_{rst_name}"));
-                            if rst_name == &rif.sw_clocking.rst.name {
-                                rst = &rif.sw_clocking.rst;
+                            if rst_name == &sw_clk.rst.name {
+                                rst = &sw_clk.rst;
                             } else {
                                 rst = &rif.hw_clocking.iter()
                                     .find(|&x| &x.rst.name==rst_name)
@@ -1619,7 +1622,7 @@ pub trait GeneratorHw : GeneratorBase {
                     }
                     if !signals.is_empty() {
                         let proc_name = format!("proc_{group_name}{reg_idxf}_special");
-                        self.write_process_seq(&reg_clk, &rif.sw_clocking.rst, &proc_name, &signals);
+                        self.write_process_seq(&reg_clk, &sw_clk.rst, &proc_name, &signals);
                     }
                 }
 
@@ -1852,6 +1855,7 @@ pub trait GeneratorHw : GeneratorBase {
         let rifmux_name = self.casing(&rifmux.type_name);
         let name_len = rifmux.components.iter().map(|c| c.get_name().len()).max().unwrap_or(0);
         let pkg_name = format!("{}_pkg", rifmux.type_name);
+        let sw_clk = rifmux.sw_clocking.last().cloned().unwrap_or_default();
         let bridge = if let Interface::Custom(_,path) = &rifmux.interface {
             ModuleInfo::from_file(path)?
         } else {
@@ -1875,11 +1879,10 @@ pub trait GeneratorHw : GeneratorBase {
         self.write_module_port_header();
         // Add port/reset port if not default interface
         if rifmux_has_clk_rst {
-            self.write_port_decl(&PortInfo::new_in(
-                rifmux.sw_clocking.clk.to_owned(), "Bridge clock".to_owned()), None, false);
-            self.write_port_decl(&PortInfo::new_in(
-                rifmux.sw_clocking.rst.name.to_owned(),
-                format!("Bridge reset : {}", rifmux.sw_clocking.rst.desc())), None, false);
+            for clocking in rifmux.sw_clocking.iter() {
+                self.write_port_decl(&PortInfo::new_in(clocking.clk.to_owned(), "Bridge clock".to_owned()), None, false);
+                self.write_port_decl(&PortInfo::new_in(clocking.rst.name.to_owned(), format!("Bridge reset : {}", clocking.rst.desc())), None, false);
+            }
         }
         // Add rif enable structure if needed
         if rifmux.components.iter().any(|c| c.has_enable()) {
@@ -1912,11 +1915,13 @@ pub trait GeneratorHw : GeneratorBase {
 
         let comp_info : CompInfo = rifmux.into();
         if !rifmux.interface.is_default() {
-            self.write_rif_decl(&comp_info, true, &rifmux.sw_clocking.clk, &rifmux.sw_clocking.rst.name);
+            let clk = if rifmux_has_clk_rst {&sw_clk.clk} else {"0"};
+            let rst = if rifmux_has_clk_rst {&sw_clk.rst.name} else {"1"};
+            self.write_rif_decl(&comp_info, true, clk, rst);
         }
         self.write_signal_decl_footer(false);
         // Add interface bridge when not default
-        let sw_clk_rst = if bridge.has_clk() {Some((rifmux.sw_clocking.clk.as_str(), rifmux.sw_clocking.rst.name.as_str()))} else {None};
+        let sw_clk_rst = if bridge.has_clk() {Some((sw_clk.clk.as_str(), sw_clk.rst.name.as_str()))} else {None};
         self.write_intf_bridge(&rifmux.interface, &comp_info, sw_clk_rst);
 
         // Address demultiplexing
@@ -1988,7 +1993,7 @@ pub trait GeneratorHw : GeneratorBase {
         // Optionnal pipe on addr_invalid
         if self.rifmux_pipe_invalid() {
             let signals: Vec<SignalInfo> = vec![SignalInfo::new("addr_invalid".into(), LogicExpr::ValueU(0, 1), "addr_invalid_next".into())];
-            self.write_process_seq(&rifmux.sw_clocking.clk, &rifmux.sw_clocking.rst, "proc_addr_invalid", &signals);
+            self.write_process_seq(&sw_clk.clk, &sw_clk.rst, "proc_addr_invalid", &signals);
         } else {
             self.write_assign(
                 "addr_invalid".into(),
@@ -2051,9 +2056,9 @@ pub trait GeneratorHw : GeneratorBase {
     fn gen_riftop(&mut self, rifmux: &RifmuxInst) -> Result<(), RifGenError> {
         let Some(riftop) = &rifmux.top else { return Ok(())};
         let riftop_name = self.casing(&riftop.name);
-
-        let sw_clk = &rifmux.sw_clocking.clk;
-        let sw_rst = &rifmux.sw_clocking.rst.name;
+        let sw_clocking = rifmux.sw_clocking.last().cloned().unwrap_or_default();
+        let sw_clk = &sw_clocking.clk;
+        let sw_rst = &sw_clocking.rst.name;
         let bridge = if let Interface::Custom(_,path) = &rifmux.interface {
             ModuleInfo::from_file(path)?
         } else {
@@ -2070,15 +2075,16 @@ pub trait GeneratorHw : GeneratorBase {
         self.write_module_port_header();
         self.write_comment(1, "RTL clock/reset");
         // Add Clock/reset
-        if rifmux_has_clk_rst {
-            self.write_port_decl(&PortInfo::new_in(sw_clk.to_owned(), "Software clock".to_owned()), None, false);
-            self.write_port_decl(&PortInfo::new_in(sw_rst.to_owned(), format!("Software reset : {}", rifmux.sw_clocking.rst.desc())), None, false);
-            names.push(sw_clk.to_owned());
-            names.push(sw_rst.to_owned());
+        for clocking in rifmux.sw_clocking.iter() {
+            self.write_port_decl(&PortInfo::new_in(clocking.clk.to_owned(), "Software clock".to_owned()), None, false);
+            self.write_port_decl(&PortInfo::new_in(clocking.rst.name.to_owned(), format!("Software reset : {}", clocking.rst.desc())), None, false);
+            names.push(clocking.clk.to_owned());
+            names.push(clocking.rst.name.to_owned());
         }
         let mut nb_ctrl = 0;
         for rif in rifmux.components.iter().filter_map(|c| c.get_rif()) {
             nb_ctrl += rif.ports.clk_ens.len() + rif.ports.ctrls.len();
+            // Skip the first clock/reset port since it is the Software clock which will be connected to the top SW clock
             let ports = rif.ports.clocks.iter().skip(1)
                 .chain(rif.ports.resets.iter().skip(1));
             self.set_addr_width(rif.addr_width);

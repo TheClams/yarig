@@ -273,7 +273,7 @@ impl GeneratorHw for GeneratorSv {
     }
 
     fn set_rif_info(&mut self, rif: &RifInst) {
-        self.sw_clk = rif.sw_clocking.clk.clone();
+        self.sw_clk = rif.sw_clocking.last().cloned().unwrap_or_default().clk;
         self.import_uvm =
             (self.limit.1==RtlLimit::UvmError && !rif.enum_defs.is_empty()) ||
             (self.limit.0==RtlLimit::UvmError && rif.iter_reg().flat_map(|r| r.fields.iter()).any(|f| f.has_limit()));

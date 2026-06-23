@@ -66,7 +66,7 @@ The possible properties, indented by one level compare to the RIF declaration, a
     First line of description
     Second line of description
 ```
- - `swClock : <clock_name>` : Name the software clock signal _clock_name_ (clk by default)
+ - `swClock : <clock_name0> <clock_name1>` : Name the software clocks signal _clock_name_ (clk by default). Last clock is used at Software clock while previous one can be used inside an optional bridge.
  - `hwClock : <clock_name0> <clock_name1> ...` : Declare hardware clocks. The first one will be the default one.
  - `swReset|hwReset : <rst_name> [activeLow|activeHigh] [async|sync]`: Specify reset signal for software/hardware.
  - `swClkEn|hwClkEn : <clk_en_name> `: Specify default clock enable signal for software/hardware clocks. This can be overriden on a register basis
