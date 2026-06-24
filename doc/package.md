@@ -160,3 +160,37 @@ signal: [
 
 The APB interface is also supported, just use `interface : apb` in the RIF properties (same place as the address width and register width).
 
+#### Custom bridge
+
+Any other processor bus can be supported by providing a bridge module that translates it to the internal `rif_if` interface.
+Built-in bridges (`apb`, `uaux`) ship with RifGen; for a custom bus use this syntax in the RIF (or Rifmux) properties: `interface : <ifname>(<filename>)`
+
+For example, `interface : my_apb(bridge_my_apb_rif.sv)` selects a custom bridge named `my_apb` whose RTL description is in `bridge_my_apb_rif.sv`.
+
+This syntax is only available in the `.rif` file itself (not via the `interface` override in the TOML configuration, which accepts only `default`, `apb` and `uaux`).
+
+The `<filename>` is first resolved relative to the `.rif` file. If it is not found, RifGen searches each directory listed in `bridge_path` from the [configuration file](config.md) (paths are relative to that file). Additional search paths can also be passed on the command line with `--rtl-path`.
+
+##### Bridge implementation requirements
+
+The bridge source file **must be SystemVerilog**. RifGen parses the module header (parameters and ports) to determine the external interface of the generated RIF/Rifmux module.
+The parser is quite basic, so please report any syntax that are not understood properly.
+
+The module **must** be named `bridge_<ifname>_rif`, where `<ifname>` is the name given in the RIF property (e.g. `bridge_my_apb_rif` for `interface : my_apb(bridge_my_apb_rif.sv)`).
+
+The module **must** declare at least these two parameters, which RifGen sets from the RIF `addrWidth` and `dataWidth` properties:
+
+ - `ADDR_W` : address bus width (connected to `addrWidth`)
+ - `DATA_W` : data bus width (connected to `dataWidth`)
+
+A warning is emitted if either parameter is missing from the bridge declaration.
+
+The module **must** expose a `rif_if` interface port named `if_rif` using modport `ctrl` to connect to the internal register logic:
+
+All other ports of the bridge (the processor-side signals) become ports of the generated top module.
+Ports whose name contains `clk`/`clock` or `rst`/`reset`, as well as `if_rif` are not re-exposed on the generated module.
+
+Optional `clk` and `rst_n` ports (or any port whose name contains `clock` or `reset`) are automatically connected to the software clock and reset declared in the RIF (`swClock`, `swReset`).
+For a Rifmux whose bridge needs a separate clock domain, declare multiple software clocks: `swClock : <bridge_clk> <rif_clk>`; the last name is the RIF software clock, earlier names are available to the bridge, and connected through implicit binding.
+
+Any additional bridge parameters are passed through with implicit `.*` binding in the generated SystemVerilog (they must match a signal or generic visible in the enclosing scope).

@@ -31,7 +31,7 @@ impl VectorDim {
 pub fn sv_skip_empty<'a>(input: &mut &'a str) -> Res<'a, () >{
     let mut p = Some("");
     while p.is_some() {
-        p = opt(alt((sv_comment, multispace1))).parse_next(input)?;
+        p = opt(alt((sv_comment, sv_macro, multispace1,))).parse_next(input)?;
     }
     Ok(())
 }
@@ -224,6 +224,14 @@ pub fn sv_comment_block<'a>(input: &mut &'a str)  -> Res<'a, &'a str> {
 pub fn sv_comment_line<'a>(input: &mut &'a str)  -> Res<'a, &'a str> {
     preceded(
         ws("//"),
+        take_until(0..,"\n")
+    ).parse_next(input)
+}
+
+/// Capture everything that come after backtik until end of line
+pub fn sv_macro<'a>(input: &mut &'a str)  -> Res<'a, &'a str> {
+    preceded(
+        ws("`"),
         take_until(0..,"\n")
     ).parse_next(input)
 }

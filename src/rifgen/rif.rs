@@ -247,27 +247,33 @@ impl Rif {
     }
 
     pub fn set_sw_clk(&mut self, names:Vec<&str>) {
-        if self.sw_clocking.is_empty() {
-            self.sw_clocking = names.into_iter().map(|n| ClockingInfo{ clk: n.to_owned(), ..Default::default() }).collect();
-        } else {
-            self.sw_clocking.iter_mut().zip(names).for_each(|(sw, n)| sw.clk = n.to_owned());
-        }
+        names.into_iter().enumerate().for_each(|(i, n)| {
+            if let Some(sw) = self.sw_clocking.get_mut(i) {
+                sw.clk = n.to_owned();
+            } else {
+                self.sw_clocking.push(ClockingInfo { clk: n.to_owned(), ..Default::default() });
+            }
+        });
     }
 
     pub fn set_sw_clken(&mut self, names:Vec<&str>) {
-        if self.sw_clocking.is_empty() {
-            self.sw_clocking = names.into_iter().map(|n| ClockingInfo{ en: n.to_owned(), ..Default::default() }).collect();
-        } else {
-            self.sw_clocking.iter_mut().zip(names).for_each(|(sw, en)| sw.en = en.to_owned());
-        }
+        names.into_iter().enumerate().for_each(|(i, n)| {
+            if let Some(sw) = self.sw_clocking.get_mut(i) {
+                sw.en = n.to_owned();
+            } else {
+                self.sw_clocking.push(ClockingInfo { en: n.to_owned(), ..Default::default() });
+            }
+        });
     }
 
     pub fn set_sw_clear(&mut self, names:Vec<&str>) {
-        if self.sw_clocking.is_empty() {
-            self.sw_clocking = names.into_iter().map(|clear| ClockingInfo{ clear: clear.to_owned(), ..Default::default() }).collect();
-        } else {
-            self.sw_clocking.iter_mut().zip(names).for_each(|(sw, clear)| sw.clear = clear.to_owned());
-        }
+        names.into_iter().enumerate().for_each(|(i, n)| {
+            if let Some(sw) = self.sw_clocking.get_mut(i) {
+                sw.clear = n.to_owned();
+            } else {
+                self.sw_clocking.push(ClockingInfo { clear: n.to_owned(), ..Default::default() });
+            }
+        });
     }
 
     pub fn set_sw_rst(&mut self, rst: ResetDef) {
@@ -279,27 +285,33 @@ impl Rif {
     }
 
     pub fn set_hw_clk(&mut self, names:Vec<&str>) {
-        if self.hw_clocking.is_empty() {
-            self.hw_clocking = names.into_iter().map(|n| ClockingInfo{ clk: n.to_owned(), ..Default::default() }).collect();
-        } else {
-            self.hw_clocking.iter_mut().zip(names).for_each(|(hw, n)| hw.clk = n.to_owned());
-        }
+        names.into_iter().enumerate().for_each(|(i, n)| {
+            if let Some(hw) = self.hw_clocking.get_mut(i) {
+                hw.clk = n.to_owned();
+            } else {
+                self.hw_clocking.push(ClockingInfo { clk: n.to_owned(), ..Default::default() });
+            }
+        });
     }
 
     pub fn set_hw_clken(&mut self, names:Vec<&str>) {
-        if self.hw_clocking.is_empty() {
-            self.hw_clocking = names.into_iter().map(|n| ClockingInfo{ en: n.to_owned(), ..Default::default() }).collect();
-        } else {
-            self.hw_clocking.iter_mut().zip(names).for_each(|(hw, en)| hw.en = en.to_owned());
-        }
+        names.into_iter().enumerate().for_each(|(i, n)| {
+            if let Some(hw) = self.hw_clocking.get_mut(i) {
+                hw.en = n.to_owned();
+            } else {
+                self.hw_clocking.push(ClockingInfo { en: n.to_owned(), ..Default::default() });
+            }
+        });
     }
 
     pub fn set_hw_clear(&mut self, names:Vec<&str>) {
-        if self.hw_clocking.is_empty() {
-            self.hw_clocking = names.into_iter().map(|clear| ClockingInfo{ clear: clear.to_owned(), ..Default::default() }).collect();
-        } else {
-            self.hw_clocking.iter_mut().zip(names).for_each(|(hw, clear)| hw.clear = clear.to_owned());
-        }
+        names.into_iter().enumerate().for_each(|(i, n)| {
+            if let Some(hw) = self.hw_clocking.get_mut(i) {
+                hw.clear = n.to_owned();
+            } else {
+                self.hw_clocking.push(ClockingInfo { clear: n.to_owned(), ..Default::default() });
+            }
+        });
     }
 
     pub fn set_hw_rst(&mut self, rst: ResetDef) {

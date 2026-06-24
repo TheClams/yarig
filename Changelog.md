@@ -1,6 +1,14 @@
 # Change Log
 
 
+## [0.24.1] - 2026-06-24
+
+### Fix
+  - SystemVerilog parser now ignore properly macro definition before module declaration
+  - Bridge path handling: fix relative path case and setting via command-line
+  - Custom bridge: bind parameters other than ADDR_W/DATA_W
+  - Fix handling of multiple clock when occuring after an interface defintion to APB
+
 ## [0.24.0] - 2026-06-23
 
 ### Added

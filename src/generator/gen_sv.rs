@@ -451,17 +451,20 @@ impl GeneratorHw for GeneratorSv {
         ));
     }
 
-    fn write_inst_header(&mut self, type_name: &str, inst_name: &str, params: &[(String, isize)]) {
+    fn write_inst_header(&mut self, type_name: &str, inst_name: &str, dim_params: &[(String, isize)], other_params: &[&str]) {
         self.is_bridge = inst_name=="bridge";
         self.write(&format!("   {type_name}"));
-        if !params.is_empty() {
+        if !dim_params.is_empty() || !other_params.is_empty() {
             self.write("#(");
-            let mut iter = params.iter().map(|(_,v)| v).peekable();
+            let mut iter = dim_params.iter().map(|(_,v)| v).peekable();
             while let Some(v) = iter.next() {
                 self.write(&format!("{v}"));
                 if iter.peek().is_some() {
                     self.write(", ");
                 }
+            }
+            if !other_params.is_empty() {
+                self.write(", .*");
             }
             self.write(")");
         }

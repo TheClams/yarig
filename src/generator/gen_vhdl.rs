@@ -629,16 +629,20 @@ impl GeneratorHw for GeneratorVhdl {
         }
     }
 
-    fn write_inst_header(&mut self, type_name: &str, inst_name: &str, params: &[(String, isize)]) {
+    fn write_inst_header(&mut self, type_name: &str, inst_name: &str, dim_params: &[(String, isize)], other_params: &[&str]) {
         self.is_bridge = inst_name=="bridge";
         let type_name = type_name.replace("bridge_", "bridge_vhd_");
         self.write(&format!("   i_{inst_name} : {type_name}\n"));
-        if !params.is_empty() {
+        if !dim_params.is_empty() || !other_params.is_empty() {
             self.write("      generic map(\n");
-            let mut iter = params.iter().peekable();
-            while let Some((n,v)) = iter.next() {
-                let sep = if iter.peek().is_some() {","} else {""};
+            for (i, (n, v)) in dim_params.iter().enumerate() {
+                let has_more = i + 1 < dim_params.len() || !other_params.is_empty();
+                let sep = if has_more {","} else {""};
                 self.write(&format!("         {n} => {v}{sep}\n"));
+            }
+            for (i, name) in other_params.iter().enumerate() {
+                let sep = if i + 1 < other_params.len() {","} else {""};
+                self.write(&format!("         {name} => {name}{sep}\n"));
             }
             self.write("      )\n");
         }

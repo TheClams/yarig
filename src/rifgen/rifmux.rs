@@ -73,19 +73,23 @@ impl Rifmux {
     }
 
     pub fn set_sw_clk(&mut self, names:Vec<&str>) {
-        if self.sw_clocking.is_empty() {
-            self.sw_clocking = names.into_iter().map(|n| ClockingInfo{ clk: n.to_owned(), ..Default::default() }).collect();
-        } else {
-            self.sw_clocking.iter_mut().zip(names).for_each(|(sw, n)| sw.clk = n.to_owned());
-        }
+        names.into_iter().enumerate().for_each(|(i, n)| {
+            if let Some(sw) = self.sw_clocking.get_mut(i) {
+                sw.clk = n.to_owned();
+            } else {
+                self.sw_clocking.push(ClockingInfo { clk: n.to_owned(), ..Default::default() });
+            }
+        });
     }
 
     pub fn set_sw_clken(&mut self, names:Vec<&str>) {
-        if self.sw_clocking.is_empty() {
-            self.sw_clocking = names.into_iter().map(|n| ClockingInfo{ en: n.to_owned(), ..Default::default() }).collect();
-        } else {
-            self.sw_clocking.iter_mut().zip(names).for_each(|(sw, en)| sw.en = en.to_owned());
-        }
+        names.into_iter().enumerate().for_each(|(i, n)| {
+            if let Some(sw) = self.sw_clocking.get_mut(i) {
+                sw.en = n.to_owned();
+            } else {
+                self.sw_clocking.push(ClockingInfo { en: n.to_owned(), ..Default::default() });
+            }
+        });
     }
 
     pub fn set_sw_rst(&mut self, rst: ResetDef) {

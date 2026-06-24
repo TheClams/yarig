@@ -643,8 +643,7 @@ pub trait GeneratorHw : GeneratorBase {
 
         // Add interface bridge to the internal rif_if
         // Nothing is done if already using rif_if
-        let sw_clk_rst = if bridge.has_clk() {Some((sw_clk.clk.as_str(), sw_clk.rst.name.as_str()))} else {None};
-        self.write_intf_bridge(&rif.interface, &comp_info, sw_clk_rst);
+        self.write_intf_bridge(&rif.interface, &comp_info, &bridge, &sw_clk);
 
         // Connect interface to internal logic
         self.write_comment_box("Interface handling");
@@ -1877,10 +1876,14 @@ pub trait GeneratorHw : GeneratorBase {
         }
         self.write_module_port_header();
         // Add port/reset port if not default interface
+        let mut names : Vec<&str> = Vec::new();
         if rifmux_has_clk_rst {
             for clocking in rifmux.sw_clocking.iter() {
                 self.write_port_decl(&PortInfo::new_in(clocking.clk.to_owned(), "Bridge clock".to_owned()), None, false);
-                self.write_port_decl(&PortInfo::new_in(clocking.rst.name.to_owned(), format!("Bridge reset : {}", clocking.rst.desc())), None, false);
+                if !names.contains(&clocking.rst.name.as_str()) {
+                    self.write_port_decl(&PortInfo::new_in(clocking.rst.name.to_owned(), format!("Bridge reset : {}", clocking.rst.desc())), None, false);
+                    names.push(clocking.rst.name.as_str());
+                }
             }
         }
         // Add rif enable structure if needed
@@ -1920,8 +1923,7 @@ pub trait GeneratorHw : GeneratorBase {
         }
         self.write_signal_decl_footer(false);
         // Add interface bridge when not default
-        let sw_clk_rst = if bridge.has_clk() {Some((sw_clk.clk.as_str(), sw_clk.rst.name.as_str()))} else {None};
-        self.write_intf_bridge(&rifmux.interface, &comp_info, sw_clk_rst);
+        self.write_intf_bridge(&rifmux.interface, &comp_info, &bridge, &sw_clk);
 
         // Address demultiplexing
         self.write_comment_box("Demux access");
@@ -2076,9 +2078,11 @@ pub trait GeneratorHw : GeneratorBase {
         // Add Clock/reset
         for clocking in rifmux.sw_clocking.iter() {
             self.write_port_decl(&PortInfo::new_in(clocking.clk.to_owned(), "Software clock".to_owned()), None, false);
-            self.write_port_decl(&PortInfo::new_in(clocking.rst.name.to_owned(), format!("Software reset : {}", clocking.rst.desc())), None, false);
             names.push(clocking.clk.to_owned());
-            names.push(clocking.rst.name.to_owned());
+            if !names.contains(&clocking.rst.name) {
+                self.write_port_decl(&PortInfo::new_in(clocking.rst.name.to_owned(), format!("Software reset : {}", clocking.rst.desc())), None, false);
+                names.push(clocking.rst.name.to_owned());
+            }
         }
         let mut nb_ctrl = 0;
         for rif in rifmux.components.iter().filter_map(|c| c.get_rif()) {
@@ -2139,11 +2143,19 @@ pub trait GeneratorHw : GeneratorBase {
         // Instances RIF MUX and all RIFs
         self.write_comment_box("Instances");
         let comp_params = Vec::new();
-        self.write_inst_header(&rifmux.type_name, "rifmux", &comp_params);
+        self.write_inst_header(&rifmux.type_name, "rifmux", &comp_params, &[]);
+        // Add Clock/reset
         if rifmux_has_clk_rst {
-            self.write_port_bind(sw_clk, sw_clk, false);
-            self.write_port_bind(sw_rst, sw_rst, false);
+            names.clear();
+            for clocking in rifmux.sw_clocking.iter() {
+                self.write_port_bind(&clocking.clk, &clocking.clk, false);
+                if !names.contains(&clocking.rst.name) {
+                    self.write_port_bind(&clocking.rst.name, &clocking.rst.name, false);
+                    names.push(clocking.rst.name.to_owned());
+                }
+            }
         }
+
         for port in intf_ports.iter() {
             self.write_port_bind(port.name(), port.name(), false);
         }
@@ -2158,7 +2170,7 @@ pub trait GeneratorHw : GeneratorBase {
         for rif in rifmux.components.iter().filter_map(|c| c.get_rif()) {
             let inst_name = self.casing(&rif.inst_name);
             let type_name = self.casing(&rif.type_name);
-            self.write_inst_header(&type_name, &inst_name, &comp_params);
+            self.write_inst_header(&type_name, &inst_name, &comp_params, &[]);
             // Bind main clock/reset
             if let Some(clk) = rif.ports.clocks.first() {
                 self.write_port_bind(clk.name(), sw_clk, false);
@@ -2205,21 +2217,30 @@ pub trait GeneratorHw : GeneratorBase {
         }
     }
 
-    fn write_intf_bridge(&mut self, intf: &Interface, comp: &CompInfo, sw_clk_rst: Option<(&str,&str)>) {
+    fn write_intf_bridge(&mut self, intf: &Interface, comp: &CompInfo, bridge: &ModuleInfo, sw_clk: &ClockingInfo) {
         if intf.is_default() {
             return;
         }
 
         self.write_comment_box("Bridge to the internal register interface");
         self.write("\n");
-        let name = format!("bridge_{}_rif", intf.name());
-        let params = [
-            ("ADDR_W".to_owned(), comp.addr_width as isize),
-            ("DATA_W".to_owned(), comp.data_width  as isize)].to_vec();
-        self.write_inst_header(&name, "bridge", &params);
-        if let Some((sw_clk, sw_rst)) = sw_clk_rst {
-            self.write_port_bind("clk"  , sw_clk, false);
-            self.write_port_bind("rst_n", sw_rst, false);
+        let mut dim_params : Vec<(String,isize)>  = Vec::new();
+        if bridge.params.iter().any(|p| p.name == "ADDR_W") {
+            dim_params.push(("ADDR_W".to_owned(), comp.addr_width as isize));
+        }
+        if bridge.params.iter().any(|p| p.name == "DATA_W") {
+            dim_params.push(("DATA_W".to_owned(), comp.data_width  as isize));
+        }
+        let other_params: Vec<&str> = bridge.params.iter()
+            .map(|p| p.name.as_str())
+            .filter(|n| *n != "ADDR_W" && *n != "DATA_W")
+            .collect();
+        self.write_inst_header(&bridge.name, "bridge", &dim_params, &other_params);
+        if bridge.ports.iter().any(|p| p.name()=="clk") {
+            self.write_port_bind("clk", &sw_clk.clk, false);
+        }
+        if bridge.ports.iter().any(|p| p.name()=="rst_n") {
+            self.write_port_bind("rst_n", &sw_clk.rst.name, false);
         }
         if Self::SUPPORT_IMPL_BIND {
             self.write_port_bind("*", "", true);
@@ -2272,7 +2293,7 @@ pub trait GeneratorHw : GeneratorBase {
     fn write_port_decl(&mut self, port: &PortInfo, prefix: Option<&String>, is_last: bool) {}
     fn write_rif_decl(&mut self, comp: &CompInfo, single: bool, clk: &str, rst: &str) {}
     fn write_signal_decl(&mut self, signal: &SignalDecl) {}
-    fn write_inst_header(&mut self, type_name: &str, inst_name: &str, params: &[(String, isize)]) {}
+    fn write_inst_header(&mut self, type_name: &str, inst_name: &str, dim_params: &[(String, isize)], other_params: &[&str]) {}
     fn write_port_bind(&mut self, port_name: &str, signal_name: &str, is_last: bool) {}
     fn write_intf_bind(&mut self, name: &str, is_last: bool) {}
     /// Write combinatorial assign of an expression to a signal

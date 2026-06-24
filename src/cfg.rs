@@ -640,8 +640,12 @@ impl YarigCfg {
         if args.rtl_const_field {self.rtl.const_field = Some(true);}
         if args.rtl_limit.is_some() {self.rtl.limit = args.rtl_limit;}
         if args.rtl_force_limit.is_some() {self.rtl.force_limit = args.rtl_force_limit;}
-        if !args.rtl_path.is_empty() && let Some(bridge_path) = &mut self.rtl.bridge_path {
-            bridge_path.extend(args.rtl_path);
+        if !args.rtl_path.is_empty() {
+            if let Some(bridge_path) = &mut self.rtl.bridge_path {
+                bridge_path.extend(args.rtl_path);
+            } else {
+                self.rtl.bridge_path = Some(args.rtl_path);
+            }
         }
         if args.rifmux_pipe_invalid.is_some() {self.rtl.rifmux_pipe_invalid = args.rifmux_pipe_invalid;}
         if args.keyword_rename {self.keywords.error = false;}
@@ -834,15 +838,7 @@ impl YarigCfg {
         let bridge_path = self.rtl.bridge_path.clone().unwrap_or_default();
         match &mut rif_obj {
             Comp::Rif(rif_inst) => updt_intf_path(rif_inst, &bridge_path, base_path)?,
-            Comp::Rifmux(rifmux_inst) => {
-                for comp in rifmux_inst.components.iter_mut() {
-                    match &mut comp.inst {
-                        Comp::Rifmux(inst) => updt_intf_path_rifmux(inst, &bridge_path, base_path)?,
-                        Comp::Rif(inst) =>  updt_intf_path(inst, &bridge_path, base_path)?,
-                        Comp::External(_) => {},
-                    }
-                }
-            }
+            Comp::Rifmux(rifmux_inst) => updt_intf_path_rifmux(rifmux_inst, &bridge_path, base_path)?,
             _ => {}
         }
         //
@@ -932,35 +928,40 @@ impl YarigCfg {
 
 }
 
-pub fn updt_intf_path(inst: &mut RifInst, bridge_path: &[String], base_path: Option<&String>) -> Result<(),String> {
-    let mut new_path : Option<PathBuf> = None;
-    if let Some(p) = inst.interface.get_path() {
-        let intf_path_base : PathBuf = p.to_owned().into();
-        if !intf_path_base.exists() {
-            for rtl_path in bridge_path.iter() {
-                let mut path : PathBuf = rtl_path.clone().into();
-                if path.is_relative() && !path.exists() && let Some(base) = base_path {
-                    path = [rtl_path, base].iter().collect();
-                }
-                path.push(intf_path_base.clone());
-                if path.exists() {
-                    new_path = Some(path);
-                    break;
-                }
-            }
-            if new_path.is_none() {
-                return Err(format!("Unable to locate RTL implementation for {p}"));
-            }
+pub fn locate_intf_path(intf_path: &str, bridge_path: &[String], base_path: Option<&String>) -> Result<Option<PathBuf>, String> {
+    // println!("Searching for {intf_path:?}");
+    let intf_path_base: PathBuf = intf_path.into();
+    if intf_path_base.exists() {
+        return Ok(None);
+    }
+    for rtl_path in bridge_path.iter() {
+        let mut path: PathBuf = rtl_path.clone().into();
+        if path.is_relative() && !path.exists() && let Some(base) = base_path {
+            path = [base, rtl_path].iter().collect();
+            // println!("Updating relative {rtl_path} path to {path:?}");
+        }
+        path.push(intf_path_base.clone());
+        // println!("Checking {path:?} : {}", path.exists());
+        if path.exists() {
+            return Ok(Some(path));
         }
     }
-    if let Some(p) = new_path {
-        let path_str = p.to_str().expect("Converting path to string");
+    Err(format!("Unable to locate RTL implementation for {intf_path}"))
+}
+
+pub fn updt_intf_path(inst: &mut RifInst, bridge_path: &[String], base_path: Option<&String>) -> Result<(), String> {
+    if let Some(p) = inst.interface.get_path() && let Some(new_path) = locate_intf_path(p, bridge_path, base_path)? {
+        let path_str = new_path.to_str().expect("Converting path to string");
         inst.interface.set_path(path_str);
     }
     Ok(())
 }
 
 pub fn updt_intf_path_rifmux(inst: &mut RifmuxInst, bridge_path: &[String], base_path: Option<&String>) -> Result<(), String> {
+    if let Some(p) = inst.interface.get_path() && let Some(new_path) = locate_intf_path(p, bridge_path, base_path)? {
+        let path_str = new_path.to_str().expect("Converting path to string");
+        inst.interface.set_path(path_str);
+    }
     for comp in inst.components.iter_mut() {
         match &mut comp.inst {
             Comp::Rifmux(rifmux_inst) => updt_intf_path_rifmux(rifmux_inst, bridge_path, base_path)?,
