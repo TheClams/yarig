@@ -304,10 +304,12 @@ pub trait GeneratorHw : GeneratorBase {
 
     // Hooks for RIF package
     fn write_rif_pkg_header(&mut self, rif: &RifInst) {
-        self.write_pkg_header(&rif.type_name);
+        let rif_pkg_name = self.casing(&rif.name(true));
+        self.write_pkg_header(&rif_pkg_name);
     }
     fn write_rif_pkg_footer(&mut self, rif: &RifInst) {
-        self.write_pkg_footer(&rif.type_name);
+        let rif_pkg_name = self.casing(&rif.name(true));
+        self.write_pkg_footer(&rif_pkg_name);
     }
 
     fn write_rif_pkg_const(&mut self, basename: &str, addr_width: u8, data_width: u8, params: &ParamValues) {

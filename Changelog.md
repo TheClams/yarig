@@ -1,6 +1,11 @@
 # Change Log
 
 
+## [0.25.2] - 2026-07-06
+
+### Fix
+  - RTL: fix package name when suffix is enabled on the package
+
 ## [0.24.1] - 2026-06-24
 
 ### Fix
