@@ -6,6 +6,10 @@
 ### Added
   - RTL: support different reset per register in a register group
 
+### Fix
+  - RTL: fix inconsistent naming between SV/VHDL bridge for UAUX
+  - VHDL: remove clk/rst_n port on APB bridge instance (not in the bridge anymore)
+
 ## [0.25.2] - 2026-07-06
 
 ### Fix

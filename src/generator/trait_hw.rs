@@ -2226,6 +2226,7 @@ pub trait GeneratorHw : GeneratorBase {
 
         self.write_comment_box("Bridge to the internal register interface");
         self.write("\n");
+        let is_uaux_noif = intf==&Interface::Uaux && !Self::SUPPORT_INTF;
         let mut dim_params : Vec<(String,isize)>  = Vec::new();
         if bridge.params.iter().any(|p| p.name == "ADDR_W") {
             dim_params.push(("ADDR_W".to_owned(), comp.addr_width as isize));
@@ -2238,10 +2239,10 @@ pub trait GeneratorHw : GeneratorBase {
             .filter(|n| *n != "ADDR_W" && *n != "DATA_W")
             .collect();
         self.write_inst_header(&bridge.name, "bridge", &dim_params, &other_params);
-        if bridge.ports.iter().any(|p| p.name()=="clk") {
+        if is_uaux_noif || bridge.ports.iter().any(|p| p.name()=="clk") {
             self.write_port_bind("clk", &sw_clk.clk, false);
         }
-        if bridge.ports.iter().any(|p| p.name()=="rst_n") {
+        if is_uaux_noif || bridge.ports.iter().any(|p| p.name()=="rst_n") {
             self.write_port_bind("rst_n", &sw_clk.rst.name, false);
         }
         if Self::SUPPORT_IMPL_BIND {

@@ -577,13 +577,13 @@ impl RifIntfPorts {
                 PortInfo::new_out(  "pslverr".to_owned(), "APB Slave Error".to_owned()),
             ],
             Interface::Uaux => vec![
-                PortInfo::new_basic("uaux_addr     ".to_owned(), SignalKind::Address, PortDir::In, "AUX address".to_owned()),
-                PortInfo::new_in(   "uaux_en       ".to_owned(), "AUX enable".to_owned()),
+                PortInfo::new_basic("uaux_addr_r   ".to_owned(), SignalKind::Address, PortDir::In, "AUX address".to_owned()),
+                PortInfo::new_in(   "uaux_en_r     ".to_owned(), "AUX enable".to_owned()),
                 PortInfo::new_in(   "uaux_cmt_phase".to_owned(), "AUX commit status".to_owned()),
                 PortInfo::new_in(   "uaux_cmt_valid".to_owned(), "AUX commit valid".to_owned()),
                 PortInfo::new_in(   "uaux_read     ".to_owned(), "AUX read".to_owned()),
                 PortInfo::new_in(   "uaux_write    ".to_owned(), "AUX write".to_owned()),
-                PortInfo::new_basic("uaux_wdata    ".to_owned(), SignalKind::Data, PortDir::In, "AUX write data".to_owned()),
+                PortInfo::new_basic("uaux_wdata_r  ".to_owned(), SignalKind::Data, PortDir::In, "AUX write data".to_owned()),
                 PortInfo::new_basic("uaux_rdata    ".to_owned(), SignalKind::Data, PortDir::Out, "AUX read data".to_owned()),
                 PortInfo::new_out(  "uaux_busy     ".to_owned(), "AUX busy".to_owned()),
                 PortInfo::new_out(  "uaux_illegal  ".to_owned(), "SR/LR illegal".to_owned()),
@@ -697,10 +697,6 @@ impl ModuleInfo {
     /// Create Module info from one of the non-custom supported bridge
     pub fn new_bridge(intf: &Interface, is_rifmux: bool) -> Self {
         let mut ports : Vec<PortInfo> = Vec::new();
-        if intf==&Interface::Uaux {
-            ports.push(PortInfo::new_in("clk".to_owned(), "SW Clock".to_owned()));
-            ports.push(PortInfo::new_in("rst_n".to_owned(), "SW reset asynchronous, active low".to_owned()));
-        }
         ports.push(PortInfo::new_rif_intf(is_rifmux));
         if intf!=&Interface::Default {
             ports.extend(RifIntfPorts::new(intf, true).0);

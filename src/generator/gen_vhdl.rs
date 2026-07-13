@@ -791,8 +791,10 @@ impl GeneratorHw for GeneratorVhdl {
             self.write(&format!("\n   component bridge_vhd_{}_rif is\n", self.intf.name()));
             self.write("      generic (ADDR_W : natural := 16; DATA_W : natural := 32; ASSUME_WR_OK : boolean := false);\n");
             self.write("      port (\n");
-            self.write("         clk            : in  std_logic;\n");
-            self.write("         rst_n          : in  std_logic;\n");
+            if self.intf!=Interface::Apb {
+                self.write("         clk            : in  std_logic;\n");
+                self.write("         rst_n          : in  std_logic;\n");
+            }
             let mut ports = RifIntfPorts::new(&Interface::Default, false);
             let names = ["reg_err_addr_next", "reg_err_access_next"];
             for port in ports.iter_mut().filter(|p| !names.contains(&p.name().trim())) {

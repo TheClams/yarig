@@ -5,42 +5,40 @@
 //----------------------------------------------------------------------------*/
 
 module bridge_uaux_rif #(parameter int ADDR_W=16, DATA_W=32) (
-  input  wire              clk           , // SW Clock
-  input  wire              rst_n         , // SW reset asynchronous, active low
-  rif_if.ctrl              if_rif        , // SW register interface
+  rif_if.ctrl                   if_rif        , // SW register interface
   // User AUX Interface //
-  input  wire              uaux_en       , // AUX enable
-  input  wire [ADDR_W-1:0] uaux_addr     , // AUX address
-  input  wire              uaux_read     , // AUX read
-  input  wire              uaux_write    , // AUX write
-  output wire              uaux_busy     , // AUX busy
-  output wire [DATA_W-1:0] uaux_rdata    , // AUX read data
-  output wire              uaux_illegal  , // SR/LR illegal
-  output wire              uaux_k_rd     , // AUX read privilege violation
-  output wire              uaux_k_wr     , // AUX write privilege violation
-  output wire              uaux_unimpl   , // AUX unimplemented address
-  output wire              uaux_serial_sr, // AUX SR group flush
-  output wire              uaux_strict_sr, // AUX SR single flush
-  input  wire              uaux_cmt_phase, // AUX commit status
-  input  wire              uaux_cmt_valid, // AUX commit valid
-  input  wire [DATA_W-1:0] uaux_wdata      // AUX write data
+  input  var logic              uaux_en_r       , // AUX enable
+  input  var logic [ADDR_W-1:0] uaux_addr_r     , // AUX address
+  input  var logic              uaux_read     , // AUX read
+  input  var logic              uaux_write    , // AUX write
+  output var logic              uaux_busy     , // AUX busy
+  output var logic [DATA_W-1:0] uaux_rdata    , // AUX read data
+  output var logic              uaux_illegal  , // SR/LR illegal
+  output var logic              uaux_k_rd     , // AUX read privilege violation
+  output var logic              uaux_k_wr     , // AUX write privilege violation
+  output var logic              uaux_unimpl   , // AUX unimplemented address
+  output var logic              uaux_serial_sr, // AUX SR group flush
+  output var logic              uaux_strict_sr, // AUX SR single flush
+  input  var logic              uaux_cmt_phase, // AUX commit status
+  input  var logic              uaux_cmt_valid, // AUX commit valid
+  input  var logic [DATA_W-1:0] uaux_wdata_r      // AUX write data
 );
 
 /*------------------------------------------------------------------------------
 -- Signals declaration
 ------------------------------------------------------------------------------*/
   logic uaux_r_mask; // Request mask
-  logic uaux_read_d; 
-  logic uaux_write_d; 
+  logic uaux_read_d;
+  logic uaux_write_d;
   logic rif_en;
 
 /*------------------------------------------------------------------------------
--- Interface Conversion 
+-- Interface Conversion
 ------------------------------------------------------------------------------*/
-  always_ff @(posedge clk or negedge rst_n) begin : uaux_en_reg
-    if (~if_rif.rst_n) begin 
-      uaux_read_d  <= 1'b0;  
-      uaux_write_d <= 1'b0;  
+  always_ff @(posedge if_rif.clk or negedge if_rif.rst_n) begin : uaux_en_reg
+    if (~if_rif.rst_n) begin
+      uaux_read_d  <= 1'b0;
+      uaux_write_d <= 1'b0;
     end
     else begin
       uaux_read_d  <= uaux_read  && uaux_busy;
@@ -49,12 +47,12 @@ module bridge_uaux_rif #(parameter int ADDR_W=16, DATA_W=32) (
   end : uaux_en_reg
 
   // Read/Write pulse masked by enable
-  assign rif_en = uaux_en && ((uaux_read && ~uaux_read_d) || (uaux_write && ~uaux_write_d));
+  assign rif_en = uaux_en_r && ((uaux_read && ~uaux_read_d) || (uaux_write && ~uaux_write_d));
 
-  assign if_rif.addr    =  uaux_addr;
+  assign if_rif.addr    =  uaux_addr_r;
   assign if_rif.en      =  rif_en;
-  assign if_rif.rd_wrn  = ~uaux_write; 
-  assign if_rif.wr_data =  uaux_wdata;
+  assign if_rif.rd_wrn  = ~uaux_write;
+  assign if_rif.wr_data =  uaux_wdata_r;
   
   assign uaux_rdata     =  if_rif.rd_data;
   assign uaux_busy      = ~if_rif.done;
