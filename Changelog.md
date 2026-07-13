@@ -1,6 +1,11 @@
 # Change Log
 
 
+## [0.25.3] - 2026-07-13
+
+### Added
+  - RTL: support different reset per register in a register group
+
 ## [0.25.2] - 2026-07-06
 
 ### Fix

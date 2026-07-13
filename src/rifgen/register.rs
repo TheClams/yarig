@@ -212,6 +212,11 @@ impl RegDef {
         &self.group.name
     }
 
+    /// Check if register can be written by software
+    pub fn is_sw_wr(&self) -> bool {
+        self.fields.iter().any(|f| !f.sw_kind.is_ro())
+    }
+
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -37,6 +37,8 @@ pub struct FieldImpl {
     pub sw_kind: FieldSwKind,
     /// Field hardware access
     pub hw_acc: Access,
+    /// Field reset name: if none use the register reset signal
+    pub hw_rst: Option<String>,
     /// Field Clock name: if none select automatically
     pub clk: Option<String>,
     /// Field Clock enable
@@ -108,6 +110,7 @@ impl FieldImpl {
             hw_kind,
             sw_kind: field.sw_kind.clone(),
             hw_acc: field.hw_acc,
+            hw_rst: None,
             clk_en: field.clk_en.clone(),
             clear: field.clear.clone(),
             lock: field.lock.clone(),
@@ -295,12 +298,14 @@ impl RegImplDict {
     pub fn build(src: &Rif, rifs: &RifsInfo) -> Result<RegImplDict, String> {
         let nb_reg = src.pages.first().map(|p| p.registers.len()).unwrap_or(0);
         let mut regs = RegImplDict::with_capacity(nb_reg);
+        let sw_rst = src.sw_clocking.last().cloned().unwrap_or_default().rst.name;
+        let hw_rst = src.hw_clocking.first().map(|x| &x.rst.name).unwrap_or(&sw_rst);
         for page in src.pages.iter() {
             if page.external {
                 continue;
             }
             for reg_def in page.registers.iter() {
-                regs.add_def(reg_def, &page.clk_en, rifs)?;
+                regs.add_def(reg_def, &page.clk_en, rifs, (&sw_rst, hw_rst))?;
             }
         }
         Ok(regs)
@@ -326,7 +331,7 @@ impl RegImplDict {
         self.0.values()
     }
 
-    pub fn add_def(&mut self, def: &RegDefOrIncl, clk_en: &ClkEn, rifs: &RifsInfo) -> Result<(), String> {
+    pub fn add_def(&mut self, def: &RegDefOrIncl, clk_en: &ClkEn, rifs: &RifsInfo, rif_rst: (&str, &str)) -> Result<(), String> {
         match def {
             RegDefOrIncl::Include(inc) => {
                 let path = RegIncludePath::new(inc)?;
@@ -339,7 +344,7 @@ impl RegImplDict {
                 // Scan the page for matching registers
                 for reg_def in inc_page.registers.iter() {
                     if path.reg=="*" || path.reg==reg_def.get_name() {
-                        self.add_def(reg_def, clk_en, rifs)?;
+                        self.add_def(reg_def, clk_en, rifs, rif_rst)?;
                         if let Some(reg_impl) = self.0.last_mut() {
                             reg_impl.pkg = Some(rif.name.to_owned());
                             // reg_impl.pkg = Some(path.rif.to_string());
@@ -355,7 +360,8 @@ impl RegImplDict {
                 }
                 // If register group was already seen, merge fields
                 if let Some(reg_impl) = self.get_mut(&reg.group.name) {
-                    reg_impl.merge_with(reg, rifs)?;
+                    let reg_rst = if reg.is_sw_wr() {rif_rst.0} else {rif_rst.1};
+                    reg_impl.merge_with(reg, rifs, reg_rst)?;
                 }
                 else {
                     let mut reg_impl = RegImpl::new(reg, rifs)?;
@@ -434,12 +440,17 @@ impl RegImpl {
     // - Clock, reset, clock enable, clear, external must be the same ?
     // - Interrupt setting must the same
     // - Save partial info to check no overlap or missing
-    pub fn merge_with(&mut self, reg: &RegDef, rifs: &RifsInfo) -> Result<(),String>{
+    pub fn merge_with(&mut self, reg: &RegDef, rifs: &RifsInfo, reg_rst: &str) -> Result<(),String>{
         let params = &rifs.params;
         let partials = rifs.partials.get(reg.get_group_name());
         let array = reg.array.value(params)? as u16;
         // println!("Merging {} in {} : clk_en = {:?} | group clock_enable = {:?}", reg.name, reg.group.name, reg.clk_en, self.clk_en);
         self.port.updt(RegPortKind::from_reg(reg));
+        // Field reset: handle case where register in a register group do not share the same
+        let hw_rst = if self.rst != reg.rst {
+            println!("Reset of {} ({:?}) different from first register in group ({:?}) | rif={reg_rst}", reg.name, reg.rst, self.rst);
+            if reg.rst.is_none() {Some(reg_rst.to_owned())} else {reg.rst.clone()}
+        } else {None};
         for f in reg.fields.iter() {
             self.port.updt(RegPortKind::from_field(f, &reg.name));
             let clk_en = if !f.clk_en.is_default() {&f.clk_en} else {&reg.clk_en};
@@ -487,6 +498,9 @@ impl RegImpl {
                 if !clk_en.is_default() {
                     field.clk_en = clk_en.to_owned()
                 }
+                if hw_rst.is_some() {
+                    field.hw_rst = hw_rst.clone();
+                }
                 self.fields.push(field);
             }
         }
@@ -501,6 +515,8 @@ impl RegImpl {
         rifs: &RifsInfo,
     ) -> Result<Self,String> {
         let mut reg_impl : Option<Self> = None;
+        let sw_rst = rif.sw_clocking.last().cloned().unwrap_or_default().rst.name;
+        let hw_rst = rif.hw_clocking.first().map(|x| &x.rst.name).unwrap_or(&sw_rst);
         for p in &rif.pages {
             for r in &p.registers {
                 match r {
@@ -516,7 +532,8 @@ impl RegImpl {
                     }
                     RegDefOrIncl::Def(d) => if d.group.name == group_name {
                         if let Some(ref mut reg) = reg_impl {
-                            reg.merge_with(d, rifs)?;
+                            let reg_rst = if d.is_sw_wr() {&sw_rst} else {hw_rst};
+                            reg.merge_with(d, rifs, reg_rst)?;
                         } else {
                             reg_impl = Some(RegImpl::new(d, rifs)?);
                         }

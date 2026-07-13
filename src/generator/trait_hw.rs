@@ -1437,8 +1437,8 @@ pub trait GeneratorHw : GeneratorBase {
                         // if reg.reg_name=="" {println!("Field {reg_name_i}.{field_name} : Kind={:?} hw_write={} -> {f_clk} | field:{:?} | reg:{:?}", field.hw_kind, field.is_hw_write(), field_impl.clk, reg_impl.clk);}
                         // Get reset associated with the field
                         let f_rst =
-                            // TODO: Add optional reset name per field
-                            if let Some(n) = &reg_impl.rst {n}
+                            if let Some(n) = &field_impl.hw_rst {n}
+                            else if let Some(n) = &reg_impl.rst {n}
                             else if f_clk==&hw_clk.clk {&hw_clk.rst.name}
                             else {&sw_clk.rst.name};
                         // Next value
