@@ -52,6 +52,8 @@ pub struct RifGenSrc {
     last_data_width: DataWidth,
     last_obj: String,
     last_group: String,
+    // (sw_reset_idx, hw_reset_idx): incremented each time a reset is set on the current object
+    rst_idx: (usize, usize),
 }
 
 #[derive(Deserialize, Debug, Clone, Copy)]
@@ -120,6 +122,7 @@ impl RifGenSrc {
             last_data_width: DataWidth::default(),
             last_obj: "".to_owned(),
             last_group: "".to_owned(),
+            rst_idx: (0, 0),
         }
     }
 
@@ -243,6 +246,7 @@ impl RifGenSrc {
                             self.top = RifGenTop::Rif(name.to_owned());
                         }
                         self.last_obj = name.to_owned();
+                        self.rst_idx = (0, 0);
                         let rif = Rif::new(name);
                         self.rifs.insert(name.to_owned(), rif);
                         self.paths.insert(remove_rif(name).to_owned(), filedir.clone());
@@ -254,6 +258,7 @@ impl RifGenSrc {
                             self.top = RifGenTop::Rifmux(name.to_owned());
                         }
                         self.last_obj = name.to_owned();
+                        self.rst_idx = (0, 0);
                         let rifmux = Rifmux::new(name);
                         self.rifmux.insert(name.to_owned(), rifmux);
                         self.paths.insert(remove_rif(name).to_owned(), filedir.clone());
@@ -297,12 +302,20 @@ impl RifGenSrc {
                             self.last_data_width = w;
                         }
                         Context::SwClock => self.last_rif_mut().set_sw_clk(vec_id(l)?),
-                        Context::SwReset => self.last_rif_mut().set_sw_rst(reset_def(l)?),
+                        Context::SwReset => {
+                            let idx = self.rst_idx.0;
+                            self.last_rif_mut().set_sw_rst(idx, reset_def(l)?);
+                            self.rst_idx.0 += 1;
+                        }
                         Context::SwClkEn => self.last_rif_mut().set_sw_clken(vec_id(l)?),
                         Context::SwClear => self.last_rif_mut().set_sw_clear(vec_id(l)?),
                         Context::HwClock => self.last_rif_mut().set_hw_clk(vec_id(l)?),
                         Context::HwClkEn => self.last_rif_mut().set_hw_clken(vec_id(l)?),
-                        Context::HwReset => self.last_rif_mut().set_hw_rst(reset_def(l)?),
+                        Context::HwReset => {
+                            let idx = self.rst_idx.1;
+                            self.last_rif_mut().set_hw_rst(idx, reset_def(l)?);
+                            self.rst_idx.1 += 1;
+                        }
                         Context::HwClear => self.last_rif_mut().set_hw_clear(vec_id(l)?),
                         Context::SuffixPkg => {
                             self.last_rif_mut().suffix_pkg = bool_or_default(l, false)?
@@ -763,7 +776,11 @@ impl RifGenSrc {
                         Context::Generics => context_stack.push((Context::Generics, ilvl + 1)),
                         Context::SwClock => self.last_rifmux().set_sw_clk(vec_id(l)?),
                         Context::SwClkEn => self.last_rifmux().set_sw_clken(vec_id(l)?),
-                        Context::SwReset => self.last_rifmux().set_sw_rst(reset_def(l)?),
+                        Context::SwReset => {
+                            let idx = self.rst_idx.0;
+                            self.last_rifmux().set_sw_rst(idx, reset_def(l)?);
+                            self.rst_idx.0 += 1;
+                        }
                         Context::RifmuxMap => context_stack.push((Context::RifmuxMap, ilvl + 1)),
                         Context::RifmuxTop => {
                             self.last_rifmux().top = Some(RifmuxTop::new(identifier_last(l)?));
@@ -797,7 +814,7 @@ impl RifGenSrc {
                 }
                 Context::RifmuxTop => {
                     let (key,val) = key_val(l)?;
-                    self.last_rifmux().add_top_suffix(key, val);
+                    self.last_rifmux().add_top_prefix(key, val);
                 }
                 Context::RegInst => {
                     ovr_idx.clear();

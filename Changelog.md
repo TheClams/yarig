@@ -1,7 +1,14 @@
 # Change Log
 
 
-## [0.25.3] - 2026-07-13
+## [0.24.4] - 2026-07-20
+
+### Added
+  - Syntax: now supports multiple reset definition (one per clock SW or HW)
+    * should now also handle defining reset before clock
+    * If defining more reset/clear/enable than clock default to last defined clock
+
+## [0.24.3] - 2026-07-13
 
 ### Added
   - RTL: support different reset per register in a register group
@@ -10,7 +17,7 @@
   - RTL: fix inconsistent naming between SV/VHDL bridge for UAUX
   - VHDL: remove clk/rst_n port on APB bridge instance (not in the bridge anymore)
 
-## [0.25.2] - 2026-07-06
+## [0.24.2] - 2026-07-06
 
 ### Fix
   - RTL: fix package name when suffix is enabled on the package

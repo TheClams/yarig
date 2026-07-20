@@ -201,6 +201,7 @@ pub struct Rif {
     pub info: OrderDict<String,String>,
 }
 impl Rif {
+    /// Create an empty Rif definition
     pub fn new<S>(name: S) -> Self where S: Into<String> {
         Rif {
             name:name.into(),
@@ -234,6 +235,7 @@ impl Rif {
         self.info.insert(key_val.0.to_owned(), key_val.1.to_owned());
     }
 
+    /// Add a new enum entry
     pub fn add_enum_entry(&mut self, name: &str, entry: EnumEntry) -> Result<(), RifError> {
         let Some(def) = self.enum_defs.iter_mut().find(|e| e.name==name) else {
             return Err(RifError::generic(&format!("Unable to find enum {name}")));
@@ -246,6 +248,7 @@ impl Rif {
         Ok(())
     }
 
+    /// Set all the software clock available
     pub fn set_sw_clk(&mut self, names:Vec<&str>) {
         names.into_iter().enumerate().for_each(|(i, n)| {
             if let Some(sw) = self.sw_clocking.get_mut(i) {
@@ -256,34 +259,47 @@ impl Rif {
         });
     }
 
+    /// Set the enable corresponding to each defined software clock
     pub fn set_sw_clken(&mut self, names:Vec<&str>) {
         names.into_iter().enumerate().for_each(|(i, n)| {
             if let Some(sw) = self.sw_clocking.get_mut(i) {
                 sw.en = n.to_owned();
             } else {
-                self.sw_clocking.push(ClockingInfo { en: n.to_owned(), ..Default::default() });
+                let last = self.sw_clocking.last().cloned().unwrap_or_default();
+                self.sw_clocking.push(ClockingInfo { en: n.to_owned(), ..last });
             }
         });
     }
 
+    /// Set the clear signal corresponding to each defined softtware clock
     pub fn set_sw_clear(&mut self, names:Vec<&str>) {
         names.into_iter().enumerate().for_each(|(i, n)| {
             if let Some(sw) = self.sw_clocking.get_mut(i) {
                 sw.clear = n.to_owned();
             } else {
-                self.sw_clocking.push(ClockingInfo { clear: n.to_owned(), ..Default::default() });
+                let last = self.sw_clocking.last().cloned().unwrap_or_default();
+                self.sw_clocking.push(ClockingInfo { clear: n.to_owned(), ..last });
             }
         });
     }
 
-    pub fn set_sw_rst(&mut self, rst: ResetDef) {
-        if self.sw_clocking.is_empty() {
-            self.sw_clocking = vec![ClockingInfo{rst, ..Default::default() }];
+    /// Set a reset corresponding to a software clock
+    pub fn set_sw_rst(&mut self, idx: usize, rst: ResetDef) {
+        if idx == 0 {
+            if self.sw_clocking.is_empty() {
+                self.sw_clocking = vec![ClockingInfo { rst, ..Default::default() }];
+            } else {
+                self.sw_clocking.iter_mut().for_each(|sw| sw.rst = rst.clone());
+            }
+        } else if let Some(sw) = self.sw_clocking.get_mut(idx) {
+            sw.rst = rst;
         } else {
-            self.sw_clocking.iter_mut().for_each(|sw| sw.rst = rst.clone());
+            let last = self.sw_clocking.last().cloned().unwrap_or_default();
+            self.sw_clocking.push(ClockingInfo { rst, ..last });
         }
     }
 
+    /// Set all the hardware clock available
     pub fn set_hw_clk(&mut self, names:Vec<&str>) {
         names.into_iter().enumerate().for_each(|(i, n)| {
             if let Some(hw) = self.hw_clocking.get_mut(i) {
@@ -294,31 +310,43 @@ impl Rif {
         });
     }
 
+    /// Set the enable corresponding to each defined hardware clock
     pub fn set_hw_clken(&mut self, names:Vec<&str>) {
         names.into_iter().enumerate().for_each(|(i, n)| {
             if let Some(hw) = self.hw_clocking.get_mut(i) {
                 hw.en = n.to_owned();
             } else {
-                self.hw_clocking.push(ClockingInfo { en: n.to_owned(), ..Default::default() });
+                let last = self.hw_clocking.last().cloned().unwrap_or_default();
+                self.hw_clocking.push(ClockingInfo { en: n.to_owned(), ..last });
             }
         });
     }
 
+    /// Set the clear signal corresponding to each defined hardtware clock
     pub fn set_hw_clear(&mut self, names:Vec<&str>) {
         names.into_iter().enumerate().for_each(|(i, n)| {
             if let Some(hw) = self.hw_clocking.get_mut(i) {
                 hw.clear = n.to_owned();
             } else {
-                self.hw_clocking.push(ClockingInfo { clear: n.to_owned(), ..Default::default() });
+                let last = self.hw_clocking.last().cloned().unwrap_or_default();
+                self.hw_clocking.push(ClockingInfo { clear: n.to_owned(), ..last });
             }
         });
     }
 
-    pub fn set_hw_rst(&mut self, rst: ResetDef) {
-        if self.hw_clocking.is_empty() {
-            self.hw_clocking = vec![ClockingInfo{rst, ..Default::default() }];
+    /// Set a reset corresponding to a hardware clock
+    pub fn set_hw_rst(&mut self, idx: usize, rst: ResetDef) {
+        if idx == 0 {
+            if self.hw_clocking.is_empty() {
+                self.hw_clocking = vec![ClockingInfo { rst, ..Default::default() }];
+            } else {
+                self.hw_clocking.iter_mut().for_each(|hw| hw.rst = rst.clone());
+            }
+        } else if let Some(hw) = self.hw_clocking.get_mut(idx) {
+            hw.rst = rst;
         } else {
-            self.hw_clocking.iter_mut().for_each(|hw| hw.rst = rst.clone());
+            let last = self.hw_clocking.last().cloned().unwrap_or_default();
+            self.hw_clocking.push(ClockingInfo { rst, ..last });
         }
     }
 }

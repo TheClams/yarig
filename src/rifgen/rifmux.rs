@@ -36,7 +36,7 @@ pub struct Rifmux {
 }
 
 impl Rifmux {
-    /// Initialize a rifmux
+    /// Create an empty RifMux definition
     pub fn new<S>(name: S) -> Self where S: Into<String> {
         Rifmux {
             name: name.into(),
@@ -54,24 +54,29 @@ impl Rifmux {
         }
     }
 
+    /// Update the info dictionnary
     pub fn add_info(&mut self, key_val:(&str, &str)) {
         self.info.insert(key_val.0.to_owned(), key_val.1.to_owned());
     }
 
+    /// Add a parameter definition
     pub fn add_param(&mut self, key: &str, expr: ExprTokens) {
         self.parameters.insert(key.to_owned(), expr);
     }
 
+    /// Add a generic definition
     pub fn add_generic(&mut self, key_val:(&str, GenericRange)) {
         self.generics.insert(key_val.0.to_owned(), key_val.1);
     }
 
-    pub fn add_top_suffix(&mut self, key: &str, val: &str) {
+    /// Add a prefix definition for the top instance
+    pub fn add_top_prefix(&mut self, key: &str, val: &str) {
         if let Some(ref mut top) = self.top {
             top.prefixes.insert(key.to_owned(),val.to_owned());
         }
     }
 
+    /// Set the available software clocks
     pub fn set_sw_clk(&mut self, names:Vec<&str>) {
         names.into_iter().enumerate().for_each(|(i, n)| {
             if let Some(sw) = self.sw_clocking.get_mut(i) {
@@ -82,21 +87,31 @@ impl Rifmux {
         });
     }
 
+    /// Set the clock enable corresponding to each defined software clock
     pub fn set_sw_clken(&mut self, names:Vec<&str>) {
         names.into_iter().enumerate().for_each(|(i, n)| {
             if let Some(sw) = self.sw_clocking.get_mut(i) {
                 sw.en = n.to_owned();
             } else {
-                self.sw_clocking.push(ClockingInfo { en: n.to_owned(), ..Default::default() });
+                let last = self.sw_clocking.last().cloned().unwrap_or_default();
+                self.sw_clocking.push(ClockingInfo { en: n.to_owned(), ..last });
             }
         });
     }
 
-    pub fn set_sw_rst(&mut self, rst: ResetDef) {
-        if self.sw_clocking.is_empty() {
-            self.sw_clocking = vec![ClockingInfo{rst, ..Default::default() }];
+    /// Set the reset corresponding to each defined software clock
+    pub fn set_sw_rst(&mut self, idx: usize, rst: ResetDef) {
+        if idx == 0 {
+            if self.sw_clocking.is_empty() {
+                self.sw_clocking = vec![ClockingInfo { rst, ..Default::default() }];
+            } else {
+                self.sw_clocking.iter_mut().for_each(|sw| sw.rst = rst.clone());
+            }
+        } else if let Some(sw) = self.sw_clocking.get_mut(idx) {
+            sw.rst = rst;
         } else {
-            self.sw_clocking.iter_mut().for_each(|sw| sw.rst = rst.clone());
+            let last = self.sw_clocking.last().cloned().unwrap_or_default();
+            self.sw_clocking.push(ClockingInfo { rst, ..last });
         }
     }
 

@@ -68,7 +68,7 @@ The possible properties, indented by one level compare to the RIF declaration, a
 ```
  - `swClock : <clock_name0> <clock_name1>` : Name the software clocks signal _clock_name_ (clk by default). Last clock is used at Software clock while previous one can be used inside an optional bridge.
  - `hwClock : <clock_name0> <clock_name1> ...` : Declare hardware clocks. The first one will be the default one.
- - `swReset|hwReset : <rst_name> [activeLow|activeHigh] [async|sync]`: Specify reset signal for software/hardware.
+ - `swReset|hwReset : <rst_name> [activeLow|activeHigh] [async|sync]`: Specify reset signal for software/hardware clock. There can be as many definition of reset as tehre is of clock.
  - `swClkEn|hwClkEn : <clk_en_name> `: Specify default clock enable signal for software/hardware clocks. This can be overriden on a register basis
  - `swClear : <clear_name>` : Declare a global clear _clear_name_ active high to clear all software register (no clear by default)
  - `hwClear : <clear_name0> <clear_name1> ...` : Declare global hardware clears _clear_name_ active high to clear all hardware register (no clear by default). There should be as many signal declared as there are hwClock: same name can be repeated and the minus character `-` can be used indicate that there is no clear for the corresponding hwClock.

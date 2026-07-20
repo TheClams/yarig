@@ -448,7 +448,7 @@ impl RegImpl {
         self.port.updt(RegPortKind::from_reg(reg));
         // Field reset: handle case where register in a register group do not share the same
         let hw_rst = if self.rst != reg.rst {
-            println!("Reset of {} ({:?}) different from first register in group ({:?}) | rif={reg_rst}", reg.name, reg.rst, self.rst);
+            // println!("Reset of {} ({:?}) different from first register in group ({:?}) | rif={reg_rst}", reg.name, reg.rst, self.rst);
             if reg.rst.is_none() {Some(reg_rst.to_owned())} else {reg.rst.clone()}
         } else {None};
         for f in reg.fields.iter() {
