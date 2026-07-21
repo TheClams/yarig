@@ -474,7 +474,7 @@ impl LogicExpr {
         }
     }
 
-    /// Return the lock name if it is part of the structure (i.e. not a path to a different structure)
+    /// Return the field name if it is part of the structure (i.e. not a path to a different structure)
     pub fn local_field(&self, regname: &str) -> Option<&str> {
         if let LogicExpr::Id(id) = self {
             if ["this", "self", regname].contains(&id.name.as_str()) {

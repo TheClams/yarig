@@ -186,7 +186,7 @@ pub trait GeneratorHw : GeneratorBase {
                 if let Some(clr_expr) = &f.clear {
                     let kind = FieldHwKind::Clear(Some(clr_expr.to_owned()));
                     if let Some(d) = SignalDecl::from_hw_kind(&kind, &hw_reg.name, &name)
-                        && names.iter().rev().any(|n| n==d.name()) {
+                        && !names.iter().rev().any(|n| n==d.name()) {
                             names.push(d.name().to_owned());
                             hw_fields.push(d);
                     }
@@ -234,6 +234,10 @@ pub trait GeneratorHw : GeneratorBase {
                         );
                     }
                 }
+            }
+            // Add clear signal defined at register level
+            if let Some(clr_expr) = &hw_reg.clear && let Some(clr_name) = clr_expr.local_field(&hw_reg.name) && !names.iter().rev().any(|n| n==clr_name)  {
+                hw_fields.push( SignalDecl::new_bit(clr_name.to_owned(), format!("Register {} clear", hw_reg.name)) );
             }
             // Write the software structure (if not empty)
             if !sw_fields.is_empty() {
@@ -378,7 +382,6 @@ pub trait GeneratorHw : GeneratorBase {
             let pkg_name = format!("{}_pkg", if let Some(pkg) = &hw_reg_def.pkg {pkg} else {&rif_pkg_name});
             let kind = if hw_reg.intr_derived {"sw"} else {"hw"};
             let group_name = self.casing(group_name);
-            let prefix = if hw_reg.port.is_in() {""} else {"rif_"};
             let mut port = PortInfo::new(
                 group_name.clone(),
                 SignalKind::Custom((

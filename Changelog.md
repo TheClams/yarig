@@ -1,6 +1,12 @@
 # Change Log
 
 
+## [0.24.5] - 2026-07-21
+
+### Fix
+  - RTL: Fix case of register clear with no fields written by hardware
+  - VHDL: Fix syntax when using register clear without clock enable
+
 ## [0.24.4] - 2026-07-20
 
 ### Added

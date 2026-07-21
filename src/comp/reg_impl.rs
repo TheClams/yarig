@@ -238,7 +238,7 @@ impl RegPortKind {
             Access::WO => RegPortKind::In,
             Access::RW => RegPortKind::InOut,
             Access::RO => {
-                if field.hw_kind.is_empty() && field.get_local_lock(regname).is_none() {
+                if field.hw_kind.is_empty() && field.get_local_lock(regname).is_none() && field.clear.is_none() {
                     RegPortKind::Out
                 } else {
                     RegPortKind::InOut
@@ -256,9 +256,16 @@ impl RegPortKind {
         }
     }
 
+    /// Get the PorKind from the register definition, ignoring any field info:
+    /// - External Register are InOut
+    /// - Register with access pulse (read/write/access) are at least Out
+    /// - Register with clear using internal fie
     pub fn from_reg(reg: &RegDef) -> Self {
         if reg.external!=ExternalKind::None {RegPortKind::InOut}
-        else if !reg.pulse.is_empty() {RegPortKind::Out}
+        else if !reg.pulse.is_empty() {
+            if let Some(e) = &reg.clear && e.local_field(&reg.name).is_some() {RegPortKind::InOut}
+            else {RegPortKind::Out}
+        } else if let Some(e) = &reg.clear && e.local_field(&reg.name).is_some() {RegPortKind::In}
         else {RegPortKind::None}
     }
 

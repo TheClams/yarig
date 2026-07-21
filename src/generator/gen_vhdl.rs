@@ -897,20 +897,26 @@ impl GeneratorHw for GeneratorVhdl {
         if !rst.sync {
             self.write(&format!("      elsif rising_edge({clk}) then\n"));
         }
-        let base_lvl = if clk_en_global && clk_en.is_some() {4} else {3};
+        let has_clk_en_global = clk_en_global && clk_en.is_some();
+        let has_clr_global = clr_global && clr.is_some();
+        let base_lvl = if has_clk_en_global || has_clr_global {4} else {3};
         let tab = " ".repeat(base_lvl*3);
         // Optional Global clear
         // Maybe need to add an option to take the clear into account only if the enable is high
         if let Some(clr) = clr.filter(|_| clr_global) {
-            self.write("if ");
+            self.write("         if ");
             self.add_logic_expr(clr, 0, LogicExprKind::Bool, false);
             self.write(" then\n");
             for signal in signals.iter() {
-                self.write_signal_seq(&signal.name, &signal.reset, 3);
+                self.write_signal_seq(&signal.name, &signal.reset, 4);
             }
-            self.write("      end els");
+            if has_clk_en_global {
+                self.write("         end els");
+            } else {
+                self.write("         end else\n");
+            }
         } else if base_lvl == 4 {
-            self.write("      ");
+            self.write("         ");
         }
         // Optional Global Enable
         if let Some(clk_en) = clk_en.filter(|_| clk_en_global) {
@@ -950,8 +956,8 @@ impl GeneratorHw for GeneratorVhdl {
                 lvl = base_lvl;
             }
         }
-        if clk_en_global && clk_en.is_some() {
-            self.write("          end if;\n");
+        if has_clr_global || has_clk_en_global {
+            self.write("         end if;\n");
         }
         self.write("      end if;\n");
         self.write("   end process;\n\n");
