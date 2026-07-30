@@ -774,12 +774,19 @@ pub trait GeneratorHw : GeneratorBase {
                                 let cond = LogicExpr::or(LogicExpr::not(rd_wrn.clone()), opt.to_owned());
                                 LogicExpr::ite(cond, LogicExpr::ValueU(0, 1), LogicExpr::ValueU(1, 1))
                             }
+                            // TODO: handle case with limit
                             _ =>  LogicExpr::ValueU(0, 1)
                         }
                     } else {
                         match reg.sw_access {
                             Access::RO => LogicExpr::not(rd_wrn.clone()),
-                            Access::WO => rd_wrn.clone(),
+                            Access::WO => {
+                                if field_limit.is_empty() {
+                                    rd_wrn.clone()
+                                } else {
+                                    LogicExpr::or(rd_wrn.clone(), LogicExpr::not(format!("{name_flat}__decode").into()))
+                                }
+                            }
                             Access::NA => LogicExpr::ValueU(1, 1),
                             Access::RW => {
                                 if field_limit.is_empty() {
@@ -790,14 +797,24 @@ pub trait GeneratorHw : GeneratorBase {
                             }
                         }
                     };
+                let has_err_acc = err_acc!=LogicExpr::ValueU(0, 1);
                 self.write_assign_comb(4, "rif_err_access_l".into(), err_acc);
                 // Override done_next for external registers
                 if reg.external!=ExternalKind::None {
                     let hw_reg_def = rif.get_hw_reg(&reg.group_type);
                     let idx = reg.array.idx_str(true);
                     let qual = if hw_reg_def.is_multi_pulse() {format!("_{name_flat}")} else {"".to_owned()};
-                    let next : ExprId = (format!("{group_name}{idx}"), format!("ext{qual}_done")).into();
-                    self.write_assign_comb(4, "rif_done_next".into(), next.into());
+                    let ext_done : ExprId = (format!("{group_name}{idx}"), format!("ext{qual}_done")).into();
+                    let rif_err = if reg.optional.is_some() {
+                        if has_err_acc {LogicExpr::and(rif_en.clone(), LogicExpr::or("rif_err_addr_l".into(),"rif_err_access_l".into()))}
+                        else {LogicExpr::and(rif_en.clone(),"rif_err_addr_l".into())}
+                    } else {
+                        LogicExpr::and(rif_en.clone(),"rif_err_access_l".into())
+                    };
+                    let next : LogicExpr =
+                        if has_err_acc || reg.optional.is_some() {LogicExpr::or(ext_done.into(), rif_err)}
+                        else {ext_done.into()};
+                    self.write_assign_comb(4, "rif_done_next".into(), next);
                 }
                 self.write_match_case_footer();
             }

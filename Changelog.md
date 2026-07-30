@@ -1,6 +1,11 @@
 # Change Log
 
 
+## [0.24.6] - 2026-07-30
+
+### Fix
+  - RTL: Fix case of external register with restricted access (RO/WO/field limit)
+
 ## [0.24.5] - 2026-07-21
 
 ### Fix

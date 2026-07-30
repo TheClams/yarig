@@ -239,6 +239,7 @@ This trait is used by the generators for AsciiDoc, HTML, Latex and Mif (FrameMak
 ## Known Bugs / Edge cases
   - [ ] Support partial fields arrays
   - [ ] Support partial counter (for counter larger than register size)
+  - [ ] Add proper access error handling on optional register (currently handle only the case when register is disabled)
   - [x] Add check on width using parameter that it is actually defined
   - [ ] Add check that address is well aligned with bus size
   - [ ] Add check that reset value fit the field width
