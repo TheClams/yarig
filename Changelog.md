@@ -1,6 +1,11 @@
 # Change Log
 
 
+## [0.24.7] - 2026-07-31
+
+### Fix
+  - RTL: fix access error generation on optional fields with restricted access (RO/WO or limit)
+
 ## [0.24.6] - 2026-07-30
 
 ### Fix

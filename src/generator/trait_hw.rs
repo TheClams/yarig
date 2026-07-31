@@ -730,8 +730,9 @@ pub trait GeneratorHw : GeneratorBase {
                     .filter(|field| field.has_hw_limit(limit_cfg))
                     .map(|field| (field.name.to_owned(), field.limit.bypass.to_owned(), field.limit.is_ext()))
                     .collect();
+                let decode : ExprId = self.casing(&format!("{}__decode", reg.name())).into();
+                let mut has_decode_expr = false;
                 if reg.has_decode() {
-                    let name = self.casing(&format!("{}__decode", reg.name()));
                     let value =
                         if field_limit.is_empty() {
                             reg.optional.as_ref().map(|r| &r.0).unwrap_or(&LogicExpr::ValueU(1, 1)).to_owned()
@@ -749,9 +750,11 @@ pub trait GeneratorHw : GeneratorBase {
                             } else {
                                 expr
                             }
-
                         };
-                    self.write_assign_comb(4, name.into(), value);
+                    if value!=LogicExpr::ValueU(1, 1) {
+                        has_decode_expr = true;
+                    }
+                    self.write_assign_comb(4, decode.clone(), value);
                 }
                 // Copy corresponding read_data signal
                 self.write_assign_comb(4, "rif_read_data_l ".into(), format!("{name_flat}__read_data").into());
@@ -764,40 +767,42 @@ pub trait GeneratorHw : GeneratorBase {
                 self.write_assign_comb(4, "rif_err_addr_l  ".into(), err_addr);
                 // Access error when writing a read-only field, reading a write only field,
                 //  or writing one field outside its set value (when limits are defined)
+                let err_acc_base = match reg.sw_access {
+                    Access::RO => LogicExpr::not(rd_wrn.clone()),
+                    Access::WO => {
+                        if field_limit.is_empty() {
+                            rd_wrn.clone()
+                        } else {
+                            LogicExpr::or(rd_wrn.clone(), LogicExpr::not(format!("{name_flat}__decode").into()))
+                        }
+                    }
+                    Access::NA => LogicExpr::ValueU(1, 1),
+                    Access::RW => {
+                        if field_limit.is_empty() {
+                            LogicExpr::ValueU(0, 1)
+                        } else {
+                            LogicExpr::not(format!("{name_flat}__decode").into())
+                        }
+                    }
+                };
+                // Optional field can still avoid generating error for some specified access
                 let err_acc : LogicExpr = if let Some((opt, acc)) = &reg.optional {
                         match acc {
                             Access::RO => {
                                 let cond = LogicExpr::or(rd_wrn.clone(), opt.to_owned());
-                                LogicExpr::ite(cond, LogicExpr::ValueU(0, 1), LogicExpr::ValueU(1, 1))
+                                LogicExpr::ite(cond, err_acc_base, LogicExpr::ValueU(1, 1))
                             }
                             Access::WO => {
                                 let cond = LogicExpr::or(LogicExpr::not(rd_wrn.clone()), opt.to_owned());
-                                LogicExpr::ite(cond, LogicExpr::ValueU(0, 1), LogicExpr::ValueU(1, 1))
+                                LogicExpr::ite(cond, err_acc_base, LogicExpr::ValueU(1, 1))
                             }
-                            // TODO: handle case with limit
-                            _ =>  LogicExpr::ValueU(0, 1)
+                            Access::RW => LogicExpr::ValueU(0, 1),
+                            // NA correspond to the case where access error is not overriden
+                            Access::NA => err_acc_base,
                         }
                     } else {
-                        match reg.sw_access {
-                            Access::RO => LogicExpr::not(rd_wrn.clone()),
-                            Access::WO => {
-                                if field_limit.is_empty() {
-                                    rd_wrn.clone()
-                                } else {
-                                    LogicExpr::or(rd_wrn.clone(), LogicExpr::not(format!("{name_flat}__decode").into()))
-                                }
-                            }
-                            Access::NA => LogicExpr::ValueU(1, 1),
-                            Access::RW => {
-                                if field_limit.is_empty() {
-                                    LogicExpr::ValueU(0, 1)
-                                } else {
-                                    LogicExpr::not(format!("{name_flat}__decode").into())
-                                }
-                            }
-                        }
+                        err_acc_base
                     };
-                let has_err_acc = err_acc!=LogicExpr::ValueU(0, 1);
                 self.write_assign_comb(4, "rif_err_access_l".into(), err_acc);
                 // Override done_next for external registers
                 if reg.external!=ExternalKind::None {
@@ -805,15 +810,11 @@ pub trait GeneratorHw : GeneratorBase {
                     let idx = reg.array.idx_str(true);
                     let qual = if hw_reg_def.is_multi_pulse() {format!("_{name_flat}")} else {"".to_owned()};
                     let ext_done : ExprId = (format!("{group_name}{idx}"), format!("ext{qual}_done")).into();
-                    let rif_err = if reg.optional.is_some() {
-                        if has_err_acc {LogicExpr::and(rif_en.clone(), LogicExpr::or("rif_err_addr_l".into(),"rif_err_access_l".into()))}
-                        else {LogicExpr::and(rif_en.clone(),"rif_err_addr_l".into())}
-                    } else {
-                        LogicExpr::and(rif_en.clone(),"rif_err_access_l".into())
-                    };
                     let next : LogicExpr =
-                        if has_err_acc || reg.optional.is_some() {LogicExpr::or(ext_done.into(), rif_err)}
-                        else {ext_done.into()};
+                        if has_decode_expr {
+                            let no_dec = LogicExpr::and(rif_en.clone() ,LogicExpr::not(decode.into()));
+                            LogicExpr::or(ext_done.into(), no_dec)
+                        } else {ext_done.into()};
                     self.write_assign_comb(4, "rif_done_next".into(), next);
                 }
                 self.write_match_case_footer();
