@@ -332,10 +332,12 @@ impl DerefMut for ExprTokens {
 
 impl ExprTokens {
 
+    /// Create an empty container with a given size
     pub fn new(capacity: usize) -> Self {
         ExprTokens(Vec::with_capacity(capacity))
     }
 
+    /// Evaluate an expression integer value replacing variable by their value
     pub fn eval(&self, variables: &ParamValues) -> Result<isize, ExprError> {
         if self.is_empty() {
             return Ok(0);
@@ -408,6 +410,7 @@ impl ExprTokens {
         }
     }
 
+    /// Evaluate an expression integer value replacing variable by their value with support for generic
     pub fn eval_with_gen(&self, variables: &ParamValues, generics: &GenericValues) -> Result<ExprValue, ExprError> {
         match self.eval(variables) {
             Ok(n) => Ok(ExprValue::Value(n)),
@@ -423,6 +426,45 @@ impl ExprTokens {
             Err(e) => Err(e)
         }
     }
+
+    /// Serialize back to `.rif` syntax
+    /// Note: parentheses are normalized to the minimum needed for a left-associative re-parse
+    pub fn to_rif(&self) -> String {
+        // Stack of (rendered text, precedence of its own top-level operator; 0 for an atom/call).
+        let mut stack: Vec<(String, u8)> = Vec::with_capacity(self.len());
+        for token in self.iter() {
+            match token {
+                Token::Number(_) | Token::Var(_) => stack.push((token.to_string(), 0)),
+                Token::Operator(OpKind::Not) => {
+                    if let Some((operand, prec)) = stack.pop() {
+                        let p = precedence(OpKind::Not);
+                        let operand = if prec > p { format!("({operand})") } else { operand };
+                        stack.push((format!("!{operand}"), p));
+                    }
+                }
+                Token::Operator(op) => {
+                    if let (Some((rhs, rhs_prec)), Some((lhs, lhs_prec))) = (stack.pop(), stack.pop()) {
+                        let p = precedence(*op);
+                        // Right child parenthesized on equal precedence too: safe for every
+                        // non-associative op here, and a no-op (never fires) for the few that
+                        // are, since RPN never nests an operator under itself on the right at
+                        // equal precedence unless parens were explicit in the source.
+                        let lhs = if lhs_prec > p { format!("({lhs})") } else { lhs };
+                        let rhs = if rhs_prec >= p { format!("({rhs})") } else { rhs };
+                        stack.push((format!("{lhs} {token} {rhs}"), p));
+                    }
+                }
+                Token::FuncCall(func) => {
+                    let nb_args = if *func == FuncKind::Power { 2 } else { 1 };
+                    let mut args: Vec<String> = (0..nb_args).filter_map(|_| stack.pop().map(|(s, _)| s)).collect();
+                    args.reverse();
+                    stack.push((format!("{func}({})", args.join(",")), 0));
+                }
+                Token::ParenL | Token::ParenR | Token::Comma => {}
+            }
+        }
+        stack.pop().map(|(s, _)| s).unwrap_or_default()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -432,7 +474,7 @@ pub enum ExprValue {
 }
 
 impl ExprValue {
-
+    /// Return the upper range for a generic or directly the value for a variable
     pub fn max(&self) -> isize {
         match self {
             ExprValue::Value(n) => *n,
@@ -466,11 +508,12 @@ impl From<ExprError> for String {
 pub struct ParamValues(OrderDict<String,isize>);
 
 impl ParamValues {
-
+    /// Create an empty ordered dictionnary
     pub fn new() -> Self {
         ParamValues(OrderDict::new())
     }
 
+    /// Create an ordered dictionnary containing the key/value pair i/idx
     pub fn new_with_idx(idx: isize) -> Self {
         let mut params = ParamValues(OrderDict::new());
         params.0.insert("i".to_owned(), idx);
@@ -594,6 +637,33 @@ mod tests_parsing {
         assert_eq!(expr.eval(&variables),Ok(256));
         let expr = parse_expr("pow(2, $x) - 1").unwrap();
         assert_eq!(expr.eval(&variables),Ok((1<<17)-1));
+    }
+
+    #[test]
+    fn test_expr_to_rif() {
+        let mut variables = ParamValues(OrderDict::new());
+        variables.0.insert("a".to_owned(), 3);
+        variables.0.insert("b".to_owned(), 5);
+        for src in [
+            "$a==1",
+            "$a>2",
+            "$a-($b-2)",
+            "$a-$b-2",
+            "(16*(not $a))+256*$a",
+            "pow(2,$a)-1",
+            "ceil(log2($b-2))",
+            "$a<<2",
+            "!$a",
+        ] {
+            let expr = parse_expr(src).unwrap();
+            let rendered = expr.to_rif();
+            let reparsed = parse_expr(&rendered)
+                .unwrap_or_else(|e| panic!("re-parsing '{rendered}' (from '{src}') failed: {e:?}"));
+            assert_eq!(
+                expr.eval(&variables), reparsed.eval(&variables),
+                "'{src}' rendered as '{rendered}' evaluates differently after re-parsing"
+            );
+        }
     }
 
 }

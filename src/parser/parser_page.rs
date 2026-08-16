@@ -199,7 +199,7 @@ mod tests_parsing {
 
     use std::collections::HashMap;
 
-    use crate::rifgen::{Address, AddressOffset};
+    use crate::rifgen::{Address, AddressOffset, DeclLine};
 
     use super::*;
 
@@ -267,6 +267,7 @@ mod tests_parsing {
                 addr: Address::new(AddressKind::Absolute, AddressOffset::Value(0x10)),
                 array: parse_expr("4").expect("Parse 4 cannot fail"),
                 reg_override: HashMap::new(),
+                src: DeclLine::default(),
             })
         );
         assert_eq!(
@@ -278,6 +279,7 @@ mod tests_parsing {
                 addr: Address::new(AddressKind::Absolute, AddressOffset::Value(0x04)),
                 array: ExprTokens::new(0),
                 reg_override: HashMap::new(),
+                src: DeclLine::default(),
             })
         );
         assert_eq!(

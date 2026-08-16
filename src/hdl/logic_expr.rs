@@ -45,6 +45,16 @@ impl SignalRange {
             SignalRange::GenericLsb(_) => 0, // Might need to be reviwed if this method is used elsewhere than logic_expr_parser
         }
     }
+
+    /// Serialize the bit/range selection to `.rif` source: `[msb:lsb]`, `[bit]`, or `[lsb+:WIDTH]`
+    pub fn to_rif(&self) -> String {
+        match self {
+            SignalRange::Fixed((msb, lsb)) =>
+                if msb == lsb { format!("[{msb}]") } else { format!("[{msb}:{lsb}]") },
+            SignalRange::GenericWidth((width, lsb)) => format!("[{lsb}+:{width}]"),
+            SignalRange::GenericLsb((msb, lsb)) => format!("[{msb}:{lsb}]"),
+        }
+    }
 }
 
 
@@ -76,6 +86,22 @@ impl ExprId {
     /// Create a full ID with idx, field and optional range
     pub fn new_field_range(name: String, idx: Option<u16>, field: String, range: Option<SignalRange>) -> Self {
         ExprId { name, idx, field: Some(field), range }
+    }
+
+    /// Serialize the identifier to `.rif` source: `name[.field][idx][range]`.
+    pub fn to_rif(&self) -> String {
+        let mut s = self.name.clone();
+        if let Some(field) = &self.field {
+            s.push('.');
+            s.push_str(field);
+        }
+        if let Some(idx) = self.idx {
+            s.push_str(&format!("[{idx}]"));
+        }
+        if let Some(range) = &self.range {
+            s.push_str(&range.to_rif());
+        }
+        s
     }
 
     /// Create a new ExprId by setting the field name and range
@@ -302,6 +328,16 @@ impl From<(u16,u16)> for LogicExpr {
 }
 
 impl LogicExpr {
+    /// Serialize the expression back to `.rif` source, for the forms used in `lock`/`clear` declarations.
+    /// Richer expressions (arithmetic, comparisons, concatenations, casts, ...) ar enot supported yet and return none
+    pub fn to_rif(&self) -> Option<String> {
+        match self {
+            LogicExpr::Id(id) => Some(id.to_rif()),
+            LogicExpr::Not(inner) | LogicExpr::NotB(inner) => Some(format!("!{}", inner.to_rif()?)),
+            _ => None,
+        }
+    }
+
     /// Create a Value (Signed/Unsigned) from a u128 and a field definition (for signed and width)
     pub fn value(v: u128, info: &RifFieldInst) -> LogicExpr {
         let w = info.width.value() as usize;

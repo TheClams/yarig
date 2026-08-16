@@ -1,4 +1,4 @@
-use crate::{parser::take_until_unbalanced, rifgen::{Context, GenericRange, Interface, ResetDef}};
+use crate::{parser::take_until_unbalanced, rifgen::{Context, DeclLine, GenericRange, Interface, ResetDef}};
 
 use winnow::{
   Parser, ascii::Caseless, combinator::{alt, delimited, opt, preceded, separated_pair, terminated}, error::StrContext
@@ -93,6 +93,7 @@ pub fn reset_def(input: &str) -> ResF<'_, ResetDef> {
       name: info.0.to_owned(),
       active_high: info.1 == Some("High") || info.1 == Some("high"),
       sync: info.2 == Some("sync"),
+      src: DeclLine::default(),
     })
 }
 
@@ -160,12 +161,12 @@ mod tests_parsing {
 
   #[test]
   fn test_reset_def() {
-    assert_eq!(reset_def("default"), Ok(ResetDef {name:"default".to_owned(),sync:false,active_high:false}) );
-    assert_eq!(reset_def("low_async low async"), Ok(ResetDef {name:"low_async".to_owned(),sync:false,active_high:false}) );
-    assert_eq!(reset_def("high_async high"), Ok(ResetDef {name:"high_async".to_owned(),sync:false,active_high:true}) );
-    assert_eq!(reset_def("high_sync sync"), Ok(ResetDef {name:"high_sync".to_owned(),sync:true,active_high:false}) );
-    assert_eq!(reset_def("activeH activeHigh"), Ok(ResetDef {name:"activeH".to_owned(),sync:false,active_high:true}) );
-    assert_eq!(reset_def("activeL activeLow"), Ok(ResetDef {name:"activeL".to_owned(),sync:false,active_high:false}) );
+    assert_eq!(reset_def("default"), Ok(ResetDef {name:"default".to_owned(),sync:false,active_high:false,..Default::default()}) );
+    assert_eq!(reset_def("low_async low async"), Ok(ResetDef {name:"low_async".to_owned(),sync:false,active_high:false,..Default::default()}) );
+    assert_eq!(reset_def("high_async high"), Ok(ResetDef {name:"high_async".to_owned(),sync:false,active_high:true,..Default::default()}) );
+    assert_eq!(reset_def("high_sync sync"), Ok(ResetDef {name:"high_sync".to_owned(),sync:true,active_high:false,..Default::default()}) );
+    assert_eq!(reset_def("activeH activeHigh"), Ok(ResetDef {name:"activeH".to_owned(),sync:false,active_high:true,..Default::default()}) );
+    assert_eq!(reset_def("activeL activeLow"), Ok(ResetDef {name:"activeL".to_owned(),sync:false,active_high:false,..Default::default()}) );
     assert!(reset_def("error invalid option").is_err());
   }
 

@@ -3,7 +3,7 @@ use std::{collections::HashMap, fmt::Display, ops::{Add, Sub}};
 use crate::{error::RifError, parser::parser_expr::{ExprTokens, ParamValues}, rifgen::GenericValues};
 use crate::hdl::LogicExpr;
 
-use super::{Context, Description, InterruptClr, InterruptDesc, InterruptInfoField, InterruptTrigger};
+use super::{Context, Description, InterruptClr, InterruptDesc, InterruptInfoField, InterruptRegKind, InterruptTrigger, DeclLine, DescBlockKind, PropBlocks, PropLines};
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -100,7 +100,7 @@ impl Display for Access {
 }
 
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 /// Enumerated value entry : name, value, floating representation and description
 pub struct EnumEntry {
     /// Name
@@ -111,18 +111,38 @@ pub struct EnumEntry {
     pub repr: Option<f64>,
     /// Description
     pub description: Description,
+    /// Source-tracking metadata for round-tripping edits back to the `.rif` file.
+    pub src: DeclLine,
 }
 
-// pub type EnumDef = Vec<EnumEntry>;
+impl EnumEntry {
+    /// Serialize this entry to its `.rif` source line (without leading indent):
+    /// `- name = value (repr) "description".
+    pub fn to_rif(&self) -> String {
+        let mut s = format!("- {} = {}", self.name, self.value);
+        if let Some(r) = self.repr {
+            s.push_str(&format!(" ({r})"));
+        }
+        s.push_str(&format!(" \"{}\"", self.description.get_short(false)));
+        s
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct EnumDef {
+    /// Enum type name
     pub name: String,
+    /// Enum description
     pub description: String,
+    /// List of all enum variants
     pub values: Vec<EnumEntry>,
+    /// Source-tracking metadata for edition.
+    pub src: DeclLine,
 }
+
 impl EnumDef {
     pub fn new(name: String, description: String) -> Self {
-        EnumDef {name, description, values: Vec::with_capacity(4)}
+        EnumDef {name, description, values: Vec::with_capacity(4), src: DeclLine::default()}
     }
 
     pub fn len(&self) -> usize {
@@ -223,6 +243,22 @@ impl CounterInfo {
     /// True when counter incr/decr are single bit
     pub fn is_single_bit(&self) -> bool {
         self.incr_val <= 1 && self.decr_val <= 1
+    }
+
+    /// Serialize the counter to `.rif` source (without the `counter` keyword):
+    /// `up|down|updown [incrVal=<n>] [decrVal=<n>] [sat] [event] [clr]`.
+    pub fn to_rif(&self) -> String {
+        let mut s = String::from(match self.kind {
+            CounterKind::Up => "up",
+            CounterKind::Down => "down",
+            CounterKind::UpDown => "updown",
+        });
+        if self.incr_val != 0 { s.push_str(&format!(" incrVal={}", self.incr_val)); }
+        if self.decr_val != 0 { s.push_str(&format!(" decrVal={}", self.decr_val)); }
+        if self.sat { s.push_str(" sat"); }
+        if self.event { s.push_str(" event"); }
+        if self.clr { s.push_str(" clr"); }
+        s
     }
 }
 
@@ -408,6 +444,7 @@ impl FieldSwKind {
         !matches!(self, FieldSwKind::WriteOnly | FieldSwKind::ReadWrite | FieldSwKind::ReadOnly)
     }
 
+    /// Return access as a string (used mainly in doc generators)
     pub fn access_str(&self) -> &str {
         match self {
             FieldSwKind::ReadWrite   => "RW",
@@ -420,6 +457,24 @@ impl FieldSwKind {
             FieldSwKind::W1Tgl       => "W1TGL",
             FieldSwKind::W1Pulse(_,_) => "Pulse",
             FieldSwKind::Password(_) => "Password",
+        }
+    }
+
+    /// Inline software-access token for a `.rif` declaration line.
+    /// Return `None` when implicit or when it cannot be expressed as a single inline token
+    pub fn inline_token(&self) -> Option<&'static str> {
+        match self {
+            FieldSwKind::ReadWrite   => None,
+            FieldSwKind::ReadOnly    => Some("ro"),
+            FieldSwKind::WriteOnly   => Some("wo"),
+            FieldSwKind::ReadClr     => Some("rclr"),
+            FieldSwKind::W1Clr       => Some("w1clr"),
+            FieldSwKind::W0Clr       => Some("w0clr"),
+            FieldSwKind::W1Set       => Some("w1set"),
+            FieldSwKind::W1Tgl       => Some("toggle"),
+            FieldSwKind::W1Pulse(false, false) => Some("pulse"),
+            FieldSwKind::W1Pulse(true, false) => Some("pulsereg"),
+            _ => None,
         }
     }
 }
@@ -507,6 +562,17 @@ impl ResetValP {
     //
     pub fn is_signed(&self) -> bool {
         matches!(self,ResetValP::Signed(_) | ResetValP::FloatS(_))
+    }
+
+    /// Format the reset value for a `.rif` declaration line (hex for larger unsigned values).
+    pub fn to_rif(&self) -> String {
+        match self {
+            ResetValP::Unsigned(v) => if *v > 9 { format!("0x{v:x}") } else { format!("{v}") },
+            ResetValP::Signed(v)   => format!("{v}"),
+            ResetValP::FloatU(f) | ResetValP::FloatS(f) => format!("{f}"),
+            ResetValP::Param(p)    => format!("${p}"),
+            ResetValP::Enum(e)     => e.clone(),
+        }
     }
 
     //
@@ -679,11 +745,12 @@ impl From<&str> for Width {
         Width::Param(v.to_owned())
     }
 }
+
 impl Display for Width {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self {
             Width::Value(v) => write!(f, "{v}"),
-            Width::Param(s) => write!(f, "{s}"),
+            Width::Param(s) => write!(f, "${s}"),
         }
     }
 }
@@ -743,6 +810,17 @@ pub enum FieldPos {
     Size(Width),
 }
 
+impl FieldPos {
+    /// Format the position for a `.rif` declaration line: `msb:lsb`, `lsb+:width`, or `Nb`.
+    pub fn to_rif(&self) -> String {
+        match self {
+            FieldPos::MsbLsb((m, l)) => format!("{m}:{l}"),
+            FieldPos::LsbSize((l, w)) => format!("{l}+:{w}"),
+            FieldPos::Size(w) => format!("{w}b"),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum LimitValueP {
     None,
@@ -795,6 +873,21 @@ impl LimitP {
     pub fn compile(&self, signed: bool, nb_frac: isize, params: &ParamValues, enum_def: Option<&EnumDef>) -> Result<Limit,String> {
         let value = self.value.compile(signed, nb_frac, params, enum_def)?;
         Ok(Limit{value, bypass:self.bypass.to_owned()})
+    }
+
+    /// Serialize the limit to `.rif` source (without the `limit` keyword): `<spec> [bypass]`.
+    /// Return `None` when no limit is set.
+    pub fn to_rif(&self) -> Option<String> {
+        let spec = match &self.value {
+            LimitValueP::None => return None,
+            LimitValueP::Min(v) => format!("[{}:]", v.to_rif()),
+            LimitValueP::Max(v) => format!("[:{}]", v.to_rif()),
+            LimitValueP::MinMax(a, b) => format!("[{}:{}]", a.to_rif(), b.to_rif()),
+            LimitValueP::List(vs) => format!("{{{}}}", vs.iter().map(|v| v.to_rif()).collect::<Vec<_>>().join(",")),
+            LimitValueP::Enum => "enum".to_owned(),
+            LimitValueP::External => "external".to_owned(),
+        };
+        Some(if self.bypass.is_empty() { spec } else { format!("{spec} {}", self.bypass) })
     }
 }
 
@@ -861,6 +954,15 @@ impl PasswordInfo {
     pub fn has_hold(&self) -> bool {
         self.protect || (self.once.is_some() && self.hold.is_some())
     }
+
+    /// Serialize the password settings to `.rif` source (without the `password` keyword): `[once=<val>] [hold=<val>] [protect]`.
+    pub fn to_rif(&self) -> String {
+        let mut parts: Vec<String> = Vec::new();
+        if let Some(v) = &self.once { parts.push(format!("once={}", v.to_rif())); }
+        if let Some(v) = &self.hold { parts.push(format!("hold={}", v.to_rif())); }
+        if self.protect { parts.push("protect".to_owned()); }
+        parts.join(" ")
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -921,6 +1023,79 @@ impl Lock {
 
 }
 
+/// Identifies a field property that lives on its own indented source line
+/// Used to track source positions (`SrcInfo::prop_lines`) to support edition.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum FieldProp {
+    Signed,
+    HwAcc,
+    NbFrac,
+    ArrayPosIncr,
+    Lock,
+    Limit,
+    Counter,
+    Password,
+    Visibility,
+    EnumKind,
+    Pulse,
+    Interrupt,
+}
+
+impl FieldProp {
+    /// All managed sub-properties, in the canonical order they are emitted for a new field.
+    pub const ALL: [FieldProp; 12] = [
+        FieldProp::Signed,
+        FieldProp::HwAcc,
+        FieldProp::NbFrac,
+        FieldProp::ArrayPosIncr,
+        FieldProp::Visibility,
+        FieldProp::EnumKind,
+        FieldProp::Limit,
+        FieldProp::Lock,
+        FieldProp::Counter,
+        FieldProp::Password,
+        FieldProp::Pulse,
+        FieldProp::Interrupt,
+    ];
+}
+
+/// Source-tracking metadata attached to a parsed `Field`
+/// to allow edition while preserving original style
+#[derive(Clone, Debug, Default)]
+pub struct FieldSrcInfo {
+    /// Line number of the declaration in its source file.
+    /// `None` when the field was created programmatically rather than parsed.
+    pub decl_line: Option<usize>,
+    /// Whether the source declaration line carried an inline `"description"`.
+    pub has_inline_desc: bool,
+    /// Source line of each managed sub-property present at parse time.
+    pub prop_lines: PropLines<FieldProp>,
+    /// (start, end) source lines of each tracked description-style block: public/private
+    /// `description:`, and, for interrupt-derived fields, `enable`/`mask`/`pending.description:`.
+    pub desc_blocks: PropBlocks<DescBlockKind>,
+}
+
+impl FieldSrcInfo {
+    /// The tracked description-block range for a derived interrupt kind, if any.
+    pub fn intr_desc_range(&self, kind: InterruptRegKind) -> Option<(usize, usize)> {
+        let key = match kind {
+            InterruptRegKind::Enable  => DescBlockKind::IntrEnable,
+            InterruptRegKind::Mask    => DescBlockKind::IntrMask,
+            InterruptRegKind::Pending => DescBlockKind::IntrPending,
+            _ => return None,
+        };
+        self.desc_blocks.get(&key).copied()
+    }
+}
+
+/// Source position never affects equality: see `DeclLine`, which documents the same rule
+/// for `EnumDef`/`EnumEntry`.
+impl PartialEq for FieldSrcInfo {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Field {
     /// Field name
@@ -959,6 +1134,8 @@ pub struct Field {
     pub visibility: VisibilityRaw,
     /// Optional description for interrupt derived register (enable/mask/pending)
     pub intr_desc: Option<InterruptDesc>,
+    /// Interrupt trigger/clear override. Empty when field just inherits the owning register setting
+    pub intr_ovr: InterruptInfoField,
     /// Optional limits on the value which can be writen
     pub limit: LimitP,
     /// Number of fractional bits
@@ -967,6 +1144,8 @@ pub struct Field {
     pub optional: String,
     /// Extra Info
     pub info: HashMap<String,String>,
+    /// Source-tracking metadata for round-tripping edits back to the `.rif` file.
+    pub src: FieldSrcInfo,
 }
 
 impl Default for Field {
@@ -990,10 +1169,12 @@ impl Default for Field {
             lock: Lock(None),
             visibility: VisibilityRaw::Full,
             intr_desc: None,
+            intr_ovr: InterruptInfoField::default(),
             nb_frac : 0,
             limit: LimitP::default(),
             info: HashMap::new(),
             optional: "".to_owned(),
+            src: FieldSrcInfo::default(),
         }
     }
 }
@@ -1070,6 +1251,25 @@ impl Field {
 
     }
 
+    /// Hardware access a field gets implicitly from its software kind
+    pub fn default_hw_acc(&self) -> Access {
+        match self.sw_kind {
+            // Write-only when software access is read or clear
+            FieldSwKind::ReadOnly |
+            FieldSwKind::ReadClr  |
+            FieldSwKind::W1Clr    |
+            FieldSwKind::W0Clr    |
+            FieldSwKind::W1Set    => Access::WO,
+            // Write-only when software access can write a value
+            FieldSwKind::ReadWrite     |
+            FieldSwKind::WriteOnly     |
+            FieldSwKind::W1Tgl         |
+            FieldSwKind::W1Pulse(_, _) => Access::RO,
+            // Not-available for password field
+            FieldSwKind::Password(_) => Access::NA,
+        }
+    }
+
     pub fn set_hw_acc(&mut self, acc: Access) {
         // Handle case when trying to set hardware access as read-only
         // when there is already a hardware write access defined
@@ -1115,7 +1315,7 @@ impl Field {
         self.partial.0.is_some()
     }
 
-    /// Set interrupt settings
+    /// Update the SW/HW kind access to match the interrupt settings
     pub fn set_intr(&mut self, value: InterruptInfoField) {
         if self.hw_kind.is_empty() {
             self.hw_kind.push(FieldHwKind::Interrupt(value.trigger.unwrap_or_default()));
@@ -1129,6 +1329,15 @@ impl Field {
             Some(InterruptClr::Hw)     => self.hw_kind.push(FieldHwKind::Clear(None)),
             None => {}
         };
+    }
+
+    /// Override this field's interrupt trigger/clear.
+    pub fn set_intr_ovr(&mut self, value: InterruptInfoField, reg_default: InterruptInfoField) {
+        self.intr_ovr = value.clone();
+        self.set_intr(InterruptInfoField {
+            trigger: value.trigger.or(reg_default.trigger),
+            clear: value.clear.or(reg_default.clear),
+        });
     }
 
     /// Field width
@@ -1192,4 +1401,157 @@ impl Field {
         self.lock.local_field(regname)
     }
 
+    /// Serialize the field's *declaration line* back to `.rif` syntax, prefixed with `indent`.
+    pub fn fmt_decl(&self, indent: &str) -> String {
+        let mut s = String::with_capacity(indent.len() + self.name.len() + 24);
+        s.push_str(indent);
+        s.push_str("- ");
+        s.push_str(&self.name);
+        if let Width::Value(n) = &self.array
+            && *n > 0
+        {
+            s.push_str(&format!("[{n}]"));
+        }
+        // Reset value (default 0 is still written to keep the line unambiguous when edited).
+        s.push_str(" = ");
+        if self.reset.len() > 1 {
+            s.push_str(&format!("{{{}}}", self.reset.iter().map(|r| r.to_rif()).collect::<Vec<_>>().join(",")));
+        } else {
+            s.push_str(&self.reset.first().unwrap_or(&ResetValP::Unsigned(0)).to_rif());
+        }
+        // Position
+        s.push(' ');
+        s.push_str(&self.pos.to_rif());
+        // Software access kind (omitted for the implicit read/write default)
+        if let Some(tok) = self.sw_kind.inline_token() {
+            s.push(' ');
+            s.push_str(tok);
+        }
+        // Inline short description, only when the source originally had one
+        if self.src.has_inline_desc {
+            let short = self.description.get_short(false);
+            if !short.is_empty() {
+                s.push_str(" \"");
+                s.push_str(&short);
+                s.push('"');
+            }
+        }
+        s
+    }
+
+    /// Serialize a managed sub-property as its canonical `.rif` line, prefixed with `indent`.
+    /// Returns `None` when the property is inactive / at its default.
+    /// Currently not supporting (returning None) for complex `lock` expression,and `disabled` visibility expression).
+    pub fn fmt_prop(&self, prop: FieldProp, indent: &str) -> Option<String> {
+        let body = match prop {
+            FieldProp::Signed => if self.signed { "signed".to_owned() } else { return None },
+            FieldProp::HwAcc => if self.hw_acc == self.default_hw_acc() {
+                return None;
+            } else {
+                format!("hw {}", self.hw_acc.to_string().to_lowercase())
+            },
+            FieldProp::NbFrac => if self.nb_frac != 0 { format!("nbfrac {}", self.nb_frac) } else { return None },
+            FieldProp::ArrayPosIncr => if self.array_pos_incr != 0 { format!("arrayPosIncr {}", self.array_pos_incr) } else { return None },
+            FieldProp::Visibility => match &self.visibility {
+                VisibilityRaw::Hidden => "hidden".to_owned(),
+                VisibilityRaw::Reserved => "reserved".to_owned(),
+                // `disabled` carries an expression that is not serialized yet: leave it alone.
+                VisibilityRaw::Full | VisibilityRaw::Disabled(_) => return None,
+            },
+            FieldProp::EnumKind => match &self.enum_kind {
+                EnumKind::None => return None,
+                EnumKind::Doc(_) => "enum".to_owned(),
+                EnumKind::Type(name) => format!("enum {name}"),
+            },
+            FieldProp::Limit => format!("limit {}", self.limit.to_rif()?),
+            FieldProp::Lock => format!("lock {}", self.lock.expr().as_ref()?.to_rif()?),
+            FieldProp::Counter => {
+                let c = self.hw_kind.iter().find_map(|k| match k {
+                    FieldHwKind::Counter(c) => Some(c),
+                    _ => None,
+                })?;
+                format!("counter {}", c.to_rif())
+            }
+            FieldProp::Password => match &self.sw_kind {
+                FieldSwKind::Password(info) => {
+                    let args = info.to_rif();
+                    if args.is_empty() { "password".to_owned() } else { format!("password {args}") }
+                }
+                _ => return None,
+            },
+            FieldProp::Pulse => match &self.sw_kind {
+                FieldSwKind::W1Pulse(_, _) if self.sw_kind.inline_token().is_some() => return None,
+                FieldSwKind::W1Pulse(true, _) => "pulse reg".to_owned(),
+                FieldSwKind::W1Pulse(false, _) => "pulse comb".to_owned(),
+                _ => return None,
+            },
+            FieldProp::Interrupt => {
+                if self.intr_ovr.trigger.is_none() && self.intr_ovr.clear.is_none() {
+                    return None;
+                }
+                let mut body = "interrupt".to_owned();
+                if let Some(trigger) = self.intr_ovr.trigger {
+                    body.push(' ');
+                    body.push_str(trigger.to_rif());
+                }
+                if let Some(clear) = self.intr_ovr.clear {
+                    body.push(' ');
+                    body.push_str(clear.to_rif());
+                }
+                body
+            }
+        };
+        Some(format!("{indent}{body}"))
+    }
+
+    /// Print all properties lines, in canonical order, prefixed with `indent`.
+    pub fn fmt_prop_all(&self, indent: &str) -> Vec<String> {
+        FieldProp::ALL.iter().filter_map(|&p| self.fmt_prop(p, indent)).collect()
+    }
+
+    /// Serialize the field's public `description:` block.
+    pub fn fmt_desc_block(&self, indent: &str) -> Option<Vec<String>> {
+        let rest = self.description.get_split(true).1?;
+        let body_indent = format!("{indent}  ");
+        let mut lines = vec![format!("{indent}description:")];
+        lines.extend(rest.split('\n').map(|l| format!("{body_indent}{l}")));
+        Some(lines)
+    }
+
+    /// Serialize this field's `{enable,mask,pending}.description:` block
+    pub fn fmt_intr_desc_block(&self, kind: InterruptRegKind, indent: &str) -> Option<Vec<String>> {
+        let intr_desc = self.intr_desc.as_ref()?;
+        let desc = match kind {
+            InterruptRegKind::Enable  => &intr_desc.enable,
+            InterruptRegKind::Mask    => &intr_desc.mask,
+            InterruptRegKind::Pending => &intr_desc.pending,
+            _ => return None,
+        };
+        if desc.is_empty(true) {
+            return None;
+        }
+        let keyword = match kind {
+            InterruptRegKind::Enable  => "enable",
+            InterruptRegKind::Mask    => "mask",
+            InterruptRegKind::Pending => "pending",
+            _ => unreachable!("checked above"),
+        };
+        let body_indent = format!("{indent}  ");
+        let mut lines = vec![format!("{indent}{keyword}.description:")];
+        lines.extend(desc.get(true).split('\n').map(|l| format!("{body_indent}{l}")));
+        Some(lines)
+    }
+
+    /// Mutable access to this field's description override for a derived interrupt kind,
+    pub fn intr_desc_mut(&mut self, kind: InterruptRegKind) -> &mut Description {
+        let intr_desc = self.intr_desc.get_or_insert_with(InterruptDesc::default);
+        match kind {
+            InterruptRegKind::Enable  => &mut intr_desc.enable,
+            InterruptRegKind::Mask    => &mut intr_desc.mask,
+            InterruptRegKind::Pending => &mut intr_desc.pending,
+            _ => unreachable!("Only kind possible Enable/Mask/Pending"),
+        }
+    }
+
 }
+

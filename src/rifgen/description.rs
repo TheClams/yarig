@@ -9,6 +9,7 @@ pub struct Description {
 
 impl Description {
 
+    /// Add one line of description
     pub fn updt(&mut self, desc: &str, is_private: bool) {
         let s = if is_private {&mut self.private} else {&mut self.public};
         if !s.is_empty() {
@@ -23,6 +24,7 @@ impl Description {
         }
     }
 
+    /// Return public/private description as a string
     pub fn get(&self, is_public: bool) -> String {
         let mut desc = String::with_capacity(self.len(is_public));
         desc.push_str(&self.public);
@@ -33,6 +35,17 @@ impl Description {
         desc
     }
 
+    /// Replace the whole public description.
+    pub fn set_public(&mut self, text: &str) {
+        self.public = text.to_owned();
+    }
+
+    /// Replace the whole private description.
+    pub fn set_private(&mut self, text: &str) {
+        self.private = text.to_owned();
+    }
+
+    /// Return first line of description
     pub fn get_short(&self, is_public: bool) -> String {
         let s = if self.public.is_empty() && !is_public {
             &self.private
@@ -46,6 +59,7 @@ impl Description {
         }
     }
 
+    /// Return description as a pair of short/long description
     pub fn get_split(&self, is_public: bool) -> (String, Option<String>) {
         let d = self.get(is_public);
     	match d.find('\n') {
@@ -65,6 +79,7 @@ impl Description {
         self.public.len() + (if is_public {0} else {self.private.len()})
     }
 
+    /// Return description (both public and private) after interpolating the index (if any)
     pub fn interpolate(&self, idx: DescIdx) -> Description {
         let public = Self::interpolate_str(&self.public, idx);
         let private = Self::interpolate_str(&self.private, idx);
@@ -107,15 +122,15 @@ impl Description {
         desc
     }
 
-    // Create a description with $f replace by a format string (for example u8.0 or s5.3)
+    /// Create a description with $f replace by a format string (for example u8.0 or s5.3)
     pub fn with_format(&self, format: &str) -> Description {
         let public = self.public.replace("$f", format);
         let private = self.private.replace("$f", format);
         Description{public, private}
     }
 
-    // Remove the $ special character from description:
-    //  used when we do not want the interpolated version (for register base description typically)
+    /// Remove the $ special character from description:
+    ///  used when we do not want the interpolated version (for register base description typically)
     pub fn no_dollar(&self) -> Description {
         let public = self.public.replace("$i", "").replace("$[]", "").replace('$', "");
         let private = self.private.replace("$i", "").replace("$[]", "").replace('$', "");

@@ -4,14 +4,15 @@ use crate::{
     cfg::{RtlLimit, RtlLimitCfg}, hdl::ExprId,
     parser::{RifGenSrc, RifGenTop, get_rif, parser_expr::{ExprValue, ParamValues}},
     rifgen::{
-        Access, Address, AddressKind, ClockingInfo, CounterInfo, DescIdx, Description, EnumDef, EnumDefs, EnumKind,
+        Access, Address, AddressKind, AddressOffset, ClockingInfo, CounterInfo, DeclLine, DescIdx, Description, EnumDef, EnumDefs, EnumKind,
         ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, GenericRange, GenericValues, Interface, InterruptRegKind,
-        InterruptTrigger, Limit, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegPulseKind, ResetVal, ResetValOverride,
+        InterruptTrigger, Limit, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegOverride, RegPulseKind, ResetVal, ResetValOverride,
         Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SuffixInfo, Visibility, Width,
         order_dict::{OrderDict, OrderedDictIterV}
     }
 };
 use crate::hdl::{LogicExpr, SignalRange, PortList};
+use crate::parser::parser_expr::{ExprTokens, Token};
 
 use super::reg_impl::{HwRegs, RegImpl, RegImplDict};
 
@@ -574,11 +575,8 @@ impl RifPageInst {
         Ok(p)
     }
 
-    pub fn reg_auto_inst(&mut self,
-        rifs: &mut RifsInfo,
-        page: &RifPage,
-        addr_incr: u8,
-    ) -> Result<(), String> {
+    /// Create one instance of each register in the order of their declaration
+    pub fn reg_auto_inst(&mut self, rifs: &mut RifsInfo, page: &RifPage, addr_incr: u8) -> Result<(), String> {
         let mut inst_addr = InstAddr::new(addr_incr);
         for r in page.registers.iter() {
             match r {
@@ -648,6 +646,59 @@ impl RifPageInst {
             }
         }
         Ok(())
+    }
+
+    /// Convert a page from automatic instance to manual
+    pub fn convert_to_manual(&self, page: &RifPage, rifs: &HashMap<String, Rif>) -> Result<Vec<RegInst>, String> {
+        if !page.is_auto() {
+            return Err(format!("Page '{}' is already using manual instancing", page.name));
+        }
+        if !page.instances.is_empty() {
+            return Err(format!(
+                "Page '{}' has {} per-register override(s) in its `instances:` block; converting a page with existing overrides is not supported yet",
+                page.name, page.instances.len()
+            ));
+        }
+        let mut instances = Vec::with_capacity(self.regs.len());
+        for r in self.regs.iter() {
+            if let Some(idx) = r.array.opt_idx() {
+                if !r.array.is_def() {
+                    return Err(format!(
+                        "Register '{}' uses an instance- or generic-driven array; converting is not supported yet", r.reg_name
+                    ));
+                }
+                if idx > 0 {
+                    continue;
+                }
+            }
+            if r.intr_info.0 == InterruptRegKind::Base && !r.intr_info.1.is_empty() {
+                return Err(format!(
+                    "Register '{}' uses a named secondary interrupt block (`alt`); converting is not supported yet", r.reg_name
+                ));
+            }
+            let name = r.reg_name.clone();
+            let mut reg_override = HashMap::new();
+            if let Some(regdef) = page.find_regdef(&r.reg_name, rifs)
+                && !regdef.def.optional.is_empty() {
+                let mut optional = ExprTokens::new(1);
+                optional.push(Token::Var(regdef.def.optional.clone()));
+                reg_override.insert(None, RegOverride {
+                    optional,
+                    optional_acc: Some(regdef.def.optional_acc),
+                    ..Default::default()
+                });
+            }
+            instances.push(RegInst {
+                inst_name: name.clone(),
+                type_name: name,
+                group_name: String::new(),
+                addr: Address::new(AddressKind::Absolute, AddressOffset::Value(r.addr)),
+                array: ExprTokens::new(0),
+                reg_override,
+                src: DeclLine::default(),
+            });
+        }
+        Ok(instances)
     }
 
     /// Add a new register instance

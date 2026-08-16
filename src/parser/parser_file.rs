@@ -13,10 +13,10 @@ use crate::parser::{
     bool_or_default, clk_en, enum_kind, generic_def, intr_desc, is_hidden, limit_def, password_info, path_val, reg_incl_or_decl, reg_inst_array_properties, reg_inst_properties, reg_pulse_info, rif_inst_optional_en, rif_inst_suffix, rifmux_group, rifmux_map, signal_or_expr, val_isize, val_u16
 };
 use crate::rifgen::{
-    Access, AddressOffset, ClockingInfo, Context, DataWidth, EnumDef, EnumKind, ExternalKind, 
-    Field, FieldHwKind, FieldPos, FieldSwKind, GenericValues, InstMode, Interface, InterruptInfo, ItemOptional, 
-    Lock, OverrideIndex, RegDef, RegDefOrIncl, RegInst, RegPulseKind,
-    Rif, RifPage, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility, Width
+    Access, AddressOffset, ClockingInfo, Context, DataWidth, DescBlockKind, EnumDef, EnumKind, ExternalKind,
+    Field, FieldHwKind, FieldOverrideProp, FieldPos, FieldProp, FieldSwKind, GenericValues, InstMode, Interface, InterruptInfo, InterruptInfoField, ItemOptional,
+    Lock, OverrideIndex, RegDef, RegDefOrIncl, RegInst, RegOverrideProp, RegProp, RegPulseKind,
+    Rif, RifPage, RifProp, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility, Width
 };
 use crate::hdl::LogicExpr;
 
@@ -103,6 +103,7 @@ where
     Ok(BufReader::new(file).lines())
 }
 
+
 type ContextStack = Vec<(Context, usize)>;
 
 impl Default for RifGenSrc {
@@ -145,24 +146,7 @@ impl RifGenSrc {
             inc_paths.extend(includes.iter().map(|p| p.into()));
             let mut flist: HashMap<String, PathBuf> = HashMap::new();
             for path in inc_paths.iter() {
-                let Ok(files) = fs::read_dir(path) else {
-                    eprintln!("Unable to read include dir '{path:?}'");
-                    continue;
-                };
-                flist.extend(
-                    files.filter(|p| {
-                        p.as_ref()
-                            .unwrap()
-                            .path()
-                            .extension()
-                            .map(|s| s == "rif")
-                            .unwrap_or(false)
-                    })
-                    .map(|p| {
-                        let path = p.unwrap().path();
-                        let rifname = remove_rif(path.file_stem().unwrap().to_str().unwrap());
-                        (rifname.to_owned(), path)
-                    }));
+                flist.extend(scan_rif_dir(path));
             };
             let mut ref_done = false;
             while !ref_done {
@@ -200,6 +184,7 @@ impl RifGenSrc {
         let mut context_stack: ContextStack = vec![(Context::Top, 0)];
         let mut line_num = 0;
         let mut desc_lvl = 0;
+        let mut block_start_line: Option<usize> = None; // Start line of a block like description (used for source tracking info)
         let mut last_enum : Option<String> = None;
         let mut ovr_idx = OverrideIndex::default();
         let empty_params   = ParamValues::new();
@@ -231,6 +216,58 @@ impl RifGenSrc {
                                 }
                             }
                         }
+                        // Commit the just-finished block's range to its owning node.
+                        Context::Description => {
+                            if let Some(start) = block_start_line.take() {
+                                let block_range = (start, line_num-1);
+                                let hidden = self.last_hidden;
+                                let key = if hidden { DescBlockKind::Private } else { DescBlockKind::Public };
+                                match context_stack.last().map(|c| &c.0) {
+                                    Some(Context::RegDecl) => { self.last_reg_mut().src.desc_blocks.insert(key, block_range); }
+                                    Some(Context::Field) => { self.last_field_mut().src.desc_blocks.insert(key, block_range); }
+                                    Some(Context::RegInst) => {
+                                        if ovr_idx.field_name().is_some() {
+                                            self.last_reg_inst().stamp_field_desc_block(&ovr_idx, key, block_range);
+                                        } else {
+                                            self.last_reg_inst().stamp_desc_block(&ovr_idx, key, block_range);
+                                        }
+                                    }
+                                    Some(Context::Rif) => { self.last_rif_mut().src.desc_blocks.insert(key, block_range); }
+                                    _ => {}
+                                }
+                            }
+                        }
+                        // Same range-commit as `Context::Description` above, but for the primary interrupt's own `{enable,mask,pending}.description:` blocks
+                        Context::DescIntrEnable => {
+                            if let Some(start) = block_start_line.take() {
+                                let block_range = (start, line_num-1);
+                                match context_stack.last().map(|c| &c.0) {
+                                    Some(Context::RegDecl) => { self.last_reg_mut().src.desc_blocks.insert(DescBlockKind::IntrEnable, block_range); }
+                                    Some(Context::Field)   => { self.last_field_mut().src.desc_blocks.insert(DescBlockKind::IntrEnable, block_range); }
+                                    _ => {}
+                                }
+                            }
+                        }
+                        Context::DescIntrMask => {
+                            if let Some(start) = block_start_line.take() {
+                                let block_range = (start, line_num-1);
+                                match context_stack.last().map(|c| &c.0) {
+                                    Some(Context::RegDecl) => { self.last_reg_mut().src.desc_blocks.insert(DescBlockKind::IntrMask, block_range); }
+                                    Some(Context::Field)   => { self.last_field_mut().src.desc_blocks.insert(DescBlockKind::IntrMask, block_range); }
+                                    _ => {}
+                                }
+                            }
+                        }
+                        Context::DescIntrPending => {
+                            if let Some(start) = block_start_line.take() {
+                                let block_range = (start, line_num-1);
+                                match context_stack.last().map(|c| &c.0) {
+                                    Some(Context::RegDecl) => { self.last_reg_mut().src.desc_blocks.insert(DescBlockKind::IntrPending, block_range); }
+                                    Some(Context::Field)   => { self.last_field_mut().src.desc_blocks.insert(DescBlockKind::IntrPending, block_range); }
+                                    _ => {}
+                                }
+                            }
+                        }
                         _ => {}
                     }
                 }
@@ -247,7 +284,8 @@ impl RifGenSrc {
                         }
                         self.last_obj = name.to_owned();
                         self.rst_idx = (0, 0);
-                        let rif = Rif::new(name);
+                        let mut rif = Rif::new(name);
+                        rif.src.decl_line = Some(line_num);
                         self.rifs.insert(name.to_owned(), rif);
                         self.paths.insert(remove_rif(name).to_owned(), filedir.clone());
                         self.last_data_width = DataWidth::default();
@@ -275,14 +313,18 @@ impl RifGenSrc {
                     match info {
                         Context::Description => {
                             self.last_hidden = is_hidden(&mut l)?;
+                            let hidden = self.last_hidden;
+                            block_start_line = Some(line_num);
                             if !l.is_empty() {
-                                let hidden = self.last_hidden;
                                 self.last_rif_mut().description.updt(desc(l)?, hidden);
                             }
                             context_stack.push((Context::Description, ilvl + 1));
                             desc_lvl = 0;
                         }
-                        Context::Parameters => context_stack.push((Context::Parameters, ilvl + 1)),
+                        Context::Parameters => {
+                            self.last_rif_mut().src.params_header_line = Some(line_num);
+                            context_stack.push((Context::Parameters, ilvl + 1));
+                        }
                         Context::Info => context_stack.push((Context::Info, ilvl + 1)),
                         Context::Interface => {
                             let intf = val_intf(&mut l)?;
@@ -294,33 +336,66 @@ impl RifGenSrc {
                                 self.last_rif_mut().sw_clocking.push(sw_clocking);
                             }
                             self.last_rif_mut().interface = intf;
+                            self.last_rif_mut().src.prop_lines.insert(RifProp::Interface, line_num);
                         }
-                        Context::AddrWidth => self.last_rif_mut().addr_width = val_u8(&mut l)?,
+                        Context::AddrWidth => {
+                            self.last_rif_mut().addr_width = val_u8(&mut l)?;
+                            self.last_rif_mut().src.prop_lines.insert(RifProp::AddrWidth, line_num);
+                        }
                         Context::DataWidth => {
                             let w = val_u8(&mut l)?.try_into()?;
                             self.last_rif_mut().data_width = w;
                             self.last_data_width = w;
+                            self.last_rif_mut().src.prop_lines.insert(RifProp::DataWidth, line_num);
                         }
-                        Context::SwClock => self.last_rif_mut().set_sw_clk(vec_id(l)?),
+                        Context::SwClock => {
+                            self.last_rif_mut().set_sw_clk(vec_id(l)?);
+                            self.last_rif_mut().src.prop_lines.insert(RifProp::SwClock, line_num);
+                        }
                         Context::SwReset => {
                             let idx = self.rst_idx.0;
                             self.last_rif_mut().set_sw_rst(idx, reset_def(l)?);
                             self.rst_idx.0 += 1;
+                            if let Some(sw) = self.last_rif_mut().sw_clocking.get_mut(idx) {
+                                sw.rst.src.decl_line = Some(line_num);
+                            }
                         }
-                        Context::SwClkEn => self.last_rif_mut().set_sw_clken(vec_id(l)?),
-                        Context::SwClear => self.last_rif_mut().set_sw_clear(vec_id(l)?),
-                        Context::HwClock => self.last_rif_mut().set_hw_clk(vec_id(l)?),
-                        Context::HwClkEn => self.last_rif_mut().set_hw_clken(vec_id(l)?),
+                        Context::SwClkEn => {
+                            self.last_rif_mut().set_sw_clken(vec_id(l)?);
+                            self.last_rif_mut().src.prop_lines.insert(RifProp::SwClkEn, line_num);
+                        }
+                        Context::SwClear => {
+                            self.last_rif_mut().set_sw_clear(vec_id(l)?);
+                            self.last_rif_mut().src.prop_lines.insert(RifProp::SwClear, line_num);
+                        }
+                        Context::HwClock => {
+                            self.last_rif_mut().set_hw_clk(vec_id(l)?);
+                            self.last_rif_mut().src.prop_lines.insert(RifProp::HwClock, line_num);
+                        }
+                        Context::HwClkEn => {
+                            self.last_rif_mut().set_hw_clken(vec_id(l)?);
+                            self.last_rif_mut().src.prop_lines.insert(RifProp::HwClkEn, line_num);
+                        }
                         Context::HwReset => {
                             let idx = self.rst_idx.1;
                             self.last_rif_mut().set_hw_rst(idx, reset_def(l)?);
                             self.rst_idx.1 += 1;
+                            if let Some(hw) = self.last_rif_mut().hw_clocking.get_mut(idx) {
+                                hw.rst.src.decl_line = Some(line_num);
+                            }
                         }
-                        Context::HwClear => self.last_rif_mut().set_hw_clear(vec_id(l)?),
+                        Context::HwClear => {
+                            self.last_rif_mut().set_hw_clear(vec_id(l)?);
+                            self.last_rif_mut().src.prop_lines.insert(RifProp::HwClear, line_num);
+                        }
                         Context::SuffixPkg => {
-                            self.last_rif_mut().suffix_pkg = bool_or_default(l, false)?
+                            self.last_rif_mut().suffix_pkg = bool_or_default(l, false)?;
+                            self.last_rif_mut().src.prop_lines.insert(RifProp::SuffixPkg, line_num);
                         }
-                        Context::Generics => context_stack.push((Context::Generics, ilvl + 1)),
+                        Context::Generics => {
+                            self.last_rif_mut().src.generics_header_line = Some(line_num);
+                            context_stack.push((Context::Generics, ilvl + 1));
+                        }
                         Context::Item(name) => {
                             self.last_rif_mut().pages.push(RifPage::new(name));
                             if !l.is_empty() {
@@ -355,6 +430,7 @@ impl RifGenSrc {
                                 return Err(RifError::duplicated(Context::Parameters, k));
                             }
                             last_rif.add_param(k,expr);
+                            last_rif.src.param_lines.insert(k.to_owned(), line_num);
                         }
                         Some((Context::RifInst, _)) => self.last_rif_inst().add_param(k,expr),
                         _ => unreachable!(), // Should never fail
@@ -376,7 +452,9 @@ impl RifGenSrc {
                             if last_rif.parameters.contains_key(gen_def.0) {
                                 return Err(RifError::duplicated(Context::Generics, gen_def.0));
                             }
+                            let gen_name = gen_def.0.to_owned();
                             last_rif.add_generic(gen_def);
+                            last_rif.src.generic_lines.insert(gen_name, line_num);
                         }
                         _ => unreachable!(), // Should never fail
                     }
@@ -404,6 +482,7 @@ impl RifGenSrc {
                                 inst_auto = InstMode::AutoLegacy;
                             }
                             self.last_page_mut().inst_auto = inst_auto;
+                            self.last_page_mut().instances_decl.decl_line = Some(line_num);
                             context_stack.push((Context::Instances, ilvl + 1));
                         }
                         Context::Optional => self.last_page_mut().optional = l.to_owned(),
@@ -435,13 +514,15 @@ impl RifGenSrc {
                             refs.insert(identifier(&mut l)?.to_owned());
                         }
                         Context::Registers => {
-                            let r = reg_decl(l)?;
+                            let mut r = reg_decl(l)?;
                             if !self.check_reg_uniq(&r.name) {
                                 return Err(RifError::duplicated(info, &r.name));
                             }
                             if let Some(rif_name) = &r.group.pkg {
                                 refs.insert(rif_name.to_owned());
                             }
+                            // Record the source line so the declaration can be edited in place
+                            r.src.decl_line = Some(line_num);
                             self.last_page_mut().registers.push(RegDefOrIncl::Def(Box::new(r)));
                             context_stack.push((Context::RegDecl, ilvl + 1));
                         }
@@ -456,8 +537,9 @@ impl RifGenSrc {
                         Context::Info => context_stack.push((Context::Info, ilvl + 1)),
                         Context::Description => {
                             self.last_hidden = is_hidden(&mut l)?;
+                            let hidden = self.last_hidden;
+                            block_start_line = Some(line_num);
                             if !l.is_empty() {
-                                let hidden = self.last_hidden;
                                 self.last_reg_mut().description.updt(desc(l)?, hidden);
                             }
                             context_stack.push((Context::Description, ilvl + 1));
@@ -467,6 +549,7 @@ impl RifGenSrc {
                         | Context::DescIntrMask
                         | Context::DescIntrPending => {
                             self.last_hidden = is_hidden(&mut l)?;
+                            block_start_line = Some(line_num);
                             if !l.is_empty() {
                                 let hidden = self.last_hidden;
                                 self.last_reg_mut().desc_intr_updt(&info, "", desc(l)?, hidden)?;
@@ -482,7 +565,10 @@ impl RifGenSrc {
                             }
                             context_stack.push((info_desc, ilvl + 1));
                         }
-                        Context::HwClock => self.last_reg_mut().clk = Some(identifier_last(l)?.to_owned()),
+                        Context::HwClock => {
+                            self.last_reg_mut().clk = Some(identifier_last(l)?.to_owned());
+                            self.last_reg_mut().src.prop_lines.insert(RegProp::Clock, line_num);
+                        }
                         Context::HwClkEn => self.last_reg_mut().clk_en = clk_en(l)?,
                         Context::HwClear => {
                             let expr = opt_signal_or_expr(l)?;
@@ -494,24 +580,34 @@ impl RifGenSrc {
                             self.last_reg_mut().clear = clear;
                         }
                         Context::HwReset => {
-                            self.last_reg_mut().rst = Some(identifier_last(l)?.to_owned())
+                            self.last_reg_mut().rst = Some(identifier_last(l)?.to_owned());
+                            self.last_reg_mut().src.prop_lines.insert(RegProp::Reset, line_num);
                         }
-                        Context::External => self.last_reg_mut().external = ExternalKind::ReadWrite,
-                        Context::ExternalDone => self.last_reg_mut().external = ExternalKind::Done,
+                        Context::External => {
+                            self.last_reg_mut().external = ExternalKind::ReadWrite;
+                            self.last_reg_mut().src.prop_lines.insert(RegProp::External, line_num);
+                        }
+                        Context::ExternalDone => {
+                            self.last_reg_mut().external = ExternalKind::Done;
+                            self.last_reg_mut().src.prop_lines.insert(RegProp::External, line_num);
+                        }
                         Context::RegPulseWr => {
                             let clk = self.last_rif().sw_clocking.last().map(|sw| sw.clk.as_str()).unwrap_or("clk");
                             let n = reg_pulse_info(&mut l, clk, true)?;
                             self.last_reg_mut().pulse.push(RegPulseKind::Write(n));
+                            self.last_reg_mut().src.prop_lines.insert(RegProp::WrPulse, line_num);
                         },
                         Context::RegPulseRd => {
                             let clk = self.last_rif().sw_clocking.last().map(|sw| sw.clk.as_str()).unwrap_or("clk");
                             let n = reg_pulse_info(&mut l, clk, false)?;
                             self.last_reg_mut().pulse.push(RegPulseKind::Read(n));
+                            self.last_reg_mut().src.prop_lines.insert(RegProp::RdPulse, line_num);
                         },
                         Context::RegPulseAcc => {
                             let clk = self.last_rif().sw_clocking.last().map(|sw| sw.clk.as_str()).unwrap_or("clk");
                             let n = reg_pulse_info(&mut l, clk, false)?;
                             self.last_reg_mut().pulse.push(RegPulseKind::Access(n));
+                            self.last_reg_mut().src.prop_lines.insert(RegProp::AccPulse, line_num);
                         },
                         Context::Interrupt => {
                             let info = reg_interrupt(&mut l)?;
@@ -520,6 +616,7 @@ impl RifGenSrc {
                                 eprintln!("[WARNING] Ignoring extra character '{l}' in interrupt definition of {}.{} (line {line_num})", self.last_rif().name, self.last_reg().name);
                             }
                             self.last_reg_mut().interrupt.push(InterruptInfo::new("", info));
+                            self.last_reg_mut().src.prop_lines.insert(RegProp::Interrupt, line_num);
                         },
                         Context::InterruptAlt => {
                             let name = identifier(&mut l)?;
@@ -533,13 +630,22 @@ impl RifGenSrc {
                                 if info.4.is_none() {info.4 = Some(intf_def.pending);}
                             }
                             self.last_reg_mut().interrupt.push(InterruptInfo::new(name, info));
+                            self.last_reg_mut().src.prop_lines.insert(RegProp::InterruptAlt, line_num);
                         },
                         Context::Optional => self.last_reg_mut().optional = l.to_owned(),
                         Context::OptionalAcc => self.last_reg_mut().optional_acc = field_acc(&mut l)?,
-                        Context::Hidden => self.last_reg_mut().hidden(),
-                        Context::Reserved => self.last_reg_mut().reserved(),
+                        Context::Hidden => {
+                            self.last_reg_mut().hidden();
+                            self.last_reg_mut().src.prop_lines.insert(RegProp::Visibility, line_num);
+                        }
+                        Context::Reserved => {
+                            self.last_reg_mut().reserved();
+                            self.last_reg_mut().src.prop_lines.insert(RegProp::Visibility, line_num);
+                        }
                         Context::Item(_) => {
                             let mut f = field_decl(&mut l)?;
+                            // Record the source line so the declaration can be edited in place
+                            f.src.decl_line = Some(line_num);
                             if f.array != Width::Value(0) && matches!(f.pos, FieldPos::Size(Width::Param(_))) {
                                 return Err(RifError::unsupported(info, &format!("Field {} is an array with generic width: not supported yet !", f.name)));
                             }
@@ -568,8 +674,9 @@ impl RifGenSrc {
                     match info {
                         Context::Description => {
                             self.last_hidden = is_hidden(&mut l)?;
+                            let hidden = self.last_hidden;
+                            block_start_line = Some(line_num);
                             if !l.is_empty() {
-                                let hidden = self.last_hidden;
                                 self.last_field_mut().description.updt(desc(l)?, hidden);
                             }
                             context_stack.push((Context::Description, ilvl + 1));
@@ -579,6 +686,7 @@ impl RifGenSrc {
                         | Context::DescIntrMask
                         | Context::DescIntrPending => {
                             self.last_hidden = is_hidden(&mut l)?;
+                            block_start_line = Some(line_num);
                             if !l.is_empty() {
                                 let hidden = self.last_hidden;
                                 self.last_field_mut().desc_intr_updt(&info, desc(l)?, hidden);
@@ -596,7 +704,10 @@ impl RifGenSrc {
                             };
                             self.last_field_mut().clear = clear;
                         }
-                        Context::HwAccess => self.last_field_mut().set_hw_acc(field_acc(&mut l)?),
+                        Context::HwAccess => {
+                            self.last_field_mut().set_hw_acc(field_acc(&mut l)?);
+                            self.last_field_mut().src.prop_lines.insert(FieldProp::HwAcc, line_num);
+                        }
                         Context::HwSet => {
                             self.last_field_mut()
                                 .set_hw_kind(FieldHwKind::Set(opt_signal_or_expr(l)?.map(|v| v.to_owned())))?;
@@ -610,27 +721,35 @@ impl RifGenSrc {
                                 .set_hw_kind(FieldHwKind::Toggle(opt_signal_or_expr(l)?.map(|v| v.to_owned())))?;
                         }
                         Context::HwLock => {
-                            self.last_field_mut().lock = Lock::new(signal_or_expr(l)?.to_owned())
+                            self.last_field_mut().lock = Lock::new(signal_or_expr(l)?.to_owned());
+                            self.last_field_mut().src.prop_lines.insert(FieldProp::Lock, line_num);
                         }
                         Context::Pulse => {
                             let wo = self.last_field_mut().sw_kind==FieldSwKind::WriteOnly;
                             self.last_field_mut()
                                 .set_sw_kind(FieldSwKind::W1Pulse(pulse_kind(l)?, wo))?;
+                            self.last_field_mut().src.prop_lines.insert(FieldProp::Pulse, line_num);
                         }
                         Context::Toggle => {
                             self.last_field_mut().set_sw_kind(FieldSwKind::W1Tgl)?;
                         }
                         Context::Password => {
                             self.last_field_mut().set_sw_kind(FieldSwKind::Password(password_info(l)?))?;
+                            self.last_field_mut().src.prop_lines.insert(FieldProp::Password, line_num);
                         }
                         Context::Interrupt => {
-                            self.last_field_mut().set_intr(field_interrupt(&mut l)?);
+                            let reg_default = self.last_reg().interrupt.first()
+                                .map(|intr| InterruptInfoField { trigger: Some(intr.trigger), clear: Some(intr.clear) })
+                                .unwrap_or_default();
+                            self.last_field_mut().set_intr_ovr(field_interrupt(&mut l)?, reg_default);
+                            self.last_field_mut().src.prop_lines.insert(FieldProp::Interrupt, line_num);
                         }
                         Context::SwSet => {
                             return Err(RifError::unsupported(info, l));
                         }
                         Context::Signed => {
                             self.last_field_mut().set_signed();
+                            self.last_field_mut().src.prop_lines.insert(FieldProp::Signed, line_num);
                         }
                         Context::HwWe => {
                             self.last_field_mut().set_hw_kind(FieldHwKind::WriteEn(
@@ -645,13 +764,26 @@ impl RifGenSrc {
                         Context::Counter => {
                             self.last_field_mut()
                                 .set_hw_kind(FieldHwKind::Counter(counter_def(l)?))?;
+                            self.last_field_mut().src.prop_lines.insert(FieldProp::Counter, line_num);
                         }
                         Context::Partial => self.last_field_mut().partial.0 = Some(val_u16(&mut l)?),
-                        Context::Hidden => self.last_field_mut().hidden(),
-                        Context::Reserved => self.last_field_mut().reserved(),
-                        Context::Disabled => self.last_field_mut().disabled(parse_expr(l)?),
+                        Context::Hidden => {
+                            self.last_field_mut().hidden();
+                            self.last_field_mut().src.prop_lines.insert(FieldProp::Visibility, line_num);
+                        }
+                        Context::Reserved => {
+                            self.last_field_mut().reserved();
+                            self.last_field_mut().src.prop_lines.insert(FieldProp::Visibility, line_num);
+                        }
+                        Context::Disabled => {
+                            self.last_field_mut().disabled(parse_expr(l)?);
+                            self.last_field_mut().src.prop_lines.insert(FieldProp::Visibility, line_num);
+                        }
                         Context::Optional => self.last_field_mut().optional = l.to_owned(),
-                        Context::ArrayPosIncr => self.last_field_mut().array_pos_incr = val_u8(&mut l)?,
+                        Context::ArrayPosIncr => {
+                            self.last_field_mut().array_pos_incr = val_u8(&mut l)?;
+                            self.last_field_mut().src.prop_lines.insert(FieldProp::ArrayPosIncr, line_num);
+                        }
                         Context::ArrayPartial => self.last_field_mut().partial.1 = val_u16(&mut l)?,
                         Context::Enum => {
                             let regname = self.last_reg().get_group_name().to_owned();
@@ -663,7 +795,8 @@ impl RifGenSrc {
                                     if desc.is_empty() {
                                         desc = self.last_field_mut().description.get_short(true);
                                     }
-                                    let enum_def = EnumDef::new(enum_name.to_owned(), desc);
+                                    let mut enum_def = EnumDef::new(enum_name.to_owned(), desc);
+                                    enum_def.src.decl_line = Some(line_num);
                                     last_enum = Some(enum_def.name.to_owned());
                                     self.last_rif_mut().enum_defs.push(enum_def);
                                     context_stack.push((Context::Enum, ilvl + 1));
@@ -672,9 +805,16 @@ impl RifGenSrc {
                                 }
                             }
                             self.last_field_mut().enum_kind = enum_kind;
+                            self.last_field_mut().src.prop_lines.insert(FieldProp::EnumKind, line_num);
                         }
-                        Context::Limit => self.last_field_mut().limit = limit_def(l)?,
-                        Context::FieldFrac => self.last_field_mut().nb_frac = val_isize(&mut l)?,
+                        Context::Limit => {
+                            self.last_field_mut().limit = limit_def(l)?;
+                            self.last_field_mut().src.prop_lines.insert(FieldProp::Limit, line_num);
+                        }
+                        Context::FieldFrac => {
+                            self.last_field_mut().nb_frac = val_isize(&mut l)?;
+                            self.last_field_mut().src.prop_lines.insert(FieldProp::NbFrac, line_num);
+                        }
                         _ => {
                             return Err(RifError::unsupported(info, l));
                         }
@@ -725,7 +865,8 @@ impl RifGenSrc {
                 // Enum definition
                 Context::Enum => {
                     if let Some(name) = &last_enum {
-                        let entry = enum_entry(l)?;
+                        let mut entry = enum_entry(l)?;
+                        entry.src.decl_line = Some(line_num);
                         if let Ok(field_width) = self.last_field().width((&empty_params, &empty_generics)) && entry.value as u16 >= (1<<field_width) {
                             return Err(RifError::generic(&format!("Enum value {name}.{} = {}, does not fit the field width {field_width}", entry.name, entry.value)));
                         }
@@ -734,10 +875,12 @@ impl RifGenSrc {
                 }
                 // Instances
                 Context::Instances => {
-                    let inst = reg_inst(l)?;
+                    let mut inst = reg_inst(l)?;
                     if let AddressOffset::Value(addr) = &inst.addr.offset && (addr & self.last_data_width.addr_mask()) != 0 {
                         return Err(RifErrorKind::AddrUnaligned.into())
                     }
+                    // Record the source line so the declaration can be edited in place
+                    inst.src.decl_line = Some(line_num);
                     self.last_page_mut().instances.push(inst);
                     context_stack.push((Context::RegInst, ilvl + 1));
                 }
@@ -822,21 +965,29 @@ impl RifGenSrc {
                     match info {
                         Context::Description => {
                             self.last_hidden = is_hidden(&mut l)?;
+                            let hidden = self.last_hidden;
+                            block_start_line = Some(line_num);
                             if !l.is_empty() {
-                                let hidden = self.last_hidden;
                                 self.last_reg_inst().desc_updt(&ovr_idx, desc(l)?, hidden);
                             }
+                            if !hidden {
+                                self.last_reg_inst().stamp_prop(&ovr_idx, RegOverrideProp::Description, line_num);
+                            }
                             context_stack.push((Context::Description, ilvl + 1));
+                            desc_lvl = 0;
                         }
                         Context::Optional => {
                             self.last_reg_inst().set_optional(&ovr_idx, parse_expr(l)?);
+                            self.last_reg_inst().stamp_prop(&ovr_idx, RegOverrideProp::Optional, line_num);
                         }
                         Context::OptionalAcc => {
                             self.last_reg_inst().set_optional_acc(&ovr_idx, field_acc(&mut l)?);
+                            self.last_reg_inst().stamp_prop(&ovr_idx, RegOverrideProp::OptionalAcc, line_num);
                         }
-                        Context::HwAccess => self
-                            .last_reg_inst()
-                            .set_hw_acc(&ovr_idx, field_acc(&mut l)?),
+                        Context::HwAccess => {
+                            self.last_reg_inst().set_hw_acc(&ovr_idx, field_acc(&mut l)?);
+                            self.last_reg_inst().stamp_prop(&ovr_idx, RegOverrideProp::Hw, line_num);
+                        }
                         Context::Hidden => {
                             let v = if bool_or_default(l, true)? {
                                 Visibility::Hidden
@@ -851,14 +1002,20 @@ impl RifGenSrc {
                             match info {
                                 Context::Description => {
                                     self.last_hidden = is_hidden(&mut l)?;
+                                    let hidden = self.last_hidden;
+                                    block_start_line = Some(line_num);
                                     if !l.is_empty() {
-                                        let hidden = self.last_hidden;
                                         self.last_reg_inst().desc_updt(&ovr_idx, desc(l)?, hidden);
                                     }
+                                    if !hidden {
+                                        self.last_reg_inst().stamp_prop(&ovr_idx, RegOverrideProp::Description, line_num);
+                                    }
                                     context_stack.push((Context::Description, ilvl + 1));
+                                    desc_lvl = 0;
                                 }
                                 Context::Optional => {
-                                    self.last_reg_inst().set_optional(&ovr_idx,  parse_expr(l)?)
+                                    self.last_reg_inst().set_optional(&ovr_idx,  parse_expr(l)?);
+                                    self.last_reg_inst().stamp_prop(&ovr_idx, RegOverrideProp::Optional, line_num);
                                 }
                                 Context::Address(addr) => {
                                     self.last_reg_inst().set_addr(&ovr_idx, addr);
@@ -888,7 +1045,7 @@ impl RifGenSrc {
                                 }
                                 Context::Item(n) => {
                                     ovr_idx.set_field_name(n);
-                                    self.parse_inst_field(&mut context_stack, ilvl, &ovr_idx, &mut l)?;
+                                    self.parse_inst_field(&mut context_stack, ilvl, &ovr_idx, &mut l, line_num, &mut block_start_line)?;
                                 }
                                 _ => {
                                     return Err(RifError::unsupported(info, l));
@@ -897,11 +1054,11 @@ impl RifGenSrc {
                         }
                         Context::Item(n) => {
                             ovr_idx.set_field_name(n);
-                            self.parse_inst_field(&mut context_stack, ilvl, &ovr_idx, &mut l)?;
+                            self.parse_inst_field(&mut context_stack, ilvl, &ovr_idx, &mut l, line_num, &mut block_start_line)?;
                         }
                         Context::FieldIndex((n,i)) => {
                             ovr_idx.set_field_list(n,i);
-                            self.parse_inst_field(&mut context_stack, ilvl, &ovr_idx, &mut l)?;
+                            self.parse_inst_field(&mut context_stack, ilvl, &ovr_idx, &mut l, line_num, &mut block_start_line)?;
                         }
                         _ => {
                             return Err(RifError::unsupported(info, l));
@@ -1026,14 +1183,24 @@ impl RifGenSrc {
         ilvl: usize,
         ovr_idx: &OverrideIndex,
         line: &mut &str,
+        line_num: usize,
+        block_start_line: &mut Option<usize>,
     ) -> Result<(), RifError> {
         let info = reg_inst_field_properties(line)?;
+        // Stamps every `FieldOverride` entry `ovr_idx` targets: whole-field, a single field index, or a field index list
+        let stamp = |this: &mut Self, prop: FieldOverrideProp| {
+            this.last_reg_inst().stamp_field_prop(ovr_idx, prop, line_num);
+        };
         match info {
             Context::Description => {
                 self.last_hidden = is_hidden(line)?;
+                let hidden = self.last_hidden;
+                *block_start_line = Some(line_num);
                 if !line.is_empty() {
-                    let hidden = self.last_hidden;
                     self.last_reg_inst().desc_updt(ovr_idx, desc(line)?, hidden);
+                }
+                if !hidden {
+                    stamp(self, FieldOverrideProp::Description);
                 }
                 context_stack.push((Context::Description, ilvl + 1));
             }
@@ -1059,9 +1226,11 @@ impl RifGenSrc {
                 if let Ok(r) = reset_val(line) {
                     self.last_reg_inst().set_reset(ovr_idx, r);
                 }
+                stamp(self, FieldOverrideProp::Reset);
             }
             Context::HwReset => {
                 self.last_reg_inst().set_reset(ovr_idx, reset_val(line)?);
+                stamp(self, FieldOverrideProp::Reset);
             }
             Context::Limit => {
                 self.last_reg_inst().set_limit(ovr_idx, limit_def(line)?);
@@ -1096,6 +1265,33 @@ impl RifGenSrc {
     }
 }
 
+
+/// Scan a directory for `.rif` files, mapping each file's normalized name to its path.
+pub fn scan_rif_dir<P: AsRef<Path>>(dir: P) -> HashMap<String, PathBuf> {
+    let mut flist = HashMap::new();
+    let Ok(files) = fs::read_dir(dir.as_ref()) else {
+        eprintln!("Unable to read include dir '{:?}'", dir.as_ref());
+        return flist;
+    };
+    flist.extend(
+        files.filter_map(Result::ok)
+            .map(|p| p.path())
+            .filter(|p| p.extension().map(|s| s == "rif").unwrap_or(false))
+            .filter_map(|p| {
+                let rifname = remove_rif(p.file_stem()?.to_str()?).to_owned();
+                Some((rifname, p))
+            })
+    );
+    flist
+}
+
+/// Find the `.rif` file that declares `name`, searching `dirs` in order (a later directory's
+/// match overrides an earlier one, mirroring [`RifGenSrc::from_file`]'s own precedence between
+/// a file's own directory and its include paths).
+pub fn find_rif_file<P: AsRef<Path>>(name: &str, dirs: &[P]) -> Option<PathBuf> {
+    let key = remove_rif(name);
+    dirs.iter().filter_map(|dir| scan_rif_dir(dir).remove(key)).last()
+}
 
 // Remove prefix/suffix rif from a string
 pub fn remove_rif(name: &str) -> &str {

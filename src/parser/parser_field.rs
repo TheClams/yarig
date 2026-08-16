@@ -1,5 +1,5 @@
 use crate::{parser::comment, rifgen::{
-    Access, ClkEn, Context, CounterInfo, CounterKind, EnumEntry, Field, FieldPos, FieldSwKind, InterruptInfoField, LimitP, LimitValueP, PasswordInfo, ResetValP
+    Access, ClkEn, Context, CounterInfo, CounterKind, DeclLine, EnumEntry, Field, FieldPos, FieldSwKind, InterruptInfoField, LimitP, LimitValueP, PasswordInfo, ResetValP
 }};
 
 use winnow::{
@@ -74,16 +74,17 @@ pub fn field_decl<'a>(input: &mut &'a str) -> Res<'a, Field> {
     if !input.is_empty() {
         comment(input).map_err(|_| winnow::error::ErrMode::Incomplete(winnow::error::Needed::Unknown))?;
     }
-    Ok(
-        Field::new(
-            name,
-            reset_val.unwrap_or(vec![]),
-            pos,
-            kind,
-            array_size,
-            desc.unwrap_or(""),
-        ),
-    )
+    let mut field = Field::new(
+        name,
+        reset_val.unwrap_or(vec![]),
+        pos,
+        kind,
+        array_size,
+        desc.unwrap_or(""),
+    );
+    // Remember whether an inline description was present to support editition of a field properties
+    field.src.has_inline_desc = desc.is_some();
+    Ok(field)
 }
 
 pub fn field_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
@@ -206,6 +207,7 @@ pub fn enum_entry(input: &str) -> ResF<'_, EnumEntry> {
         value: info.1,
         repr: info.2,
         description: info.3.into(),
+        src: DeclLine::default(),
     })
 }
 
@@ -365,7 +367,7 @@ pub fn password_info(input: &str) -> ResF<'_, PasswordInfo> {
 mod tests_parsing {
 
     use super::*;
-    use crate::rifgen::{FieldSwKind, ResetValP, Width};
+    use crate::rifgen::{DeclLine, FieldSwKind, ResetValP, FieldSrcInfo, Width};
 
     #[test]
     fn test_reset_val() {
@@ -418,6 +420,7 @@ mod tests_parsing {
                     reset: vec![ResetValP::Unsigned(24)],
                     array: Width::Value(0),
                     hw_acc: Access::RO,
+                    src: FieldSrcInfo { has_inline_desc: true, ..Default::default() },
                     ..Default::default()
                 }
             )
@@ -433,6 +436,7 @@ mod tests_parsing {
                     array: Width::Value(0),
                     hw_acc: Access::WO,
                     sw_kind: FieldSwKind::ReadOnly,
+                    src: FieldSrcInfo { has_inline_desc: true, ..Default::default() },
                     ..Default::default()
                 }
             )
@@ -448,6 +452,7 @@ mod tests_parsing {
                     array: Width::Value(0),
                     hw_acc: Access::WO,
                     sw_kind: FieldSwKind::ReadOnly,
+                    src: FieldSrcInfo { has_inline_desc: true, ..Default::default() },
                     ..Default::default()
                 }
             )
@@ -462,10 +467,27 @@ mod tests_parsing {
                     reset: vec![ResetValP::Unsigned(13), ResetValP::Signed(-37)],
                     array: Width::Value(4),
                     hw_acc: Access::RO,
+                    src: FieldSrcInfo { has_inline_desc: true, ..Default::default() },
                     ..Default::default()
                 }
             )
         );
+    }
+
+    #[test]
+    fn test_field_fmt_decl() {
+        // Inline description and access token are reproduced (reset normalized to decimal)
+        let f = field_decl(&mut "field_constant = 0x3 10:5 ro  \"Field Constant\"").unwrap();
+        assert_eq!(f.fmt_decl(""), "- field_constant = 3 10:5 ro \"Field Constant\"");
+        // Indentation is prefixed; read/write default emits no access token
+        let f = field_decl(&mut "en = 1 0:0 \"Enable\"").unwrap();
+        assert_eq!(f.fmt_decl("  "), "  - en = 1 0:0 \"Enable\"");
+        // No inline description in the source -> none emitted (and implicit RO is made explicit)
+        let f = field_decl(&mut "raw 7:0").unwrap();
+        assert_eq!(f.fmt_decl(""), "- raw = 0 7:0 ro");
+        // A generic-width position keeps its `$name` reference on re-serialization: `Width`'s
+        let f = field_decl(&mut "field_gen 7+:$MY_GEN \"Generic width\"").unwrap();
+        assert_eq!(f.fmt_decl(""), "- field_gen = 0 7+:$MY_GEN ro \"Generic width\"");
     }
 
     #[test]
@@ -476,7 +498,8 @@ mod tests_parsing {
                 name: "VAL0".to_owned(),
                 value: 5,
                 repr: None,
-                description: "F0 Value 0".into()
+                description: "F0 Value 0".into(),
+                src: DeclLine::default(),
             })
         );
         assert_eq!(
@@ -485,7 +508,8 @@ mod tests_parsing {
                 name: "VAL1".to_owned(),
                 value: 5,
                 repr: Some(5000.0),
-                description: "F1 Value 1".into()
+                description: "F1 Value 1".into(),
+                src: DeclLine::default(),
             })
         );
         assert_eq!(
@@ -494,7 +518,8 @@ mod tests_parsing {
                 name: "VAL2".to_owned(),
                 value: 1,
                 repr: Some(4e3),
-                description: "F2 Value 2".into()
+                description: "F2 Value 2".into(),
+                src: DeclLine::default(),
             })
         );
     }

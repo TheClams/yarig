@@ -7,9 +7,20 @@ impl InterruptTrigger {
     pub fn is_level(&self) -> bool {
         matches!(self,InterruptTrigger::High | InterruptTrigger::Low)
     }
+
+    /// Canonical `.rif` keyword for this trigger.
+    pub fn to_rif(&self) -> &'static str {
+        match self {
+            InterruptTrigger::High    => "high",
+            InterruptTrigger::Low     => "low",
+            InterruptTrigger::Rising  => "rising",
+            InterruptTrigger::Falling => "falling",
+            InterruptTrigger::Edge    => "edge",
+        }
+    }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub enum InterruptRegKind {#[default] None, Base, Enable, Mask, Pending}
 impl InterruptRegKind {
     /// Return True when the kind is enable/mask/pending
@@ -44,6 +55,18 @@ impl InterruptRegKind {
 
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub enum InterruptClr {#[default] Read, Write0, Write1, Hw}
+
+impl InterruptClr {
+    /// Canonical `.rif` keyword for this clear method.
+    pub fn to_rif(&self) -> &'static str {
+        match self {
+            InterruptClr::Read   => "rclr",
+            InterruptClr::Write0 => "w0clr",
+            InterruptClr::Write1 => "w1clr",
+            InterruptClr::Hw     => "hwclr",
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct InterruptDesc {

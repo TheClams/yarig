@@ -17,9 +17,9 @@ fn reg_decl_l<'a>(input: &mut &'a str) -> Res<'a, RegDef> {
     ws(":").parse_next(input)?;
     let group_name = opt(delimited("(", scoped_identifier, ")")).parse_next(input)?;
     let desc = opt(quoted_string).parse_next(input)?;
-    Ok(
-        RegDef::new(name, group_name, array_size, desc.unwrap_or_default()),
-    )
+    let mut r = RegDef::new(name, group_name, array_size, desc.unwrap_or_default());
+    r.src.has_inline_desc = desc.is_some();
+    Ok(r)
 }
 
 pub fn reg_decl(input: &str) -> ResF<'_, RegDef> {

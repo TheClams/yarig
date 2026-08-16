@@ -1,7 +1,7 @@
 use crate::error::RifError;
 use crate::parser::parser_expr::ExprTokens;
 
-use super::{DataWidth, EnumEntry};
+use super::{DataWidth, DeclLine, DescBlockKind, EnumEntry, PropBlocks, PropLines};
 use super::{order_dict::OrderDict, Description, EnumDef, RifPage};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -9,12 +9,23 @@ pub struct ResetDef {
     pub name: String,
     pub sync: bool,
     pub active_high: bool,
+    /// Source line of the `swReset:`/`hwReset:` line.
+    pub src: DeclLine,
 }
 
 impl ResetDef {
     /// Create an asynchronous reset, active low with configurable name
     pub fn new(name: String) -> Self {
-        ResetDef {name, sync: false, active_high: false}
+        ResetDef {name, sync: false, active_high: false, src: DeclLine::default()}
+    }
+
+    /// Serialize as `keyword name [[active]Low|High] [async|sync]` (for edition)
+    pub fn fmt_decl(&self, keyword: &str) -> String {
+        format!("{keyword}: {} {} {}",
+            self.name,
+            if self.active_high { "activeHigh" } else { "activeLow" },
+            if self.sync { "sync" } else { "async" },
+        )
     }
 
     /// Return a simple description
@@ -171,6 +182,63 @@ impl From<(Vec<u16>, Option<&str>)> for GenericRange {
 
 pub type GenericValues = OrderDict<String,GenericRange>;
 
+/// `Rif`-level properties used to track source meta-data for edition
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum RifProp {
+    AddrWidth,
+    DataWidth,
+    Interface,
+    SuffixPkg,
+    SwClock,
+    SwClkEn,
+    SwClear,
+    HwClock,
+    HwClkEn,
+    HwClear,
+}
+
+impl RifProp {
+    /// All managed properties, in the canonical order they are emitted for a new Rif.
+    pub const ALL: [RifProp; 10] = [
+        RifProp::AddrWidth,
+        RifProp::DataWidth,
+        RifProp::Interface,
+        RifProp::SuffixPkg,
+        RifProp::SwClock,
+        RifProp::SwClkEn,
+        RifProp::SwClear,
+        RifProp::HwClock,
+        RifProp::HwClkEn,
+        RifProp::HwClear,
+    ];
+}
+
+/// Source-tracking metadata attached to a parsed `Rif` for edition
+#[derive(Clone, Debug, Default)]
+pub struct RifSrcInfo {
+    /// Line number of the `rif: <name>` declaration. `None` when created programmatically.
+    pub decl_line: Option<usize>,
+    /// Source line of each property present at parse time.
+    pub prop_lines: PropLines<RifProp>,
+    /// (start, end) source lines of the Rif's public/private description blocks.
+    pub desc_blocks: PropBlocks<DescBlockKind>,
+    /// Source Line starting parameters declaration
+    pub params_header_line: Option<usize>,
+    /// Source line of each `parameters:` entry, keyed by parameter name.
+    pub param_lines: PropLines<String>,
+    /// Source Line starting generics declaration
+    pub generics_header_line: Option<usize>,
+    /// Source line of each `generics:` entry, keyed by generic name.
+    pub generic_lines: PropLines<String>,
+}
+
+/// Source position never affects equality: see `RegSrcInfo`, which documents the same rule.
+impl PartialEq for RifSrcInfo {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Rif {
     /// Type name
@@ -199,6 +267,8 @@ pub struct Rif {
     pub generics: GenericValues,
     /// Extra Custom information
     pub info: OrderDict<String,String>,
+    /// Source-tracking metadata, used by editors to round-trip edits back to the `.rif`.
+    pub src: RifSrcInfo,
 }
 impl Rif {
     /// Create an empty Rif definition
@@ -217,6 +287,7 @@ impl Rif {
             parameters: OrderDict::new(),
             generics: OrderDict::new(),
             info: OrderDict::new(),
+            src: RifSrcInfo::default(),
         }
     }
 
@@ -349,4 +420,100 @@ impl Rif {
             self.hw_clocking.push(ClockingInfo { rst, ..last });
         }
     }
+
+    /// Render the `rif: <name>` top-level declaration line. Always at column 0 — unlike
+    /// `RegDef::fmt_decl`, a Rif declaration is never nested under anything, so there is no
+    /// indent to preserve.
+    pub fn fmt_decl(&self) -> String {
+        format!("rif: {}", self.name)
+    }
+
+    /// Serialize a RIF property line
+    pub fn fmt_prop(&self, prop: RifProp, indent: &str) -> Option<String> {
+        match prop {
+            RifProp::AddrWidth => Some(format!("{indent}addrWidth: {}", self.addr_width)),
+            RifProp::DataWidth => Some(format!("{indent}dataWidth: {}", self.data_width.value())),
+            RifProp::SuffixPkg => Some(format!("{indent}suffixPkg: {}", self.suffix_pkg)),
+            RifProp::Interface => {
+                if self.interface.is_default() {
+                    None
+                } else {
+                    let s = match &self.interface {
+                        Interface::Apb => "apb".to_owned(),
+                        Interface::Uaux => "uaux".to_owned(),
+                        Interface::Custom(name, path) => format!("{name}({path})"),
+                        Interface::Default => return None,
+                    };
+                    Some(format!("{indent}interface: {s}"))
+                }
+            }
+            RifProp::SwClock => self.fmt_clock_line(false, indent),
+            RifProp::HwClock => self.fmt_clock_line(true, indent),
+            RifProp::SwClkEn => self.fmt_clken_line(false, indent),
+            RifProp::HwClkEn => self.fmt_clken_line(true, indent),
+            RifProp::SwClear => self.fmt_clear_line(false, indent),
+            RifProp::HwClear => self.fmt_clear_line(true, indent),
+        }
+    }
+
+    /// Serialize all RIF properties
+    pub fn fmt_prop_all(&self, indent: &str) -> Vec<String> {
+        RifProp::ALL.iter().filter_map(|&p| self.fmt_prop(p, indent)).collect()
+    }
+
+    /// Serialize Rif's public `description:` block.
+    pub fn fmt_desc_block(&self, indent: &str) -> Option<Vec<String>> {
+        let text = self.description.get(true);
+        if text.is_empty() {
+            return None;
+        }
+        let body_indent = format!("{indent}  ");
+        let mut lines = vec![format!("{indent}description:")];
+        lines.extend(text.split('\n').map(|l| format!("{body_indent}{l}")));
+        Some(lines)
+    }
+
+    /// Render the `swClock:`/`hwClock:` line listing every clock name in declaration order.
+    /// `None` when there are no clocks of that kind to emit.
+    pub fn fmt_clock_line(&self, hw: bool, indent: &str) -> Option<String> {
+        let (keyword, clocking) = if hw { ("hwClock", &self.hw_clocking) } else { ("swClock", &self.sw_clocking) };
+        if clocking.is_empty() {
+            return None;
+        }
+        let names: Vec<&str> = clocking.iter().map(|c| c.clk.as_str()).collect();
+        Some(format!("{indent}{keyword}: {}", names.join(" ")))
+    }
+
+    /// Render the `swClkEn:`/`hwClkEn:` line. `None` when no clock in that group has an enable
+    /// signal set.
+    pub fn fmt_clken_line(&self, hw: bool, indent: &str) -> Option<String> {
+        let (keyword, clocking) = if hw { ("hwClkEn", &self.hw_clocking) } else { ("swClkEn", &self.sw_clocking) };
+        if clocking.is_empty() || clocking.iter().all(|c| c.en.is_empty()) {
+            return None;
+        }
+        let names: Vec<&str> = clocking.iter().map(|c| c.en.as_str()).collect();
+        Some(format!("{indent}{keyword}: {}", names.join(" ")))
+    }
+
+    /// Render the `swClear:`/`hwClear:` line. `None` when no clock in that group has a clear
+    /// signal set.
+    pub fn fmt_clear_line(&self, hw: bool, indent: &str) -> Option<String> {
+        let (keyword, clocking) = if hw { ("hwClear", &self.hw_clocking) } else { ("swClear", &self.sw_clocking) };
+        if clocking.is_empty() || clocking.iter().all(|c| c.clear.is_empty()) {
+            return None;
+        }
+        let names: Vec<&str> = clocking.iter().map(|c| c.clear.as_str()).collect();
+        Some(format!("{indent}{keyword}: {}", names.join(" ")))
+    }
+}
+
+/// Render one `parameters:` entry line
+pub fn fmt_param_line(name: &str, value: &ExprTokens, indent: &str) -> String {
+    format!("{indent}- {name} = {}", value.to_rif())
+}
+
+/// Render one `generics:` entry line
+pub fn fmt_generic_line(name: &str, range: &GenericRange, indent: &str) -> String {
+    let desc = range.desc.as_deref().map(|d| format!(" \"{d}\"")).unwrap_or_default();
+    format!("{indent}- {name} : {}:{}:{}{desc}", range.min, range.default, range.max)
 }
