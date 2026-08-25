@@ -155,6 +155,7 @@ pub trait GeneratorSw : GeneratorBase {
                     //
                     if let Some(mut intr_regs) = intr_regs {
                         while let Some(r) = intr_regs.next() {
+                            if !r.intr_info.1.is_empty() {continue;}
                             self.write_reg_header(basename, r);
                             self.write_fields_decl(rif, basename, r, &regs_rst);
                             self.write_reg_footer(basename, r, last_type && intr_regs.peek().is_none());

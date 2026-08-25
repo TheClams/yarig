@@ -1,6 +1,17 @@
 # Change Log
 
 
+## [0.25.0] - 2026-07-31
+
+### Added
+  - Update parser and internal structure to allow edition of the source:
+    * Parser now track source line number of RIF property
+    * Add to_rif() method to many struct to produce proper RIF syntax
+    * Description (both private and public) can now easily be set programatically
+
+### Fix
+  - Trait SW: option INTR_VARIANT_DECL does not generate anymore declaration for alt interrupt
+
 ## [0.24.7] - 2026-07-31
 
 ### Fix
