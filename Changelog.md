@@ -1,6 +1,14 @@
 # Change Log
 
 
+## [0.25.1] - 2026-09-10
+
+### Added
+  - Check field bit position is valid (MSB>=LSB)
+
+### Fix
+  - Trait SW: option INTR_VARIANT_DECL does not generate anymore declaration for alt interrupt
+
 ## [0.25.0] - 2026-07-31
 
 ### Added

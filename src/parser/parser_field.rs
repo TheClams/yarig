@@ -1,12 +1,9 @@
 use crate::{parser::comment, rifgen::{
-    Access, ClkEn, Context, CounterInfo, CounterKind, DeclLine, EnumEntry, Field, FieldPos, FieldSwKind, InterruptInfoField, LimitP, LimitValueP, PasswordInfo, ResetValP
+    Access, ClkEn, Context, CounterInfo, CounterKind, DeclLine, EnumEntry, Field, FieldPos, FieldSwKind, InterruptInfoField, LimitP, LimitValueP, PasswordInfo, ResetValP, Width
 }};
 
 use winnow::{
-    ascii::{multispace0, space0, Caseless},
-    combinator::{alt, delimited, opt, preceded, repeat_till, separated, separated_pair, terminated, unordered_seq},
-    error::StrContext,
-    Parser
+    Parser, ascii::{Caseless, multispace0, space0}, combinator::{alt, delimited, opt, preceded, repeat_till, separated, separated_pair, terminated, unordered_seq}, error::{ContextError, ErrMode, StrContext}
 };
 
 use super::{
@@ -69,6 +66,9 @@ pub fn field_decl<'a>(input: &mut &'a str) -> Res<'a, Field> {
     .context(StrContext::Label("reset value"))
     .parse_next(input)?;
     let pos = field_pos(input)?;
+    if let FieldPos::MsbLsb((Width::Value(msb),Width::Value(lsb))) = pos && lsb > msb {
+        return Err(ErrMode::Backtrack(ContextError::new()));
+    }
     let kind = opt(field_sw_kind).parse_next(input)?;
     let desc = opt(ws(quoted_string)).parse_next(input)?;
     if !input.is_empty() {
