@@ -158,6 +158,8 @@ The register properties, indented by one level compare to the register declarati
     Allows to define an alternative interrupt register with a different enable/mask/pending settings and a secondary interrupt request output.
     This is useful when needing two configurable interrupt lines with different priority using the same set of interrupt event
  - `clear` : Synchronous clear signal for the register, setting all fields to their reset values
+ - `lock [<lock_signal>]` : Signal to prevent write access to every field of the register that does not define its own field-level `lock`.
+    If no _lock_signal_ is provided, it defaults to `<regName>_lock`. Not supported on a register that has a `partial` field.
  - `hidden` : Hide the register in any documentation (HTML, MIF, C Header) when the visibility is set to public (generator setting)
  - `disabled` : Force the register to its reset value. Used typically when overloading included register.
  - `reserved` : Rename register in any documentation to `rsvd` when the visibility is set to public (generator setting). Also remove description.
@@ -226,7 +228,9 @@ The optional properties of a field, indented by one level compare to the field d
  - `hwtgl [<tglSignal>] [<data_signal>]` : Hardware high toggle the field value.
   If no _tglSignal_ is provided, a field with the name _reg_name_hwtgl_ is automatically added.
   When used on multi-bit field if no _data_signal_ is provided the whole field is inverted. Otherwise only bits high in _data_signal_ are toggled _set_signal_ goes high.
- - `lock [<lock_signal>]` : Signal to prevent a register to be written. _lock_signal_ follow the same rule as _set_signal_ just above.
+ - `lock [<lock_signal>]` : Signal to prevent the field to be written. _lock_signal_ follow the same rule as _set_signal_ just above.
+  If no _lock_signal_ is provided, it defaults to `<fieldName>_lock`. Overrides a register-level `lock`, if any, for this field.
+  Not supported on a `partial` field.
  - `pulse [comb]` : The field stays high only one cycle after being set. If pulse is followed by `comb`, then the pulse is generated on the write signal without extra flop in the block.
  - `toggle` : When a 1 is written by software on this field, the field inverts its value.
  - `signed` : Indicates that the value stored is a signed value.

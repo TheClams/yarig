@@ -1,6 +1,15 @@
 # Change Log
 
 
+## [0.25.2] - 2026-09-26
+
+### Added
+  - Lock supported at register level, locking all field in the register
+
+### Fix
+  - lock without name is supported (as docuemented)
+  - Trait HW: support lock for fields in a register array
+
 ## [0.25.1] - 2026-09-10
 
 ### Added

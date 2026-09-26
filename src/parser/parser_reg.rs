@@ -52,6 +52,7 @@ pub fn reg_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
                 ws("hwReset").value(Context::HwReset),
                 ws(Caseless("clkEn")).value(Context::HwClkEn),
                 ws("clear").value(Context::HwClear),
+                ws("lock").value(Context::HwLock),
                 ws("hidden").value(Context::Hidden),
                 alt((ws("disabled"),ws("disable"))).value(Context::Disabled),
                 ws("reserved").value(Context::Reserved),

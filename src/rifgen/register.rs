@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::{error::RifErrorKind, parser::parser_expr::ParamValues};
 use crate::hdl::LogicExpr;
 
-use super::{Access, ClkEn, Context, Description, DescBlockKind, Field, FieldSwKind, InterruptInfo, InterruptInfoField, InterruptRegKind, PropBlocks, PropLines, Visibility, Width};
+use super::{Access, ClkEn, Context, Description, DescBlockKind, Field, FieldSwKind, InterruptInfo, InterruptInfoField, InterruptRegKind, Lock, PropBlocks, PropLines, Visibility, Width};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum RegPulseKind {
@@ -89,6 +89,7 @@ pub enum RegProp {
     Clock,
     Reset,
     External,
+    Lock,
     WrPulse,
     RdPulse,
     AccPulse,
@@ -98,12 +99,13 @@ pub enum RegProp {
 
 impl RegProp {
     /// All managed sub-properties, in the canonical order they are emitted for a new register.
-    pub const ALL: [RegProp; 9] = [
+    pub const ALL: [RegProp; 10] = [
         RegProp::Interrupt,
         RegProp::InterruptAlt,
         RegProp::Clock,
         RegProp::Reset,
         RegProp::External,
+        RegProp::Lock,
         RegProp::WrPulse,
         RegProp::RdPulse,
         RegProp::AccPulse,
@@ -175,6 +177,9 @@ pub struct RegDef {
     pub clk_en: ClkEn,
     /// Optional clear logic expression
     pub clear: Option<LogicExpr>,
+    /// Optional lock logic expression: when set, locks write access to every field of this register
+    /// that does not define its own field-level lock
+    pub lock: Lock,
     /// Generic key/value pair to provide extra information to generators
     pub info: HashMap<String, String>,
     /// Width of the array (fixed or from parameter). Null when register is not an array
@@ -354,6 +359,7 @@ impl RegDef {
             },
             RegProp::Clock => self.clk.as_ref().map(|c| format!("{indent}clock {c}")),
             RegProp::Reset => self.rst.as_ref().map(|r| format!("{indent}hwReset {r}")),
+            RegProp::Lock => Some(format!("{indent}lock {}", self.lock.expr().as_ref()?.to_rif()?)),
             RegProp::External => match self.external {
                 ExternalKind::ReadWrite => Some(format!("{indent}external")),
                 ExternalKind::Done => Some(format!("{indent}externalDone")),

@@ -10,7 +10,7 @@ use winnow::Parser;
 use crate::error::{RifError, RifErrorKind, ERROR_CONTEXT};
 use crate::parser::parser_expr::{ParamValues, parse_expr};
 use crate::parser::{
-    bool_or_default, clk_en, enum_kind, generic_def, intr_desc, is_hidden, limit_def, password_info, path_val, reg_incl_or_decl, reg_inst_array_properties, reg_inst_properties, reg_pulse_info, rif_inst_optional_en, rif_inst_suffix, rifmux_group, rifmux_map, signal_or_expr, val_isize, val_u16
+    bool_or_default, clk_en, enum_kind, generic_def, intr_desc, is_hidden, limit_def, password_info, path_val, reg_incl_or_decl, reg_inst_array_properties, reg_inst_properties, reg_pulse_info, rif_inst_optional_en, rif_inst_suffix, rifmux_group, rifmux_map, val_isize, val_u16
 };
 use crate::rifgen::{
     Access, AddressOffset, ClockingInfo, Context, DataWidth, DescBlockKind, EnumDef, EnumKind, ExternalKind,
@@ -579,6 +579,16 @@ impl RifGenSrc {
                             };
                             self.last_reg_mut().clear = clear;
                         }
+                        Context::HwLock => {
+                            let expr = opt_signal_or_expr(l)?;
+                            let lock = if let Some(e) = expr {
+                                e
+                            } else {
+                                LogicExpr::Id(format!("{}_lock",self.last_reg().name).into())
+                            };
+                            self.last_reg_mut().lock = Lock::new(lock);
+                            self.last_reg_mut().src.prop_lines.insert(RegProp::Lock, line_num);
+                        }
                         Context::HwReset => {
                             self.last_reg_mut().rst = Some(identifier_last(l)?.to_owned());
                             self.last_reg_mut().src.prop_lines.insert(RegProp::Reset, line_num);
@@ -721,7 +731,13 @@ impl RifGenSrc {
                                 .set_hw_kind(FieldHwKind::Toggle(opt_signal_or_expr(l)?.map(|v| v.to_owned())))?;
                         }
                         Context::HwLock => {
-                            self.last_field_mut().lock = Lock::new(signal_or_expr(l)?.to_owned());
+                            let expr = opt_signal_or_expr(l)?;
+                            let lock = if let Some(e) = expr {
+                                e
+                            } else {
+                                LogicExpr::Id(format!("{}_lock",self.last_field().name).into())
+                            };
+                            self.last_field_mut().lock = Lock::new(lock);
                             self.last_field_mut().src.prop_lines.insert(FieldProp::Lock, line_num);
                         }
                         Context::Pulse => {

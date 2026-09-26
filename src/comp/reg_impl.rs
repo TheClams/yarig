@@ -60,7 +60,7 @@ pub struct FieldImpl {
 impl FieldImpl {
 
     /// Create a FieldImplementation base on a field definition
-    fn new(field: &Field, reg_array: u16, ctrl_idx: usize, rifs: &RifsInfo, partials: Option<&PartialFieldInfos>) -> Result<Self, String> {
+    fn new(field: &Field, reg_array: u16, ctrl_idx: usize, rifs: &RifsInfo, partials: Option<&PartialFieldInfos>, reg_lock: &Lock) -> Result<Self, String> {
         let params = &rifs.params;
         let param_gen = rifs.param_gen();
         let enum_def = field.enum_kind.get_def(&rifs.enums);
@@ -113,7 +113,7 @@ impl FieldImpl {
             hw_rst: None,
             clk_en: field.clk_en.clone(),
             clear: field.clear.clone(),
-            lock: field.lock.clone(),
+            lock: if field.lock.is_some() { field.lock.clone() } else { reg_lock.clone() },
             intr_desc: field.intr_desc.clone(),
             limit,
             is_partial: field.is_partial(),
@@ -232,13 +232,14 @@ impl RegPortKind {
         }
     }
 
-    pub fn from_field(field: &Field, regname: &str) -> Self {
+    pub fn from_field(field: &Field, regname: &str, reg_lock: &Lock) -> Self {
         match field.hw_acc {
             Access::NA => RegPortKind::None,
             Access::WO => RegPortKind::In,
             Access::RW => RegPortKind::InOut,
             Access::RO => {
-                if field.hw_kind.is_empty() && field.get_local_lock(regname).is_none() && field.clear.is_none() {
+                if field.hw_kind.is_empty() && field.get_local_lock(regname).is_none()
+                    && reg_lock.local_field(regname).is_none() && field.clear.is_none() {
                     RegPortKind::Out
                 } else {
                     RegPortKind::InOut
@@ -424,9 +425,9 @@ impl RegImpl {
         let partials = rifs.partials.get(reg.get_group_name());
         // Copy all fields
         for f in reg.fields.iter() {
-            port.updt(RegPortKind::from_field(f, &reg.name));
+            port.updt(RegPortKind::from_field(f, &reg.name, &reg.lock));
             sw_access.updt((&f.sw_kind).into());
-            fields.push(FieldImpl::new(f, array, 0, rifs, partials)?);
+            fields.push(FieldImpl::new(f, array, 0, rifs, partials, &reg.lock)?);
         }
         Ok(RegImpl {
             name: reg.get_group_name().to_owned(),
@@ -459,10 +460,20 @@ impl RegImpl {
             if reg.rst.is_none() {Some(reg_rst.to_owned())} else {reg.rst.clone()}
         } else {None};
         for f in reg.fields.iter() {
-            self.port.updt(RegPortKind::from_field(f, &reg.name));
+            self.port.updt(RegPortKind::from_field(f, &reg.name, &reg.lock));
             let clk_en = if !f.clk_en.is_default() {&f.clk_en} else {&reg.clk_en};
             // Search field vec in reverse since it is most likely to be the most recent one
             if let Some(ref mut field_impl) = self.fields.iter_mut().rev().find(|e| e.name==f.name) {
+                // Lock is not supported on a field split across multiple registers: a single FieldImpl
+                // cannot carry a different lock per slice, so reject as soon as a second slice is merged
+                // and either the existing or the incoming slice would resolve to a lock (field-level or
+                // inherited from the owning register's register-level lock).
+                if f.is_partial() {
+                    let has_incoming_lock = f.lock.is_some() || reg.lock.is_some();
+                    if field_impl.lock.is_some() || has_incoming_lock {
+                        return Err(format!("Field {}.{} : lock is not supported on fields split across multiple registers (partial)", reg.name, f.name));
+                    }
+                }
                 // Check for clk_en/rst: either defined once, or same for all partial definition
                 if !clk_en.is_default() {
                     if field_impl.clk_en.is_default() {
@@ -501,7 +512,7 @@ impl RegImpl {
                     return Err(format!("Field {}.{} already defined in this register group. Missing partial definition ?", reg.name, f.name));
                 }
             } else {
-                let mut field = FieldImpl::new(f, array, self.regs_ctrl.len(), rifs, partials)?;
+                let mut field = FieldImpl::new(f, array, self.regs_ctrl.len(), rifs, partials, &reg.lock)?;
                 if !clk_en.is_default() {
                     field.clk_en = clk_en.to_owned()
                 }

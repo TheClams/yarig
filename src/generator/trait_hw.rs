@@ -2386,9 +2386,9 @@ fn path_to_signal(expr: &Option<LogicExpr>, ext: &str, group_info: (&str, &str),
             range: None,
         }),
         Some(e) => {
-            // println!("{e:?} -> local_field={:?}, port={:?}",  e.local_field(group_info.0), e.port_name());
+            // println!("{e:?}, idx={idx:?} -> local_field={:?}, port={:?}",  e.local_field(group_info.0), e.port_name());
             if let Some(f) = e.local_field(group_info.0) {
-                LogicExpr::Id((group_info.1, f).into())
+                LogicExpr::Id(ExprId { name: group_info.1.to_owned(), idx, field: Some(f.to_owned()), range: None })
             } else if let Some(n) = e.port_name() {
                 LogicExpr::Id(n.into())
             } else {
