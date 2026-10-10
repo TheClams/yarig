@@ -381,6 +381,7 @@ The possible properties, indented by one level compare to the rifmux declaration
  - `parameters : `: Start a parameter list. See [paragraph Parameters](#Parameters).
  - `generics : `: Start a generic list. See [paragraph Generics](#Generics).
  - `top` : Specify the top-level RIF component name
+ - `enable : [true|false]` : Add an enable input to the access of all RIF instances (see [Access enable](#access-enable)). Value defaults to true when omitted.
  - `map:` : start the mapping of RIFs in the memory space
 
 
@@ -389,16 +390,18 @@ Each entry of the map is indented by one level compare to the map keyword and fo
 
 Every RIF definition should be either in the same directory as the rifmux or in the include path list define on the command line.
 
-For each RIF instance it is possible to override :
- - the description using `description : ...`.
- - parameters value with a `parameters:` section using the same syntax as the RIF (cf. [Parameters](#Parameters)).
- - suffix name using `suffix : <suffix_info>` to add a suffix to the file generated (useful when using parameters different from default)
+RIF instance properties are:
  - `optional : <condition>` : Indicate that the component is instantiated only if the _condition_ is true.
   The condition should be a valid arithemtic expression where parameters can be used: this supports standard math operation (+,-,\*,\%,<<,>>) or comparison operator (==,!=,>,<,...).
   The condition can also simply the name of a generic.
   If the condition is set to enable, this add ports on the RIFmux with a structure of enable for each RIF instance. When the corresponding enable signal is low,
   the rif_en signal of the corresponding RIF instance is forced to 0.
+ - `enable : [true|false]` : Control the access to the instance with an external enable signal (see [Access enable](#access-enable)). A group can also have an `enable : [true|false]` property, indented at the same level as the instances of the group, which applies to all the instances of the group.
 
+For each RIF instance it is possible to override :
+ - the description using `description : ...`.
+ - parameters value with a `parameters:` section using the same syntax as the RIF (cf. [Parameters](#Parameters)).
+ - suffix name using `suffix : <suffix_info>` to add a suffix to the file generated (useful when using parameters different from default)
 
 You can also use external RIF (to access memory-like block) with the syntax:
 `- <rif_name> external <addr_width> @ <rifAddr>` where _addr_width_ is the range of address that can be addressed in number of bits.
@@ -406,6 +409,19 @@ You can also use external RIF (to access memory-like block) with the syntax:
 The address can be made relative:
  - Using `@+` instead of `@` uses the rifAddr as an offset to the previous absolute address
  - Using `@+=` is the same, except it also update the previous absolute address
+
+### Access enable
+
+The access to a RIF instance can be protected by an external signal, for example to block accesses when an untrusted condition happens.
+The `enable` property can be set, from lowest to highest priority:
+ - on the rifmux: applies to all RIF instances
+ - on a group: applies to all RIF instances of the group, overriding the rifmux setting
+ - on a RIF instance: overriding the group and rifmux setting (`enable : false` removes the enable inherited from a group or the rifmux)
+
+The rifmux package then contains a structure `t_<rifmux>_en` with a 1b member, named after the instance, for each instance with an enable.
+The RIFmux has an extra input `rifmux_en` of this type: the `en` signal of the RIF instance interface is and-ed with the corresponding `rifmux_en.<instance_name>`.
+When the enable is low the RIF is not selected, so the access is handled as an access to an invalid address.
+
 
 ### Example
 ```yaml

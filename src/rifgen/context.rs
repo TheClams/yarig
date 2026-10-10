@@ -69,6 +69,8 @@ pub enum Context { #[default]
 	Optional,
     /// Define access of optional register when disabled
     OptionalAcc,
+    /// Enable input controlling the access to a RIF instance (property of a rifmux, group or RIF instance)
+    Enable,
     /// Set limit of field write value (started by keyword `limit`)
     Limit,
     /// Set number fo fractional bits of field

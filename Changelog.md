@@ -1,5 +1,10 @@
 # Change Log
 
+## [0.26.0]
+
+### Added
+  - Rifmux: `enable` property on a rifmux, a group or a RIF instance to gate the access to RIF instances with an external signal.
+    Add a `t_<rifmux>_en` structure in the rifmux package and a `rifmux_en` input on the rifmux (and riftop) which is and-ed with the RIF instance interface enable.
 
 ## [0.25.2] - 2026-09-26
 

@@ -1838,12 +1838,16 @@ pub trait GeneratorHw : GeneratorBase {
             ).collect();
         if !rifs_en.is_empty() {
             let type_name = format!("t_{}_rifs_en", rifmux.type_name_short().to_casing(Snake));
-            self.write_struct_header(&type_name, &rifs_en);
-            let mut fields = rifs_en.iter().peekable();
-            while let Some(f) = fields.next() {
-                self.write_struct_field(f, fields.peek().is_none());
-            }
-            self.write_struct_footer(&type_name);
+            self.write_en_struct(&type_name, &rifs_en);
+        }
+        // Structure of enable controlling the access to each RIF instance
+        let rifmux_en : Vec<SignalDecl> = rifmux.components.iter()
+            .filter(|c| c.access_en)
+            .map(|c| SignalDecl::new_bit(c.get_name().to_owned(), format!("Access to instance {} is allowed when high", c.get_name())))
+            .collect();
+        if !rifmux_en.is_empty() {
+            let type_name = format!("t_{}_en", rifmux.type_name_short().to_casing(Snake));
+            self.write_en_struct(&type_name, &rifmux_en);
         }
         for comp in rifmux.components.iter() {
             let pad = name_len - comp.get_name().len();
@@ -1858,6 +1862,16 @@ pub trait GeneratorHw : GeneratorBase {
         // Write file
         let filename = self.filename_rifmux_pkg(rifmux);
         self.save(&filename, true)
+    }
+
+    /// Write a structure of enable signals in the rifmux package
+    fn write_en_struct(&mut self, type_name: &str, fields: &[SignalDecl]) {
+        self.write_struct_header(type_name, fields);
+        let mut fields = fields.iter().peekable();
+        while let Some(f) = fields.next() {
+            self.write_struct_field(f, fields.peek().is_none());
+        }
+        self.write_struct_footer(type_name);
     }
 
     /// Write Rifmux Package header
@@ -1912,9 +1926,16 @@ pub trait GeneratorHw : GeneratorBase {
         // Add rif enable structure if needed
         if rifmux.components.iter().any(|c| c.has_enable()) {
             let type_name = format!("t_{}_rifs_en", rifmux.type_name_short().to_casing(Snake));
-            let en_type = SignalKind::Custom((Some(pkg_name),type_name));
-            let rif_en = PortInfo::new_basic("rifs_en".to_owned(), en_type, PortDir::In,  "RIF enables".to_owned());
+            let en_type = SignalKind::Custom((Some(pkg_name.clone()),type_name));
+            let rif_en =PortInfo::new_basic("rifs_en".to_owned(), en_type, PortDir::In,  "RIF enables".to_owned());
             self.write_port_decl(&rif_en, None, false);
+        }
+        // Add access enable structure if needed
+        if rifmux.components.iter().any(|c| c.access_en) {
+            let type_name = format!("t_{}_en", rifmux.type_name_short().to_casing(Snake));
+            let en_type = SignalKind::Custom((Some(pkg_name),type_name));
+            let access_en = PortInfo::new_basic("rifmux_en".to_owned(), en_type, PortDir::In, "Enable of access to each RIF instance".to_owned());
+            self.write_port_decl(&access_en, None, false);
         }
         // Add RIF interface for each component
         for comp in rifmux.components.iter() {
@@ -1972,6 +1993,9 @@ pub trait GeneratorHw : GeneratorBase {
             let mut rif_en_conds = vec![("if_rif","en").into(), addr_v.clone()];
             if comp.has_enable() && let Some(opt) = &comp.optional {
                 rif_en_conds.push(LogicExpr::eq(opt.clone(), LogicExpr::ValueU(1,1)));
+            }
+            if comp.access_en {
+                rif_en_conds.push(ExprId::new_field_range("rifmux_en".to_owned(), None, name.to_owned(), None).into());
             }
             self.write_assign(
                 en.with_path(format!("{:<pad$}","en"), None),
@@ -2107,6 +2131,14 @@ pub trait GeneratorHw : GeneratorBase {
                 names.push(clocking.rst.name.to_owned());
             }
         }
+        // Access enable of each RIF instance
+        let has_access_en = rifmux.components.iter().any(|c| c.access_en);
+        if has_access_en {
+            let type_name = format!("t_{}_en", rifmux.type_name_short().to_casing(Snake));
+            let en_type = SignalKind::Custom((Some(format!("{}_pkg", rifmux.type_name)),type_name));
+            let access_en = PortInfo::new_basic("rifmux_en".to_owned(), en_type, PortDir::In, "Enable of access to each RIF instance".to_owned());
+            self.write_port_decl(&access_en, None, false);
+        }
         let mut nb_ctrl = 0;
         for rif in rifmux.components.iter().filter_map(|c| c.get_rif()) {
             nb_ctrl += rif.ports.clk_ens.len() + rif.ports.ctrls.len();
@@ -2179,6 +2211,9 @@ pub trait GeneratorHw : GeneratorBase {
             }
         }
 
+        if has_access_en {
+            self.write_port_bind("rifmux_en", "rifmux_en", false);
+        }
         for port in intf_ports.iter() {
             self.write_port_bind(port.name(), port.name(), false);
         }

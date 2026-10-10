@@ -33,6 +33,8 @@ pub struct Rifmux {
     pub top: Option<RifmuxTop>,
     /// Extra custom informations
     pub info: HashMap<String,String>,
+    /// Default access enable input for all instances (can be overridden by a group or an instance)
+    pub enable: bool,
 }
 
 impl Rifmux {
@@ -51,7 +53,16 @@ impl Rifmux {
             generics: OrderDict::new(),
             info: HashMap::new(),
             top: None,
+            enable: false,
         }
+    }
+
+    /// Check if the access to an instance is controlled by an enable input
+    /// The instance setting has priority over the group, which has priority over the rifmux
+    pub fn has_access_enable(&self, item: &RifmuxItem) -> bool {
+        item.enable
+            .or_else(|| self.groups.iter().find(|g| g.name==item.group).and_then(|g| g.enable))
+            .unwrap_or(self.enable)
     }
 
     /// Update the info dictionnary
@@ -186,7 +197,8 @@ pub struct RifmuxItem {
     pub suffixes: HashMap<String,SuffixInfo>,
     /// Indicates the page instance is controlled by a parameter or generic
     pub optional: ItemOptional,
-
+    /// Access to the instance is controlled by an enable input (None to inherit from the group/rifmux)
+    pub enable: Option<bool>,
 }
 
 impl RifmuxItem {
@@ -199,6 +211,7 @@ impl RifmuxItem {
             rif_type: info.1,
             addr: addr_info,
             optional: ItemOptional::None,
+            enable: None,
             description: info.3.unwrap_or("").into(),
             parameters: OrderDict::new(),
             suffixes: HashMap::new(),
@@ -236,6 +249,8 @@ pub struct RifmuxGroup {
     pub addr: Address,
     /// Description
     pub description: Description,
+    /// Access to all instances of the group is controlled by an enable input (None to inherit from the rifmux)
+    pub enable: Option<bool>,
 }
 
 pub type RifmuxGroupTuple<'a> = (&'a str, Address, Option<&'a str>);
@@ -245,6 +260,7 @@ impl From<RifmuxGroupTuple<'_>> for RifmuxGroup {
             name: info.0.to_owned(),
             addr: info.1,
             description: info.2.unwrap_or("").into(),
+            enable: None,
         }
     }
 }

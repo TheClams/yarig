@@ -25,7 +25,7 @@ use super::{
     field_properties, identifier, identifier_last, indentation, is_auto, key_val,
     opt_signal_or_expr, page_properties, pulse_kind, reg_decl, reg_inst,
     reg_inst_field_properties, reg_interrupt, reg_properties_or_item, reset_def, reset_val,
-    rif_inst, rif_inst_properties, rif_properties_or_item, rifmux_properties,
+    rif_inst, rif_inst_properties, rif_properties_or_item, rifmux_group_properties, rifmux_properties,
     val_intf, val_u64, val_u8, vec_id
 };
 
@@ -940,6 +940,7 @@ impl RifGenSrc {
                             self.last_rifmux().set_sw_rst(idx, reset_def(l)?);
                             self.rst_idx.0 += 1;
                         }
+                        Context::Enable => self.last_rifmux().enable = bool_or_default(l, true)?,
                         Context::RifmuxMap => context_stack.push((Context::RifmuxMap, ilvl + 1)),
                         Context::RifmuxTop => {
                             self.last_rifmux().top = Some(RifmuxTop::new(identifier_last(l)?));
@@ -952,6 +953,17 @@ impl RifGenSrc {
                 }
                 Context::RifmuxMap |
                 Context::RifmuxGroup => {
+                    // Group properties (applied to all instances of the group) are tried first, on a copy since a failing parser may consume input
+                    if cntxt.0 == Context::RifmuxGroup {
+                        let mut probe = l;
+                        if let Ok(Context::Enable) = rifmux_group_properties(&mut probe) {
+                            let en = bool_or_default(probe, true)?;
+                            if let Some(g) = self.last_rifmux().groups.last_mut() {
+                                g.enable = Some(en);
+                            }
+                            continue;
+                        }
+                    }
                     let info = rifmux_map(&mut l)?;
                     match info {
                         Context::Item(_) => {
@@ -1101,6 +1113,7 @@ impl RifGenSrc {
                                 else {ItemOptional::Expr(parse_expr(l)?)};
                             self.last_rif_inst().optional = o;
                         }
+                        Context::Enable => self.last_rif_inst().enable = Some(bool_or_default(l, true)?),
                         _ => {
                             return Err(RifError::unsupported(info, l));
                         }
