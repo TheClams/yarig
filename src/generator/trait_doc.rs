@@ -6,7 +6,7 @@ use crate::{
     comp::comp_inst::{ArrayIdx, Comp, CompInst, FieldWidth, RifFieldInst, RifInst, RifRegInst, RifmuxGroupInst, val_str},
     error::RifGenError,
     parser::remove_rif,
-    rifgen::{EnumDef, FieldSwKind, ResetVal},
+    rifgen::{EnumDef, FieldSwKind, ResetVal, SuffixTarget},
 };
 
 use super::gen_common::{GeneratorBase, InstDict, RifInstInfo, RifList, Skippable};
@@ -245,11 +245,11 @@ pub trait GeneratorDoc : GeneratorBase {
                     self.save(&fname, true)?;
                 }
                 // Add description of all rif types
-                let rif_list = RifList::new(rifmux, true);
+                let rif_list = RifList::new(rifmux, true, Some(SuffixTarget::DocType));
                 for (i,(rif,info)) in rif_list.iter().enumerate() {
                     self.set_comp((*rif).into(), true);
                     if self.setting().split {
-                        let name = rif.name(false);
+                        let name = rif.name_for(self.setting().suffix_target);
                         let basename = remove_rif(&name);
                         self.write_header(basename);
                         self.add_rif(rif, None, info)?;
@@ -297,7 +297,11 @@ pub trait GeneratorDoc : GeneratorBase {
                 }
             },
             inst => {
-                let tn = remove_rif(inst.get_type());
+                let type_name = match inst {
+                    Comp::Rif(rif) => rif.name_for(SuffixTarget::DocType),
+                    _ => inst.get_type().to_owned(),
+                };
+                let tn = remove_rif(&type_name);
                 if let Comp::Rif(rif) = inst {
                     self.set_comp(rif.deref().into(), true);
                     self.set_rif_info(rif);
@@ -321,7 +325,8 @@ pub trait GeneratorDoc : GeneratorBase {
 
     /// Add RIF description
     fn add_rif(&mut self, rif: &RifInst, idx: Option<usize>, info: &[RifInstInfo]) -> Result<(), String> {
-        let rif_name = remove_rif(&rif.type_name);
+        let type_name = rif.name_for(SuffixTarget::DocType);
+        let rif_name = remove_rif(&type_name);
         let desc = rif.base_description.get_split(self.is_public());
         let idx_ = idx.unwrap_or(1);
         self.set_rif_info(rif);
@@ -341,7 +346,8 @@ pub trait GeneratorDoc : GeneratorBase {
 
     /// Add register summary
     fn add_reg_summary(&mut self, rif: &RifInst, info: &[RifInstInfo], is_single: bool) {
-        let rif_name = remove_rif(&rif.type_name);
+        let type_name = rif.name_for(SuffixTarget::DocType);
+        let rif_name = remove_rif(&type_name);
         let addr_w = ((rif.addr_width+3)>>2) as usize;
         let data_w = ((rif.data_width+3)>>2) as usize;
         let is_public = self.core().setting.privacy.is_public();
@@ -405,7 +411,8 @@ pub trait GeneratorDoc : GeneratorBase {
             self.write_table_cell_top((TableKind::RifInst, k), 0, k.label(), "");
         }
         self.write_table_row_top_footer();
-        let type_name = remove_rif(&rif.type_name);
+        let type_name = rif.name_for(SuffixTarget::DocType);
+        let type_name = remove_rif(&type_name);
         for info in infos.iter() {
             self.write_rifmux_entry(&info.name, type_name, (info.addr,w), &info.desc, false);
         }
@@ -416,7 +423,8 @@ pub trait GeneratorDoc : GeneratorBase {
     fn add_reg_detail(&mut self, rif: &RifInst, idx: Option<usize>, info: &[RifInstInfo])  -> Result<(),String> {
         let base_addr = if info.len() == 1 && idx.is_some() {Some(info[0].addr)} else {None};
         let idx_c = idx.unwrap_or(1);
-        let rif_name = remove_rif(&rif.type_name);
+        let type_name = rif.name_for(SuffixTarget::DocType);
+        let rif_name = remove_rif(&type_name);
         let addr_w = ((rif.addr_width+3)>>2) as usize;
         let data_w = ((rif.data_width+3)>>2) as usize;
         let is_public = self.core().setting.privacy.is_public();

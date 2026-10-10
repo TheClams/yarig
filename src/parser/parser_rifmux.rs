@@ -1,5 +1,5 @@
 use winnow::{
-  combinator::{alt, delimited, opt, preceded, terminated},
+  combinator::{alt, delimited, opt, preceded, separated, terminated},
   error::StrContext, Parser
 };
 
@@ -82,26 +82,38 @@ pub fn rif_inst_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
   .parse_next(input)
 }
 
+/// Flag following a suffix name
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum SuffixFlag {Alt, Pkg, Doc, DocType}
+
+fn suffix_flag<'a>(input: &mut &'a str) -> Res<'a, SuffixFlag> {
+  alt((
+    ws("alt").value(SuffixFlag::Alt),
+    ws("pkg").value(SuffixFlag::Pkg),
+    // doc_type must be tested before doc
+    ws("doc_type").value(SuffixFlag::DocType),
+    ws("doc").value(SuffixFlag::Doc),
+  )).context(StrContext::Label("suffix flag (alt, pkg, doc or doc_type)"))
+  .parse_next(input)
+}
+
+/// Parse a suffix definition: `name` or `name(flag0,flag1,...)` where each flag is one of alt, pkg, doc, doc_type
 pub fn suffix_info_l<'a>(input: &mut &'a str) -> Res<'a, SuffixInfo> {
   (identifier,
-    opt(
-      delimited('(',
-        alt((
-          (ws("alt"),",",ws("pkg")).value((true,true)),
-          (ws("pkg"),",",ws("alt")).value((true,true)),
-          ws("alt").value((true,false)),
-          ws("pkg").value((false,true)),
-        )),
-      ')')
-    )
+    opt(delimited('(', separated(1.., suffix_flag, ","), ')'))
   ).context(StrContext::Label("suffix definition"))
   .parse_next(input)
-  .map(|v|
+  .map(|(name, flags): (&str, Option<Vec<SuffixFlag>>)| {
+    let flags = flags.unwrap_or_default();
     SuffixInfo::new(
-      v.0.to_owned(),
-      matches!(v.1,Some((true,_))),
-      matches!(v.1,Some((_,true))))
-  )
+      name.to_owned(),
+      flags.contains(&SuffixFlag::Alt),
+      flags.contains(&SuffixFlag::Pkg),
+    ).with_doc(
+      flags.contains(&SuffixFlag::Doc),
+      flags.contains(&SuffixFlag::DocType),
+    )
+  })
 }
 
 pub fn suffix_info(input: &str) -> ResF<'_, SuffixInfo> {
@@ -153,23 +165,66 @@ mod tests_parsing {
     fn test_suffix_info() {
         assert_eq!(
           suffix_info("name_only"),
-          Ok(SuffixInfo { name: "name_only".to_owned(), alt_pos: false, pkg: false })
+          Ok(SuffixInfo::new("name_only".to_owned(), false, false))
         );
         assert_eq!(
           suffix_info("ctrl(pkg)"),
-          Ok(SuffixInfo { name: "ctrl".to_owned(), alt_pos: false, pkg: true })
+          Ok(SuffixInfo::new("ctrl".to_owned(), false, true))
         );
         assert_eq!(
           suffix_info("name(alt)"),
-          Ok(SuffixInfo { name: "name".to_owned(), alt_pos: true, pkg: false })
+          Ok(SuffixInfo::new("name".to_owned(), true, false))
         );
         assert_eq!(
           suffix_info("n1(alt,pkg)"),
-          Ok(SuffixInfo { name: "n1".to_owned(), alt_pos: true, pkg: true })
+          Ok(SuffixInfo::new("n1".to_owned(), true, true))
         );
         assert_eq!(
           suffix_info("n2(pkg,alt)"),
-          Ok(SuffixInfo { name: "n2".to_owned(), alt_pos: true, pkg: true })
+          Ok(SuffixInfo::new("n2".to_owned(), true, true))
         );
+        assert_eq!(
+          suffix_info("n3(doc)"),
+          Ok(SuffixInfo::new("n3".to_owned(), false, false).with_doc(true, false))
+        );
+        assert_eq!(
+          suffix_info("n4(doc_type)"),
+          Ok(SuffixInfo::new("n4".to_owned(), false, false).with_doc(false, true))
+        );
+        assert_eq!(
+          suffix_info("n5(alt, doc_type, pkg)"),
+          Ok(SuffixInfo::new("n5".to_owned(), true, true).with_doc(false, true))
+        );
+        assert!(suffix_info("n6(unknown)").is_err());
+        assert!(suffix_info("n7()").is_err());
+    }
+
+    #[test]
+    fn test_suffix_apply() {
+        use crate::rifgen::{SuffixTarget, SuffixTargets, SuffixTargetSel};
+        let s = suffix_info("lite").unwrap();
+        // Default: module and file names only
+        assert_eq!(s.apply("uart_rif", SuffixTarget::RtlType), "uart_rif_lite");
+        assert_eq!(s.apply("uart_rif", SuffixTarget::RtlPkg),  "uart_rif");
+        assert_eq!(s.apply("uart_rif", SuffixTarget::DocFile), "uart_rif_lite");
+        assert_eq!(s.apply("uart_rif", SuffixTarget::DocType), "uart_rif");
+        // Flags enable extra targets, alt position places the suffix before _rif
+        let s = suffix_info("lite(alt,pkg,doc_type)").unwrap();
+        assert_eq!(s.apply("uart_rif", SuffixTarget::RtlPkg),  "uart_lite_rif");
+        assert_eq!(s.apply("uart_rif", SuffixTarget::DocType), "uart_lite_rif");
+        assert_eq!(s.apply("uart_rif", SuffixTarget::Sw),      "uart_lite_rif");
+        // Global selection replaces the default targets
+        let t = SuffixTargets::from_sel(&[SuffixTargetSel::Rtl, SuffixTargetSel::DocType]);
+        let s = suffix_info("lite").unwrap().with_targets(t);
+        assert_eq!(s.apply("uart", SuffixTarget::RtlType), "uart_lite");
+        assert_eq!(s.apply("uart", SuffixTarget::RtlPkg),  "uart_lite");
+        assert_eq!(s.apply("uart", SuffixTarget::DocType), "uart_lite");
+        assert_eq!(s.apply("uart", SuffixTarget::DocFile), "uart");
+        assert_eq!(s.apply("uart", SuffixTarget::Sw),      "uart");
+        // Legacy option: only the RTL module
+        let s = suffix_info("lite").unwrap().with_targets(SuffixTargets::rtl_only());
+        assert_eq!(s.apply("uart", SuffixTarget::RtlType), "uart_lite");
+        assert_eq!(s.apply("uart", SuffixTarget::DocFile), "uart");
+        assert_eq!(s.apply("uart", SuffixTarget::Sim),     "uart");
     }
 }

@@ -4,7 +4,7 @@ use crate::{
     cfg::{RtlLimit, RtlLimitCfg}, comp::comp_inst::{Comp, CompInst, FieldWidth, RifInst, RifmuxInst}, error::RifGenError, hdl::{CastInfo, ExprId, LogicExpr, ModuleInfo, PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalInfo, SignalKind, SignalRange}, parser::parser_expr::ParamValues, rifgen::{
         Access, ClkEn, ClockingInfo, EnumEntry, EnumKind, ExternalKind, FieldHwKind, FieldSwKind,
         GenericRange, Interface, InterruptClr, InterruptRegKind, InterruptTrigger, LimitValue,
-        RegPulseKind, ResetDef,  order_dict::OrderDict,
+        RegPulseKind, ResetDef, SuffixTarget, order_dict::OrderDict,
     }
 };
 
@@ -49,7 +49,8 @@ pub trait GeneratorHw : GeneratorBase {
                 // Generate include file
                 if !self.setting().gen_inc.is_empty() {
                     let gen_all = self.setting().is_gen_all();
-                    let rif_list = RifList::new(rifmux, true);
+                    // Instances of the same type are generated once, unless a suffix makes the RTL module different
+                    let rif_list = RifList::new(rifmux, true, Some(SuffixTarget::RtlType));
                     for (rif,_) in rif_list.iter() {
                         if !gen_all && !self.setting().is_gen_inc(rif) {
                             continue;
@@ -72,7 +73,7 @@ pub trait GeneratorHw : GeneratorBase {
 
     /// Generate package containing enum, type and and structure definition
     fn gen_rif_pkg(&mut self, rif: &RifInst) -> Result<(), RifGenError> {
-    	let rif_name = self.casing(&rif.name(true));
+    	let rif_name = self.casing(&rif.name_for(SuffixTarget::RtlPkg));
         self.write_file_header();
         self.write_rif_pkg_header(rif);
         // Constants definition
@@ -308,11 +309,11 @@ pub trait GeneratorHw : GeneratorBase {
 
     // Hooks for RIF package
     fn write_rif_pkg_header(&mut self, rif: &RifInst) {
-        let rif_pkg_name = self.casing(&rif.name(true));
+        let rif_pkg_name = self.casing(&rif.name_for(SuffixTarget::RtlPkg));
         self.write_pkg_header(&rif_pkg_name);
     }
     fn write_rif_pkg_footer(&mut self, rif: &RifInst) {
-        let rif_pkg_name = self.casing(&rif.name(true));
+        let rif_pkg_name = self.casing(&rif.name_for(SuffixTarget::RtlPkg));
         self.write_pkg_footer(&rif_pkg_name);
     }
 
@@ -336,8 +337,8 @@ pub trait GeneratorHw : GeneratorBase {
 
     /// Generate RIF module
     fn gen_rif(&mut self, rif: &RifInst) -> Result<(), RifGenError> {
-        let rif_name = self.casing(&rif.name(false));
-        let rif_pkg_name = self.casing(&rif.name(true));
+        let rif_name = self.casing(&rif.name_for(SuffixTarget::RtlType));
+        let rif_pkg_name = self.casing(&rif.name_for(SuffixTarget::RtlPkg));
         let sw_clk = rif.sw_clocking.last().cloned().unwrap_or_default();
         let hw_clk = rif.hw_clocking.first().unwrap_or(&sw_clk);
         let addr_shift = (rif.data_width as f32).log2().ceil() as u16 - 3; // Min data width is 8 bits
@@ -2227,7 +2228,7 @@ pub trait GeneratorHw : GeneratorBase {
         // RIFs
         for rif in rifmux.components.iter().filter_map(|c| c.get_rif()) {
             let inst_name = self.casing(&rif.inst_name);
-            let type_name = self.casing(&rif.type_name);
+            let type_name = self.casing(&rif.name_for(SuffixTarget::RtlType));
             self.write_inst_header(&type_name, &inst_name, &comp_params, &[]);
             // Bind main clock/reset
             if let Some(clk) = rif.ports.clocks.first() {
@@ -2396,7 +2397,7 @@ pub trait GeneratorHw : GeneratorBase {
 
     /// Filename for RIF package
     fn filename_rif_pkg(&self, rif: &RifInst) -> String {
-        format!("{}_pkg.{}", rif.name(true).to_lowercase(), Self::EXT)
+        format!("{}_pkg.{}", rif.name_for(SuffixTarget::RtlPkg).to_lowercase(), Self::EXT)
     }
 
     /// Filename for RIF mux package

@@ -353,7 +353,7 @@ impl GeneratorSw for GeneratorPy {
         // Import each
         for (rif_inst,_) in rif_list.iter() {
             self.write(&format!("from {dir}.{} import {}\n",
-                rif_inst.name(false).to_lowercase(),
+                rif_inst.name_for(self.setting().suffix_target).to_lowercase(),
                 remove_rif(&rif_inst.type_name).to_casing(Casing::Pascal)
             ));
         }

@@ -7,7 +7,7 @@ use crate::{
         Access, Address, AddressKind, AddressOffset, ClockingInfo, CounterInfo, DeclLine, DescIdx, Description, EnumDef, EnumDefs, EnumKind,
         ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, GenericRange, GenericValues, Interface, InterruptRegKind,
         InterruptTrigger, Limit, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegOverride, RegPulseKind, ResetVal, ResetValOverride,
-        Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SuffixInfo, Visibility, Width,
+        Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SuffixInfo, SuffixTarget, SuffixTargets, Visibility, Width,
         order_dict::{OrderDict, OrderedDictIterV}
     }
 };
@@ -71,21 +71,6 @@ impl Comp {
 
     pub fn is_external(&self) -> bool {
         matches!(self, Comp::External(_))
-    }
-
-    pub fn set_suffixes(&mut self, suffixes: &HashMap<String, SuffixInfo>) {
-        match self {
-            Comp::Rifmux(rifmux) => {
-                for comp in rifmux.components.iter_mut() {
-                    comp.inst.set_suffixes(suffixes);
-                }
-            },
-            Comp::Rif(rif) => {
-                let n = if suffixes.contains_key(&rif.inst_name) {rif.inst_name.as_str()} else {""};
-                rif.suffix = suffixes.get(n).cloned();
-            },
-            Comp::External(_) => {},
-        }
     }
 
     pub fn set_interface(&mut self, intf: &Interface) {
@@ -445,19 +430,18 @@ impl RifInst {
         }
     }
 
-    /// Name with optional prefix taken into account
-    pub fn name(&self, is_pkg: bool) -> String {
-        if let Some(suffix) = &self.suffix {
-            if is_pkg && !suffix.pkg  {
-                self.type_name.clone()
-            } else if suffix.alt_pos && self.type_name.ends_with("_rif") {
-                format!("{}_{}_rif", &self.type_name[..(self.type_name.len()-4)], suffix.name)
-            } else {
-                format!("{}_{}", self.type_name, suffix.name)
-            }
-        } else {
-            self.type_name.clone()
+    /// Type name with the optional suffix added when it is enabled for the target
+    pub fn name_for(&self, target: SuffixTarget) -> String {
+        match &self.suffix {
+            Some(suffix) => suffix.apply(&self.type_name, target),
+            None => self.type_name.clone(),
         }
+    }
+
+    /// Name with optional suffix: RTL package name when `is_pkg` is true, name used for software files otherwise.
+    /// Generators should prefer [`RifInst::name_for`] to select precisely the target.
+    pub fn name(&self, is_pkg: bool) -> String {
+        self.name_for(if is_pkg {SuffixTarget::RtlPkg} else {SuffixTarget::Sw})
     }
 
     /// Iterate over all register instance accross all pages
@@ -1857,7 +1841,7 @@ impl RifmuxInst {
         }
     }
 
-    pub fn build(src: &RifGenSrc, inst_name: &str, rifmux: &Rifmux, top_params: &ParamValues, suffixes: &HashMap<String,SuffixInfo>) -> Result<Self, String> {
+    pub fn build(src: &RifGenSrc, inst_name: &str, rifmux: &Rifmux, top_params: &ParamValues, suffixes: &HashMap<String,SuffixInfo>, targets: SuffixTargets) -> Result<Self, String> {
         // let params = ParamValues::from_items(rifmux.parameters.items())?;
         let mut params = ParamValues::new();
         for (k,v) in top_params.items().filter(|(k,_)| !k.contains('.')) {
@@ -1905,14 +1889,15 @@ impl RifmuxInst {
             match &i.rif_type {
                 RifType::Rif(typename) => {
                     if let Some(rif_def) = src.get_rif(typename) {
-                        let rif_suffix = suffixes.get(&i.name).or_else(||i.suffixes.get("")).cloned();
+                        let rif_suffix = suffixes.get(&i.name).or_else(||i.suffixes.get(""))
+                            .map(|s| s.clone().with_targets(targets));
                         // if rif_suffix.is_some() {println!("Found Suffix {:?} for {}", rif_suffix, i.name);}
                         // if !i_params.is_empty() {println!("Parameter in sub-rif {}.{} = {}", rifmux.name, i.name, i_params);}
                         let inst = RifInst::new(&i.name, rif_def, &i_params, &src.rifs, i.description.clone(), rif_suffix)?;
                         rm.components.push(CompInst::new_rif(inst, addr, &i.group, optional).with_access_en(access_en));
                     } else if let Some(rifmux) = src.get_rifmux(typename) {
                         // if !i_params.is_empty() {println!("Parameter in sub-rifmux {}.{} = {:?}", rifmux.name, i.name, i_params);}
-                        let inst = RifmuxInst::build(src, &i.name, rifmux, &i_params, &i.suffixes)?;
+                        let inst = RifmuxInst::build(src, &i.name, rifmux, &i_params, &i.suffixes, targets)?;
                         rm.components.push(CompInst::new_mux(inst, addr, &i.group, optional).with_access_en(access_en));
                     } else {
                         return Err(format!("No RIF definition found for {typename} in {inst_name} ! Available RIFs are: {:?}", src.rifs.keys().collect::<Vec<&String>>()));
@@ -1938,17 +1923,24 @@ impl RifmuxInst {
 
 impl Comp {
 
-    /// Compile the RIF definition into instances
+    /// Compile the RIF definition into instances, with the default suffix targets
     pub fn compile(src: &RifGenSrc, suffixes: &HashMap<String, SuffixInfo>, params: &ParamValues) -> Result<Self, String> {
+        Self::compile_with_targets(src, suffixes, SuffixTargets::default(), params)
+    }
+
+    /// Compile the RIF definition into instances.
+    /// The suffix targets define on which artifacts the suffixes are applied (in addition to the flags of each suffix)
+    pub fn compile_with_targets(src: &RifGenSrc, suffixes: &HashMap<String, SuffixInfo>, targets: SuffixTargets, params: &ParamValues) -> Result<Self, String> {
         let r: Comp;
         match &src.top {
             RifGenTop::Rifmux(s) => {
                 let Some(def) = src.get_rifmux(s) else {return Err(format!("Rifmux {s} not defined !"));} ;
-                r = Comp::Rifmux(Box::new(RifmuxInst::build(src, s, def, params, suffixes)?));
+                r = Comp::Rifmux(Box::new(RifmuxInst::build(src, s, def, params, suffixes, targets)?));
             }
             RifGenTop::Rif(s) => {
                 if let Some(rifdef) = src.rifs.get(s) {
-                    r = Comp::Rif(Box::new(RifInst::new(s, rifdef, params, &src.rifs, rifdef.description.clone(), suffixes.get("").cloned())?));
+                    let suffix = suffixes.get("").map(|s| s.clone().with_targets(targets));
+                    r = Comp::Rif(Box::new(RifInst::new(s, rifdef, params, &src.rifs, rifdef.description.clone(), suffix)?));
                 } else {
                     return Err(format!("Rif {s} not defined !"));
                 }

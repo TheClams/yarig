@@ -401,7 +401,13 @@ RIF instance properties are:
 For each RIF instance it is possible to override :
  - the description using `description : ...`.
  - parameters value with a `parameters:` section using the same syntax as the RIF (cf. [Parameters](#Parameters)).
- - suffix name using `suffix : <suffix_info>` to add a suffix to the file generated (useful when using parameters different from default)
+ - suffix name using `suffix : <suffix_info>` to add a suffix to the file generated (useful when using parameters different from default).
+   The suffix info is a name, optionally followed by a list of flags in parenthesis: `<name>[(alt,pkg,doc,doc_type)]`:
+   * `alt`: place the suffix before `_rif` (e.g. `name_suffix_rif`) instead of at the end of the name
+   * `pkg`: also apply the suffix to the RTL package
+   * `doc`: also apply the suffix to the type name used in the documentation (the documentation file name is suffixed by default)
+   * `doc_type`: apply the suffix to the type name used in the documentation only
+   See [Suffixes](config.md#suffixes) for how the artifacts receiving the suffix can be selected globally.
 
 You can also use external RIF (to access memory-like block) with the syntax:
 `- <rif_name> external <addr_width> @ <rifAddr>` where _addr_width_ is the range of address that can be addressed in number of bits.

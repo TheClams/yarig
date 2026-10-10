@@ -44,7 +44,7 @@ impl GeneratorDoc for GeneratorAdoc {
     const SHOW_UNUSED : bool = true;
 
     fn set_rif_info(&mut self, rif: &RifInst) {
-        self.comp_fname = rif.name(false);
+        self.comp_fname = rif.name_for(self.setting().suffix_target);
     }
 
     fn write_rif_title(&mut self, idx_rif: (&str,usize), desc: &str) {

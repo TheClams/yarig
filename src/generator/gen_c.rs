@@ -262,7 +262,7 @@ impl GeneratorSw for GeneratorC {
         // Includes
         self.write("// Includes Register File definition\n");
         for (rif,_) in rif_list.iter() {
-            self.write(&format!("#include \"{}.h\"\n", rif.name(false).to_lowercase()));
+            self.write(&format!("#include \"{}.h\"\n", rif.name_for(self.setting().suffix_target).to_lowercase()));
         }
         self.write("\n");
     }

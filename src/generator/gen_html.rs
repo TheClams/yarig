@@ -39,7 +39,7 @@ impl GeneratorDoc for GeneratorHtml {
     const SHOW_SINGLE_REG : bool = true;
 
     fn set_rif_info(&mut self, rif: &RifInst) {
-        self.comp_fname = rif.name(false);
+        self.comp_fname = rif.name_for(self.setting().suffix_target);
     }
 
     fn write_header(&mut self, name: &str) {

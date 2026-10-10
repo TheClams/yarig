@@ -4,7 +4,7 @@ use crate::{
     cfg::{RifGenTarget, YarigCfg},
     comp::comp_inst::{Comp, RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxInst},
     error::RifGenError,
-    parser::remove_rif, rifgen::Description,
+    parser::remove_rif, rifgen::{Description, SuffixTarget},
 };
 
 use super::casing::{Casing, ToCasing};
@@ -62,24 +62,29 @@ pub struct RifList<'a>(Vec<(&'a RifInst,Vec<RifInstInfo>)>);
 
 impl<'a> RifList<'a> {
 
-    pub fn new(rifmux: &'a RifmuxInst, deep: bool) -> Self {
+    /// Collect the RIF instances of a rifmux.
+    /// Instances of the same type are merged, unless `target` is set and a suffix gives them a different name for this target.
+    /// With no target, instances are always merged by type name.
+    pub fn new(rifmux: &'a RifmuxInst, deep: bool, target: Option<SuffixTarget>) -> Self {
         let mut rd = RifList(Vec::with_capacity(rifmux.components.len()));
-        rd.scan(rifmux, deep, 0, vec![]);
+        rd.scan(rifmux, deep, target, 0, vec![]);
         rd
     }
 
-    pub fn scan(&mut self, rifmux: &'a RifmuxInst, deep: bool, base_addr: u64, hier: Vec<String>) {
+    pub fn scan(&mut self, rifmux: &'a RifmuxInst, deep: bool, target: Option<SuffixTarget>, base_addr: u64, hier: Vec<String>) {
         for comp in rifmux.components.iter() {
             let addr = base_addr + comp.full_addr(&rifmux.groups);
             let mut hier = hier.to_owned();
             hier.push(comp.inst.get_name().to_owned());
             match &comp.inst {
                 Comp::Rifmux(c) => if deep {
-                    self.scan(c, true, addr, hier);
+                    self.scan(c, true, target, addr, hier);
                 },
                 Comp::Rif(c) => {
                     let info = RifInstInfo::new(addr, &c.inst_name, &c.description, &hier);
-                    if let Some(ri) = self.0.iter_mut().find(|x| x.0.type_name==c.type_name) {
+                    let is_same = |x: &(&RifInst, Vec<RifInstInfo>)| x.0.type_name==c.type_name
+                        && target.is_none_or(|t| x.0.name_for(t)==c.name_for(t));
+                    if let Some(ri) = self.0.iter_mut().find(|x| is_same(x)) {
                         ri.1.push(info);
                     } else {
                         self.0.push((c, vec![info]));
@@ -163,6 +168,8 @@ pub struct GeneratorBaseSetting {
     pub skip: Vec<Skippable>,
     /// Optional Address offset (Documentation only atm)
     pub addr_offset: u64,
+    /// Kind of artifact for which the suffix of a RIF is applied to the generated files
+    pub suffix_target: SuffixTarget,
 }
 
 impl GeneratorBaseSetting {
@@ -182,6 +189,7 @@ impl GeneratorBaseSetting {
             split: false,
             addr_offset: cfg.doc_base_offset.unwrap_or(0) as u64,
             skip: Vec::new(),
+            suffix_target: SuffixTarget::Sw,
         }
     }
 
@@ -556,7 +564,7 @@ pub trait GeneratorBase {
     }
 
     fn filename_rif(&self, rif: &RifInst) -> String {
-        format!("{}.{}", rif.name(false).to_lowercase(), Self::EXT)
+        format!("{}.{}", rif.name_for(self.setting().suffix_target).to_lowercase(), Self::EXT)
     }
 
     fn filename_rifmux(&self, rifmux: &RifmuxInst) -> String {

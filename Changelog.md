@@ -5,6 +5,42 @@
 ### Added
   - Rifmux: `enable` property on a rifmux, a group or a RIF instance to gate the access to RIF instances with an external signal.
     Add a `t_<rifmux>_en` structure in the rifmux package and a `rifmux_en` input on the rifmux (and riftop) which is and-ed with the RIF instance interface enable.
+  - Suffix: can now be applied to the RIF type name used in the documentation
+    * New flags `doc` (type name and file name of the documentation) and `doc_type` (type name only) on a suffix, e.g. `suffix: ctrl(alt,pkg,doc_type)` in a rifmux or `doc_type = true` in `[suffixes.<rif>]`
+    * New option `suffix_targets` (configuration) / `--suffix_targets` (command-line) to select the artifacts on which suffixes are applied:
+      `rtl` (module and package), `rtl_type`, `rtl_pkg`, `doc` (file and type name), `doc_file`, `doc_type`, `sw` and `sim`.
+
+### Changed
+  - Option `suffix_rtl_only` is deprecated: it is equivalent to `suffix_targets = ["rtl_type"]`. It is still supported, and `suffix_targets` has priority when both are set.
+  - RAL: the RIF file included by a rifmux RAL now uses the same name as the generated file when a suffix is set (previously depended on the suffix `pkg` flag).
+
+### Fix
+  - RTL: when a rifmux instantiates the same RIF type several times with different suffixes, each variant is now generated (only the first one was before),
+    and the riftop instantiates the suffixed module. The variants share the same package unless the suffix has the `pkg` flag.
+
+### Migration guide (for projects using yarig as a library)
+Applications built on the library (custom generators, custom CLI) should check the following points:
+  - `RifList::new(rifmux, deep)` and `RifList::scan(...)` now take a `target: Option<SuffixTarget>`: instances of the same RIF type are merged unless a suffix gives them a different name for this target.
+    Pass `None` to keep the previous behavior (always merge by type name), which is what the software generators (C, Python, RAL, ...) must still use since the names inside the generated files do not depend on the suffix.
+    Pass `Some(SuffixTarget::DocType)` for documentation, or `Some(SuffixTarget::RtlType)` for RTL, to generate one entry per variant.
+  - `RifInst::name(is_pkg)` is kept but is only a shortcut for `name_for(SuffixTarget::RtlPkg)` (`true`) or `name_for(SuffixTarget::Sw)` (`false`).
+    Use `RifInst::name_for(target)` to state which artifact the name is used for, and so that it follows the `suffix_targets` selection:
+    | Name used for | Target |
+    |---|---|
+    | RTL module (and file) | `SuffixTarget::RtlType` |
+    | RTL package (and file), or reference to it | `SuffixTarget::RtlPkg` |
+    | File name of a documentation output, or link to it | `SuffixTarget::DocFile` |
+    | RIF type name displayed in a documentation | `SuffixTarget::DocType` |
+    | File name of a software output (C, Python, SVD, IP-XACT, ...), or `#include` of it | `SuffixTarget::Sw` |
+    | File name of a simulation output (RAL) | `SuffixTarget::Sim` |
+  - Generators relying on the default `GeneratorBase::filename_rif()` get the target from the new field `GeneratorBaseSetting::suffix_target` (default `SuffixTarget::Sw`).
+    `YarigCfg::gen_all()` sets it automatically for the built-in targets (see `RifGenTarget::suffix_target()`).
+    A custom target generated outside of `gen_all()` (e.g. from the `main()` of an application) should set it on its setting when it is not a software output.
+  - `Comp::set_suffixes()` is removed: the suffix is not enabled/disabled per target anymore, it is resolved once at compilation from `suffix_targets` and the flags of each suffix.
+  - `Comp::compile()` is unchanged (default targets), use `Comp::compile_with_targets()` to provide a `SuffixTargets`, built with `SuffixTargets::from_sel()`, or `YarigCfg::get_suffix_targets()`.
+    `RifmuxInst::build()` has a new `targets` argument.
+  - `SuffixInfo` has new fields (`doc`, `doc_type`, `targets`): code building it with a struct literal should add `..Default::default()` or use `SuffixInfo::new()` followed by `with_doc()`.
+    `YarigCfg` (field `suffix_targets`) and the command-line `RifGenArgs` (option `suffix_targets`) also have a new field.
 
 ## [0.25.2] - 2026-09-26
 

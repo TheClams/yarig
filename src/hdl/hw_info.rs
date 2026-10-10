@@ -4,7 +4,7 @@ use crate::{
     comp::{comp_inst::RifPageInst, reg_impl::{FieldImpl, HwRegs, RegImplDict}},
     error::RifGenError, generator::casing::{Casing, ToCasing},
     hdl::{ExprId,LogicExpr, parser_sv::sv_module_decl},
-    rifgen::{ClkEn, FieldHwKind, Interface, Rif, SuffixInfo}
+    rifgen::{ClkEn, FieldHwKind, Interface, Rif, SuffixInfo, SuffixTarget}
 };
 
 /// Signal type: either a bit vector (signed or unsigned) or a custom type
@@ -494,13 +494,7 @@ impl PortList {
                 format!("Interface to access register from page {}", p.name)))
             .collect();
         let rif_pkg_name = if let Some(suffix) = suffix {
-            if !suffix.pkg  {
-                rif.name.to_owned()
-            } else if suffix.alt_pos && rif.name.ends_with("_rif") {
-                format!("{}_{}_rif", &rif.name[..(rif.name.len()-4)], suffix.name)
-            } else {
-                format!("{}_{}", rif.name, suffix.name)
-            }
+            suffix.apply(&rif.name, SuffixTarget::RtlPkg)
         } else {
             rif.name.to_owned()
         };

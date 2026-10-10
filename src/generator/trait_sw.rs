@@ -60,7 +60,7 @@ pub trait GeneratorSw : GeneratorBase {
         // Dispatch generator: RIF or rifmux
         match obj {
             Comp::Rifmux(rifmux) => {
-                let riflist = RifList::new(rifmux, !Self::IS_HIERARCHICAL);
+                let riflist = RifList::new(rifmux, !Self::IS_HIERARCHICAL, None);
                 if !Self::SINGLE_FILE && !self.setting().gen_inc.is_empty() {
                     let gen_all = self.setting().is_gen_all();
                     for (rif, info) in riflist.iter() {

@@ -34,7 +34,11 @@ public = false
 # Valid values: "default", "apb", "uaux"
 interface = "apb"
 
-# Optional: Use suffixes only for RTL generation targets
+# Optional: Select the artifacts on which suffixes are applied (see Suffixes section)
+# Default: RTL module and the name of all generated files
+suffix_targets = ["rtl", "doc"]
+
+# Deprecated: use suffixes only for the RTL module, same as suffix_targets = ["rtl_type"]
 suffix_rtl_only = false
 
 # Optional documentation base address offset
@@ -103,9 +107,11 @@ custom_target = "./custom"
 When generating RIF using parameters, it is sometimes useful to add suffix to the generated file.
 
 The syntax to set the suffix of a rif is to defined a new table named `[suffixes.<rif_name>]` and provides at least a name.
-There are two optional key/value boolean pairs, default to false:
- - `pkg` : Suffix apply to the generate package file as well
- - `alt_pos` : Place suffix after the \_pkg instead of before when generating package
+There are optional key/value boolean pairs, default to false:
+ - `pkg` : Suffix apply to the generated RTL package (name and file) as well
+ - `doc` : Suffix apply to the documentation type name as well (the file name of the documentation is already suffixed by default)
+ - `doc_type` : Suffix apply to the documentation type name only
+ - `alt_pos` : Place suffix before the \_rif instead of after the name, for example `spi_full_rif` instead of `spi_rif_full`
 
 ```toml
 [suffixes.spi]
@@ -115,8 +121,41 @@ alt_pos = true
 
 [suffixes.uart]
 name = "lite"
-pkg = false
+doc_type = true
 ```
+
+The same flags can be set on the command line, with `--suffix name(alt,pkg,doc,doc_type)`, or on a RIF instance in a rifmux (see [syntax](syntax.md)).
+
+#### Suffix targets
+
+The suffix can be applied to different artifacts, which are selected with the `suffix_targets` list (`--suffix_targets` on the command-line, comma separated):
+
+| Target     | Artifact on which the suffix is applied                                                      |
+|------------|----------------------------------------------------------------------------------------------|
+| `rtl_type` | RTL module name and its file (the file name always follows the module name)                  |
+| `rtl_pkg`  | RTL package name and its file                                                                |
+| `rtl`      | Shortcut for `rtl_type` and `rtl_pkg`                                                        |
+| `doc_file` | File name of the documentation (html, adoc, latex, mif, json)                                |
+| `doc_type` | RIF type name used inside the documentation (titles, tables, links)                          |
+| `doc`      | Shortcut for `doc_file` and `doc_type`                                                       |
+| `sw`       | File name of software outputs (C header, python, svd, ipxact)                                |
+| `sim`      | File name of simulation output (RAL)                                                         |
+
+When `suffix_targets` is not set, the default is `["rtl_type", "doc_file", "sw", "sim"]`:
+the suffix is applied to the RTL module and to all generated files, but not to the RTL package nor to the type name inside the documentation.
+The flags of a suffix (`pkg`, `doc`, `doc_type`) enable additional targets for this suffix only,
+so they can be used to override the default for a specific RIF.
+
+```toml
+# Suffix on RTL module/package and on documentation file/type name, but not on software and simulation files
+suffix_targets = ["rtl", "doc"]
+
+# Suffix only on the type name of the documentation: all generated file names are unchanged
+suffix_targets = ["doc_type"]
+```
+
+The option `suffix_rtl_only` is deprecated: it is equivalent to `suffix_targets = ["rtl_type"]`.
+When both options are set, `suffix_targets` is used.
 
 ### Casing
 
@@ -409,7 +448,7 @@ gen_inc = ["*"]
 local = ["spi", "uart"]
 targets = ["sv", "c", "html", "py", "ral", "svd"]
 public = false
-suffix_rtl_only = true
+suffix_targets = ["rtl_type", "doc_file"]
 
 # Parameters
 [parameters]

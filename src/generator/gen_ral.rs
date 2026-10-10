@@ -4,7 +4,7 @@ use crate::{
     cfg::CfgRal,
     comp::comp_inst::{RifFieldInst, RifInst, RifPageInst, RifRegInst, RifmuxInst},
     parser::{get_rif, remove_rif},
-    rifgen::{Description, EnumDef, FieldSwKind, InterruptRegKind}
+    rifgen::{Description, EnumDef, FieldSwKind, InterruptRegKind, SuffixTarget}
 };
 
 use super::{
@@ -90,7 +90,7 @@ impl GeneratorBase for GeneratorRal {
     }
 
     fn filename_rif(&self, rif: &RifInst) -> String {
-        format!("ral_{}.{}", rif.name(false) , Self::EXT)
+        format!("ral_{}.{}", rif.name_for(self.setting().suffix_target) , Self::EXT)
     }
 
     fn filename_rifmux(&self, rif: &RifmuxInst) -> String {
@@ -252,7 +252,7 @@ impl GeneratorSw for GeneratorRal {
         }
         // println!("Rifs = {:?}, imports = {:?}", rif_list.iter().map(|l| l.0.name(true)).collect::<Vec<_>>(), self.imports);
         for (rif,_) in rif_list.iter() {
-            let name = rif.name(true).to_lowercase();
+            let name = rif.name_for(SuffixTarget::Sim).to_lowercase();
             let n = remove_rif(&name);
             let inc = if let Some(pkg) = get_rif(&self.imports, n) {
                 format!("import {pkg}::ral_block_{n};\n")

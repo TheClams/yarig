@@ -5,7 +5,7 @@ use clap::Parser;
 use crate::{
     cfg::{RifGenTarget, RtlLimit},
     generator::{casing::Casing, gen_common::Skippable, gen_py::PyVersion},
-    rifgen::{Interface, SuffixInfo}
+    rifgen::{Interface, SuffixInfo, SuffixTargetSel}
 };
 
 
@@ -73,9 +73,13 @@ pub struct RifGenArgs{
     /// Rename field using reserved keyword
     #[arg(long, action)]
     pub keyword_rename: bool,
-    /// Use suffix only  for RTL outputs
+    /// Use suffix only for RTL outputs (deprecated, use --suffix_targets rtl_type instead)
     #[arg(long, action)]
     pub suffix_rtl_only: bool,
+    /// List of artifacts on which the suffix is applied: rtl, rtl_type, rtl_pkg, doc, doc_file, doc_type, sw, sim
+    /// (default: RTL module and all generated file names)
+    #[arg(long, num_args = 1.., value_delimiter = ',')]
+    pub suffix_targets: Vec<SuffixTargetSel>,
     /// Specify an HDL interface
     #[arg(long)]
     pub interface: Option<Interface>,
