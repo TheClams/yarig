@@ -795,7 +795,7 @@ impl RifGenSrc {
                             self.last_field_mut().disabled(parse_expr(l)?);
                             self.last_field_mut().src.prop_lines.insert(FieldProp::Visibility, line_num);
                         }
-                        Context::Optional => self.last_field_mut().optional = l.to_owned(),
+                        Context::Optional => self.last_field_mut().optional = parse_expr(l)?,
                         Context::ArrayPosIncr => {
                             self.last_field_mut().array_pos_incr = val_u8(&mut l)?;
                             self.last_field_mut().src.prop_lines.insert(FieldProp::ArrayPosIncr, line_num);

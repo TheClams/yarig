@@ -24,9 +24,9 @@ impl GeneratorIpXact {
     pub fn new(setting: GeneratorBaseSetting, cfg: CfgIpXact) -> Self {
         GeneratorIpXact{
             core: GeneratorCore::new(1,setting),
-            vendor : cfg.vendor.map_or("Unknown".to_owned(), |s| s),
-            version : cfg.version.map_or("1.0".to_owned(), |s| s),
-            library : cfg.library.map_or("IP".to_owned(), |s| s),
+            vendor : cfg.vendor.unwrap_or("Unknown".to_owned()),
+            version : cfg.version.unwrap_or("1.0".to_owned()),
+            library : cfg.library.unwrap_or("IP".to_owned()),
             page_range: Vec::new(),
         }
     }

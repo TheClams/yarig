@@ -76,7 +76,7 @@ impl FieldImpl {
         let (width, resets) = if field.is_partial() {
             // By construction the partials should always be Some if the field is partial
             let Some(partial_info) = partials else {
-                return Err(format!("Found empty partial for field {}", &field.name));
+                return Err(format!("Found empty partial for field {}", field.name));
             };
             partial_info.merge(&field.name, field.signed)
         } else {

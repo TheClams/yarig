@@ -1,5 +1,18 @@
 # Change Log
 
+## [0.26.1]
+### Added
+  - Syntax: `optional` property of a field (definition or instance override) now supports a generic: `optional: $GEN` enables the field when the generic is not 0.
+    The condition must be the generic alone and is not supported for password, counter or partial field.
+    Documentation generators add a note on the field (or tell it is disabled when the generic value is provided by `--doc_generics`).
+
+### Fix
+  - Various fix around the optional feature:
+    * was previously only working at instance level, not deifnition level
+    * In RTL, optional now use the more general condition GEN != 0 instead of GEN == 1
+    * Disabled RO field now behaves like optional field: evaluate to reset value (as stated by documentation)
+  - RTL: missing enum cast of the reset value assigned to the `__next` signal (and field signal for external register) of a field disabled by a generic or beyond a generic array size.
+
 ## [0.26.0]
 
 ### Added
@@ -20,6 +33,7 @@
 
 ### Migration guide (for projects using yarig as a library)
 Applications built on the library (custom generators, custom CLI) should check the following points:
+  - `RifFieldInst` has a new field `optional: Option<String>` (name of the generic controlling the field). Generators can use it to flag the field as conditional.
   - `RifList::new(rifmux, deep)` and `RifList::scan(...)` now take a `target: Option<SuffixTarget>`: instances of the same RIF type are merged unless a suffix gives them a different name for this target.
     Pass `None` to keep the previous behavior (always merge by type name), which is what the software generators (C, Python, RAL, ...) must still use since the names inside the generated files do not depend on the suffix.
     Pass `Some(SuffixTarget::DocType)` for documentation, or `Some(SuffixTarget::RtlType)` for RTL, to generate one entry per variant.

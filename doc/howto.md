@@ -315,6 +315,19 @@ Fields can also be conditional:
 
 At the hardware level, the field still exists but it is constant (reset value)
 
+The condition can also be a generic, to select at instantiation of the RTL whether a field is enabled (when the generic is not 0):
+
+```yaml
+generics:
+  - FIELD_EN = true
+registers:
+  - ctrl: "Control register"
+    - mode = 0 3:0 rw "Mode selection"
+      optional: $FIELD_EN
+```
+
+When the generic is 0, the field is constant (reset value): software write is ignored and hardware signals are ignored.
+
 ---
 
 ## Signed Fields

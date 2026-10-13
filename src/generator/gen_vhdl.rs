@@ -569,7 +569,7 @@ impl GeneratorHw for GeneratorVhdl {
                 }
                 self.write(&format!("   {base}_{n}{pad} : {d} "));
                 self.write_signal_kind(p.kind(), &SignalDim::Fixed(0));
-                self.write(&format!("; -- {} {desc}\n", &port.desc));
+                self.write(&format!("; -- {} {desc}\n", port.desc));
             }
             return;
         }

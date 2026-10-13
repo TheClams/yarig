@@ -24,8 +24,8 @@ impl GeneratorSvd {
     pub fn new(setting: GeneratorBaseSetting, cfg: CfgSvd) -> Self {
         GeneratorSvd{
             core: GeneratorCore::new(1,setting),
-            vendor : cfg.vendor.map_or("Unknown".to_owned(), |s| s),
-            version : cfg.version.map_or("1.0".to_owned(), |s| s),
+            vendor : cfg.vendor.unwrap_or("Unknown".to_owned()),
+            version : cfg.version.unwrap_or("1.0".to_owned()),
             rif_top: false,
         }
     }

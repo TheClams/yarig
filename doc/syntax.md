@@ -99,7 +99,7 @@ Parameters value can be overridden by a command-line argument `--parameters <nam
 A generic is defined as `- <name> = [<min>:]<default>:<max> "description"`.
 
 This generate an RTL with input parameter.
-The generic value can be used for register instances array size, control of optional register or optional component in a RifMux.
+The generic value can be used for register instances array size, field width, field array size, control of optional register, optional field or optional component in a RifMux.
 If no minimum value is provided, it is set to 1.
 
 
@@ -263,6 +263,10 @@ The optional properties of a field, indented by one level compare to the field d
  - `reserved` : Renamed field in any documentation to `rsvdxx` (where xx is the LSB) when the visibility is set to public (generator setting). Also remove description.
  - `optional : <condition>` : Indicate that the field is defined only if the _condition_ is true.
   The condition should be a valid arithmetic expression where parameters can be used. For example: `$WIDTH<16 * $FIELD_EN`
+  The condition can also be the name of a generic (e.g. `$FIELD_EN`), in which case it must be used alone: the field is enabled when the generic is not 0.
+  A disabled field is forced to its reset value: software writes are ignored and hardware is ignored (the hardware value is not used, and read value is the reset value).
+  With a generic, the field stays in the register structure, but the logic is removed by the synthesis when the generic is 0.
+  This is not supported for password, counter or partial field.
 
 The value described as signals (_set_signal_, _clr_signal_, _tglSignal_) can not only be signal name but also simple logical expression, using systemVerilog syntax.
 For example `hwset (self.field_en && !reg1.freeze)`.
@@ -340,6 +344,7 @@ It is possible to override some properties at the instance level. Here the synta
  - `<field_name>.description <bla bla>` : change a field description
  - `<field_name>.reset = <rst_val>` : change a field reset value
  - `<field_name>.disable [= <disable_val>]` : disable a field (i.e. value is fixed). If no value is provided, it default to the reset value.
+ - `<field_name>.optional : <condition>` : Same as the field `optional` property: the field is disabled if the _condition_ is false. The condition can be a parameter expression or a generic.
  - `optional : <condition>` : Indicate that the register is created only if the _condition_ is true or different from 0.
  - `optional_acc: [na|ro|rw]`: Control the software access (ro) of register which are due to parameters value. Default is `na` (any access will generate a bus access error).
 

@@ -1140,8 +1140,8 @@ pub struct Field {
     pub limit: LimitP,
     /// Number of fractional bits
     pub nb_frac: isize,
-    /// Indicates the register instance is controlled by a parameter
-    pub optional: String,
+    /// Field is defined only when this expression is true (empty when always defined)
+    pub optional: ExprTokens,
     /// Extra Info
     pub info: HashMap<String,String>,
     /// Source-tracking metadata for round-tripping edits back to the `.rif` file.
@@ -1173,7 +1173,7 @@ impl Default for Field {
             nb_frac : 0,
             limit: LimitP::default(),
             info: HashMap::new(),
-            optional: "".to_owned(),
+            optional: ExprTokens::new(0),
             src: FieldSrcInfo::default(),
         }
     }

@@ -664,6 +664,17 @@ pub trait GeneratorDoc : GeneratorBase {
                         if !dis.is_empty() && reg_insts.len() > 1 && dis.len() != reg_insts.len() {
                             desc.push_str(&self.sanitize(&format!(" \nNote: Disabled in register {dis:?}")));
                         }
+                        // Optional field controlled by a generic
+                        if let Some(g) = &f.optional {
+                            let note = match self.core().get_generic(g, &hier) {
+                                Some(0) => format!(" 
+Note: Disabled (generic {g} is 0)"),
+                                Some(_) => String::new(),
+                                None => format!(" 
+Note: Present only if generic {g} is not 0"),
+                            };
+                            desc.push_str(&self.sanitize(&note));
+                        }
                         // Check for field array not exisiing in some register instances
                         if !reg.array.is_inst() && reg.array.dim() > 1 && f.array.dim() > 0
                             && let Ok(field_impl) = reg_impl.get_field(&f.name) {

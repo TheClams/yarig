@@ -211,7 +211,7 @@ impl GeneratorSw for GeneratorC {
         let dim = reg.array.dim();
         let lt = self.max_len_reg_type;
         let ln = self.max_len_reg_name;
-        let type_name = format!("{}_reg_t", &reg.reg_type.to_lowercase());
+        let type_name = format!("{}_reg_t", reg.reg_type.to_lowercase());
         let desc =
             if dim > 1 {reg.base_description.get_short(self.is_public())}
             else {reg.description.get_short(self.is_public())};
@@ -286,7 +286,7 @@ impl GeneratorSw for GeneratorC {
             prefix.push_str(cntxt.prefix)
         }
         let mut name_tt = format!("{prefix}{inst_name}").to_casing(Casing::Title);
-        let mut name = format!("{prefix}{}", &inst_name.replace('_', ""));
+        let mut name = format!("{prefix}{}", inst_name.replace('_', ""));
         let mut page_type = remove_rif(&rif_inst.type_name).to_lowercase();
         if self.comp().cnt > 1 {
             name.push_str(&cntxt.page.replace('_', ""));

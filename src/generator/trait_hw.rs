@@ -1,7 +1,7 @@
 use std::{collections::HashSet, ops::Deref};
 
 use crate::{
-    cfg::{RtlLimit, RtlLimitCfg}, comp::comp_inst::{Comp, CompInst, FieldWidth, RifInst, RifmuxInst}, error::RifGenError, hdl::{CastInfo, ExprId, LogicExpr, ModuleInfo, PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalInfo, SignalKind, SignalRange}, parser::parser_expr::ParamValues, rifgen::{
+    cfg::{RtlLimit, RtlLimitCfg}, comp::{comp_inst::{Comp, CompInst, FieldWidth, RifFieldInst, RifInst, RifRegInst, RifmuxInst}, reg_impl::FieldImpl}, error::RifGenError, hdl::{CastInfo, ExprId, LogicExpr, ModuleInfo, PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalInfo, SignalKind, SignalRange}, parser::parser_expr::ParamValues, rifgen::{
         Access, ClkEn, ClockingInfo, EnumEntry, EnumKind, ExternalKind, FieldHwKind, FieldSwKind,
         GenericRange, Interface, InterruptClr, InterruptRegKind, InterruptTrigger, LimitValue,
         RegPulseKind, ResetDef, SuffixTarget, order_dict::OrderDict,
@@ -12,6 +12,23 @@ use super::{
     casing::{Casing::{self, Snake}, ToCasing},
     gen_common::{CompInfo, GeneratorBase, RifList}
 };
+
+/// Flag a field read by software directly from the hardware (or from the external register interface), i.e. without a local register
+fn field_rd_direct(reg: &RifRegInst, field: &RifFieldInst, field_impl: &FieldImpl) -> bool {
+    !field.sw_kind.is_wo() && !field.is_password()
+        && (reg.is_external() || !(field_impl.is_sw_write() || field.is_hw_write() || field_impl.is_constant()))
+}
+
+/// Expression of a field value read directly from the hardware (or from the external register interface)
+fn field_hw_read_value(name: String, reg_idx: Option<u16>, field: &RifFieldInst, reg_def_idx: Option<u16>) -> LogicExpr {
+    let field_name = field.name.to_casing(Snake);
+    let value = ExprId::new_field_range(name, reg_idx, field_name, field.to_range(reg_def_idx, true));
+    if let EnumKind::Type(n) = &field.enum_kind {
+        LogicExpr::CastFrom(n.to_owned(), field.width() as u8, Box::new(value.into()))
+    } else {
+        value.into()
+    }
+}
 
 /// Trait to implement generator for hardware implementation (SV, VHDL, ...)
 #[allow(unused_variables)]
@@ -478,6 +495,16 @@ pub trait GeneratorHw : GeneratorBase {
                     self.write_signal_decl(&format!("{name}__decode").as_str().into());
                 }
                 self.write_signal_decl(&(format!("{name}__read_data").as_str(), w).into());
+                // Declare the read value of optional field (controlled by a generic) read directly from the hardware
+                if reg.fields.iter().any(|f| f.optional.is_some()) && !reg.is_intr_derived() {
+                    let reg_impl = rif.get_hw_reg(&reg.group_type);
+                    for f in reg.fields.iter().filter(|f| f.optional.is_some()) {
+                        if field_rd_direct(reg, f, reg_impl.get_field(&f.name)?) {
+                            let f_name = self.casing(&f.name_flat());
+                            self.write_signal_decl(&SignalDef::new_bus(format!("{name}_{f_name}__rd"), f.width(), false).into());
+                        }
+                    }
+                }
             }
         }
         self.write("\n");
@@ -920,6 +947,32 @@ pub trait GeneratorHw : GeneratorBase {
                     } else {
                         field_reset
                     };
+                    // Reset value assigned when the field is disabled by a generic: same casting as the value assigned when enabled
+                    let reset_gen = {
+                        let reset_val = LogicExpr::reset(&field.reset, field_impl.width() as u8);
+                        if field_cast.is_custom() && !field_impl.is_partial {
+                            LogicExpr::Cast(field_cast.clone(), Box::new(reset_val))
+                        } else {
+                            reset_val
+                        }
+                    };
+
+                    // Optional field (controlled by a generic) read directly from the hardware: the read value is forced to the reset value when disabled
+                    if let Some(gen_name) = &field.optional && !reg.is_intr_derived() && field_rd_direct(reg, field, field_impl) {
+                        let rd_id : ExprId = format!("{reg_name}_{field_name_flat}__rd").into();
+                        let hw_value = field_hw_read_value(format!("{group_name}{intr_suffix}"), reg_idx, field, reg_def_idx);
+                        let hw_value = if field.is_signed() {LogicExpr::Cast(CastInfo::Unsigned, Box::new(hw_value))} else {hw_value};
+                        let rd_name = format!("{reg_field_name}_rd");
+                        self.write("\n");
+                        self.write_generate_if(LogicExpr::generic_en(gen_name), format!("gen_{rd_name}"));
+                        self.write_assign(rd_id.clone(), hw_value);
+                        let reset_val = LogicExpr::ValueU(field.reset(reg_def_idx), field.width() as usize);
+                        self.write_field_gen_else(&rd_name, vec![(rd_id, reset_val)]);
+                        // Without register nothing else to generate
+                        if !reg.is_external() {
+                            continue;
+                        }
+                    }
 
                     // Constant or Disabled field ? simply assign to its reset value
                     if field_impl.is_constant() || (field.is_disabled() && field.is_sw_write())  {
@@ -932,10 +985,22 @@ pub trait GeneratorHw : GeneratorBase {
                         continue;
                     }
 
-                    // Conditional assign for field array with generic depth
+                    // Conditional assign for field array with generic depth or for an optional field controlled by a generic
+                    // The else branch assigns every signal driven by the field to its disabled value
+                    let mut gen_cond : Vec<LogicExpr> = Vec::new();
+                    let mut gen_else : Vec<(ExprId, LogicExpr)> = Vec::new();
                     if let FieldWidth::Generic((param_name,_)) = &field_impl.array {
                         let param_id : LogicExpr = param_name.as_str().into();
-                        let cond = LogicExpr::gt(param_id, LogicExpr::ValueI(field.array.idx() as i128, 0));
+                        gen_cond.push(LogicExpr::gt(param_id, LogicExpr::ValueI(field.array.idx() as i128, 0)));
+                    }
+                    // (not needed for a field which does not drive any signal: pending register or read-only external register)
+                    let drives_signal = reg.intr_info.0 != InterruptRegKind::Pending && !(reg.is_external() && !field.is_sw_write());
+                    if let Some(name) = &field.optional && drives_signal {
+                        gen_cond.push(LogicExpr::generic_en(name));
+                    }
+                    let has_gen = !gen_cond.is_empty();
+                    if has_gen {
+                        let cond = if gen_cond.len() == 1 {gen_cond.remove(0)} else {LogicExpr::And(gen_cond)};
                         self.write("\n");
                         self.write_generate_if(cond, format!("gen_{reg_field_name}") );
                     }
@@ -997,6 +1062,7 @@ pub trait GeneratorHw : GeneratorBase {
                             LimitValue::None => unreachable!(),
                         };
                         if field.has_hw_limit(limit_cfg) {
+                            gen_else.push((check_sig.clone(), LogicExpr::ValueU(1, 1)));
                             self.write_assign(check_sig, check_expr);
                         } else {
                             let l = limit_cfg.get(field);
@@ -1008,15 +1074,15 @@ pub trait GeneratorHw : GeneratorBase {
                     // For external register combinatorial assign from the interface bus
                     if reg.is_external() && field.is_sw_write() {
                         self.write_assign(field_id.clone(), wr_data);
+                        if has_gen {
+                            gen_else.push((field_id.clone(), reset_gen.clone()));
+                        }
                         if let FieldWidth::Generic((n,r)) = &field.width {
                             cond_assign.push(field_id);
                             self.write_cond_generic_field(&reg_field_name, n.as_ref(), r, &cond_assign);
                         }
-                        else if field_impl.array.is_generic() {
-                            self.write_generate_else(format!("gen_no_{reg_field_name}"));
-                            let reset_val = LogicExpr::reset(&field.reset, field_impl.width() as u8);
-                            self.write_assign(field_id, reset_val);
-                            self.write_generate_end(format!("gen_no_{reg_field_name}"));
+                        if has_gen {
+                            self.write_field_gen_else(&reg_field_name, gen_else);
                         }
                         continue;
                     }
@@ -1026,7 +1092,13 @@ pub trait GeneratorHw : GeneratorBase {
                         let mut cond = LogicExpr::and(decode.clone(), rif_en.clone());
                         cond.push(LogicExpr::not(rd_wrn.clone()));
                         let val = LogicExpr::ite(cond, wr_data, LogicExpr::value(0, field));
+                        if has_gen {
+                            gen_else.push((field_id.clone(), LogicExpr::ValueU(0, field.width().into())));
+                        }
                         self.write_assign(field_id, val);
+                        if has_gen {
+                            self.write_field_gen_else(&reg_field_name, gen_else);
+                        }
                         continue;
                     }
 
@@ -1076,6 +1148,9 @@ pub trait GeneratorHw : GeneratorBase {
                         } else {
                             event
                         };
+                        if has_gen {
+                            gen_else.push((name.clone(), LogicExpr::ValueU(0, 1)));
+                        }
                         self.write_assign(name, rhs);
                     }
 
@@ -1124,19 +1199,20 @@ pub trait GeneratorHw : GeneratorBase {
                         self.write_assign(field_clr_id.clone(), intr_clr);
                         let rhs = LogicExpr::or_b(intr_set, field_clr_id.clone().into());
                         self.write_assign(field_next_id.clone(), rhs);
+                        if has_gen {
+                            gen_else.push((intr_l_id.clone(), LogicExpr::ValueU(0, field.width().into())));
+                            gen_else.push((field_clr_id.clone(), LogicExpr::ValueU(0, field.width().into())));
+                            gen_else.push((field_next_id.clone(), reset_gen.clone()));
+                        }
                         // Field with parameterized width
                         if let FieldWidth::Generic((n,r)) = &field.width {
                             cond_assign.push(intr_l_id);
                             cond_assign.push(field_clr_id);
                             cond_assign.push(field_next_id);
                             self.write_cond_generic_field(&reg_field_name, n.as_ref(), r, &cond_assign);
-                        } else if field_impl.array.is_generic() {
-                            self.write_generate_else(format!("gen_no_{reg_field_name}"));
-                            let reset_val = LogicExpr::reset(&field.reset, field_impl.width() as u8);
-                            self.write_assign(intr_l_id, LogicExpr::ValueU(0, 0));
-                            self.write_assign(field_clr_id, LogicExpr::ValueU(0, 0));
-                            self.write_assign(field_next_id, reset_val);
-                            self.write_generate_end(format!("gen_no_{reg_field_name}"));
+                        }
+                        if has_gen {
+                            self.write_field_gen_else(&reg_field_name, gen_else);
                         }
                         continue;
                     }
@@ -1149,14 +1225,15 @@ pub trait GeneratorHw : GeneratorBase {
                             LogicExpr::not(rd_wrn.clone())].to_vec());
                         let rhs = LogicExpr::ite(acc, wr_data, field_id.into());
                         self.write_assign(field_next_id.clone(), rhs);
+                        if has_gen {
+                            gen_else.push((field_next_id.clone(), reset_gen.clone()));
+                        }
                         if let FieldWidth::Generic((n,r)) = &field.width {
                             cond_assign.push(field_next_id);
                             self.write_cond_generic_field(&reg_field_name, n.as_ref(), r, &cond_assign);
-                        } else if field_impl.array.is_generic() {
-                            self.write_generate_else(format!("gen_no_{reg_field_name}"));
-                            let reset_val = LogicExpr::reset(&field.reset, field_impl.width() as u8);
-                            self.write_assign(field_next_id, reset_val);
-                            self.write_generate_end(format!("gen_no_{reg_field_name}"));
+                        }
+                        if has_gen {
+                            self.write_field_gen_else(&reg_field_name, gen_else);
                         }
                         continue;
                     }
@@ -1360,35 +1437,44 @@ pub trait GeneratorHw : GeneratorBase {
                         };
 
                         self.write_assign(field_next_id.clone(), LogicExpr::Ite(if_then, Box::new(val_default)));
+                        if has_gen {
+                            gen_else.push((field_next_id.clone(), reset_gen.clone()));
+                        }
                         // Assign external limit signals if needed
                         if field.limit.is_ext() {
                             // let idx = "";
                             let ext_val = sw_groupd_id.with_path(format!("{field_name}__next"), field_range.clone());
+                            if has_gen {
+                                gen_else.push((ext_val.clone(), LogicExpr::ValueU(0, field.width().into())));
+                            }
                             self.write_assign(ext_val, wr_data.clone());
                         }
-                        // Handle field with geenric width or geenric array depth
+                        // Handle field with geenric width
                         if let FieldWidth::Generic((n,r)) = &field.width {
                             cond_assign.push(field_next_id);
                             self.write_cond_generic_field(&reg_field_name, n.as_ref(), r, &cond_assign);
-                        } else if field_impl.array.is_generic() {
-                            self.write_generate_else(format!("gen_no_{reg_field_name}"));
-                            let reset_val = LogicExpr::reset(&field.reset, field_impl.width() as u8);
-                            self.write_assign(field_next_id, reset_val);
-                            self.write_generate_end(format!("gen_no_{reg_field_name}"));
                         }
-
                     }
                     // Handle case of partial field where one part is read-only
                     else if field_impl.has_write_mod() {
                         self.write_assign(field_next_id.clone(), LogicExpr::ValueU(0, field.width().into()));
+                        if has_gen {
+                            gen_else.push((field_next_id.clone(), LogicExpr::ValueU(0, field.width().into())));
+                        }
                     }
                     // Handle case of direct feedback of Hardware written field to hardware read value
                     else if field.hw_access==Access::RW && !reg.is_intr_derived() {
                         self.write_assign(field_id.clone(), field_sig);
+                        if has_gen {
+                            gen_else.push((field_id.clone(), reset_gen.clone()));
+                        }
                         if let FieldWidth::Generic((n,r)) = &field.width {
                             cond_assign.push(field_id);
                             self.write_cond_generic_field(&reg_field_name, n.as_ref(), r, &cond_assign);
                         }
+                    }
+                    if has_gen {
+                        self.write_field_gen_else(&reg_field_name, gen_else);
                     }
                 }
 
@@ -1467,7 +1553,7 @@ pub trait GeneratorHw : GeneratorBase {
                         let next : ExprId = format!("{reg_field_name}__next").into();
                         let value : LogicExpr = if field.is_password() {
                             next.with_idx(0).into()
-                        } else if let Some(cnt_info) = field.counter_info().and_then(|info| if info.has_satn() {Some(info)} else {None}) {
+                        } else if let Some(cnt_info) = field.counter_info().filter(|&info| info.has_satn()) {
                             let cond = field_id.with_fsuffix("_event").into();
                             let sat = if field.is_signed() {
                                 let wm1 = field.width() - 1;
@@ -1744,13 +1830,16 @@ pub trait GeneratorHw : GeneratorBase {
                         values.push(lock.into());
                     } else {
                         let prefix = if !reg.is_external() && (field_impl.is_sw_write() || field.is_hw_write() || field_impl.is_constant()) {"rif_"} else {""};
-                        let name = format!("{prefix}{group_name}{intr_suffix}");
-                        let field_range = field.to_range(reg_def_idx,true);
-                        let value = ExprId::new_field_range(name, reg_idx, field_name.to_owned(), field_range);
-                        if let EnumKind::Type(n) = &field.enum_kind {
-                            values.push(LogicExpr::CastFrom(n.to_owned(), field.width() as u8, Box::new(value.into())));
+                        let is_rd_direct = !reg.is_intr_derived() && field_rd_direct(reg, field, field_impl);
+                        if field.optional.is_some() && is_rd_direct {
+                            // Optional field controlled by a generic: use the value forced to the reset value when disabled
+                            let f_name = self.casing(&field.name_flat());
+                            values.push(ExprId::new(format!("{reg_name}_{f_name}__rd")).into());
+                        } else if field.is_disabled() && is_rd_direct {
+                            // Disabled field must ignore the hardware
+                            values.push(LogicExpr::ValueU(field.reset(reg_def_idx), field.width().into()));
                         } else {
-                            values.push(value.into());
+                            values.push(field_hw_read_value(format!("{prefix}{group_name}{intr_suffix}"), reg_idx, field, reg_def_idx));
                         }
                     }
                     // Save LSB
@@ -2313,6 +2402,16 @@ pub trait GeneratorHw : GeneratorBase {
         }
     }
 
+    /// Close the generate block of a field conditioned by a generic with the else branch
+    /// where every signal driven by the field is assigned to its disabled value
+    fn write_field_gen_else(&mut self, name: &str, assigns: Vec<(ExprId, LogicExpr)>) {
+        self.write_generate_else(format!("gen_no_{name}"));
+        for (id, value) in assigns {
+            self.write_assign(id, value);
+        }
+        self.write_generate_end(format!("gen_no_{name}"));
+    }
+
     /// Write conditional assign to MSB of unsued field with generic width
     fn write_cond_generic_field(&mut self, name: &str, param_name: &str, range: &GenericRange, ids: &[ExprId]) {
         let gen_name = format!("gen_{name}_null");
@@ -2402,7 +2501,7 @@ pub trait GeneratorHw : GeneratorBase {
 
     /// Filename for RIF mux package
     fn filename_rifmux_pkg(&self, rifmux: &RifmuxInst) -> String {
-        format!("{}_pkg.{}", &rifmux.inst_name.to_lowercase(), Self::EXT)
+        format!("{}_pkg.{}", rifmux.inst_name.to_lowercase(), Self::EXT)
     }
 
     /// Return the RTL limit configuration (default and force)

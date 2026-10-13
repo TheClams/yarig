@@ -388,6 +388,10 @@ impl LogicExpr {
     pub fn neq(lhs: LogicExpr, rhs: LogicExpr) -> LogicExpr {
         LogicExpr::Neq(Box::new(lhs), Box::new(rhs))
     }
+    /// Condition true when a generic is enabled, i.e. different from 0 (works for boolean and integer generic)
+    pub fn generic_en(name: &str) -> LogicExpr {
+        LogicExpr::neq(name.into(), LogicExpr::ValueI(0, 0))
+    }
     pub fn xor(lhs: LogicExpr, rhs: LogicExpr) -> LogicExpr {
         LogicExpr::Xor(Box::new(lhs), Box::new(rhs))
     }

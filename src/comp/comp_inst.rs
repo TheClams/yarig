@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use crate::{
     cfg::{RtlLimit, RtlLimitCfg}, hdl::ExprId,
-    parser::{RifGenSrc, RifGenTop, get_rif, parser_expr::{ExprValue, ParamValues}},
+    parser::{RifGenSrc, RifGenTop, get_rif, parser_expr::{ExprError, ExprValue, ParamValues}},
     rifgen::{
         Access, Address, AddressKind, AddressOffset, ClockingInfo, CounterInfo, DeclLine, DescIdx, Description, EnumDef, EnumDefs, EnumKind,
         ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, GenericRange, GenericValues, Interface, InterruptRegKind,
@@ -1081,7 +1081,7 @@ impl RifRegInst {
                     // For generic array, add conditional instance with the proper access when register is disabled
                     ExprValue::Range(name, _) => {
                         let acc = ovr.optional_acc.unwrap_or(def.optional_acc);
-                        r.optional = Some((LogicExpr::eq(name.into(),LogicExpr::ValueU(1, 1)), acc));
+                        r.optional = Some((LogicExpr::generic_en(&name), acc));
                     }
                     ExprValue::Value(_) => {}
                 }
@@ -1111,12 +1111,7 @@ impl RifRegInst {
                 if let Some(visibility) = ovr_f.visibility {
                     reg_field.visibility = visibility;
                 }
-                if !ovr_f.optional.is_empty() {
-                    let optional = ovr_f.optional.eval(&rifs.params)?;
-                    if optional == 0 {
-                        reg_field.visibility = Visibility::Disabled;
-                    }
-                }
+                reg_field.apply_optional(&ovr_f.optional, rifs)?;
                 let enum_def : Option<&EnumDef> = reg_field.enum_kind.get_def(&rifs.enums);
                 match &ovr_f.reset {
                     ResetValOverride::Reset(reset_val) => reg_field.reset = reset_val.compile(reg_field.is_signed(), reg_field.nb_frac, &rifs.params, enum_def)?,
@@ -1358,6 +1353,8 @@ pub struct RifFieldInst {
     pub array: ArrayIdx,
     pub nb_frac: isize,
     pub limit: Limit,
+    /// Name of the generic enabling the field: when 0 the field is forced to its reset value (None when always enabled)
+    pub optional: Option<String>,
 }
 
 impl RifFieldInst {
@@ -1460,9 +1457,11 @@ impl RifFieldInst {
             info.hold = info.hold.as_ref().map(|r| (&r.compile(field.signed, field.nb_frac, params, enum_def).expect("Unknown parameter in limit !")).into());
         }
 
+        let visibility = field.visibility.compile(params);
+
         *next_lsb += width;
         let width = FieldWidth::from_pos(width as u16, &field.pos, &rifs.generics);
-        Ok(Some(RifFieldInst {
+        let mut field_inst = RifFieldInst {
             name: field.name.to_owned(),
             base_description,
             description,
@@ -1470,7 +1469,7 @@ impl RifFieldInst {
             sw_kind,
             hw_kind,
             hw_access: field.hw_acc,
-            visibility: field.visibility.compile(params),
+            visibility,
             enum_kind: field.enum_kind.clone(),
             limit,
             partial: field.partial,
@@ -1478,7 +1477,43 @@ impl RifFieldInst {
             lsb,
             width,
             array: idx,
-        }))
+            optional: None,
+        };
+        // Optional field evaluating to 0 is disabled (i.e. forced to its reset value)
+        field_inst.apply_optional(&field.optional, rifs)?;
+        Ok(Some(field_inst))
+    }
+
+    /// Apply an optional condition: a field is disabled when the condition is 0
+    /// When the condition is a single generic, the field is enabled depending on the generic value
+    pub fn apply_optional(&mut self, cond: &ExprTokens, rifs: &RifsInfo) -> Result<(), String> {
+        if cond.is_empty() {
+            return Ok(());
+        }
+        let value = cond.eval_with_gen(&rifs.params, &rifs.generics)
+            .map_err(|e| match e {
+                ExprError::Malformed => format!("Malformed optional condition on field {}: a generic can only be used alone", self.name),
+                e => format!("{} in optional of field {}", String::from(e), self.name),
+            })?;
+        match value {
+            ExprValue::Value(0) => self.visibility = Visibility::Disabled,
+            ExprValue::Value(_) => {}
+            // Generic always (resp. never) enabled over its range do not need any condition
+            ExprValue::Range(_, r) if r.min > 0 => {}
+            ExprValue::Range(_, r) if r.max == 0 => self.visibility = Visibility::Disabled,
+            ExprValue::Range(name, _) => {
+                if self.is_password() || self.is_counter() || self.is_partial() {
+                    return Err(format!("Field {}: optional on a generic ({name}) is not supported for password, counter or partial field", self.name));
+                }
+                match &self.optional {
+                    Some(n) if *n != name => {
+                        return Err(format!("Field {}: optional can only depend on one generic ({n} and {name} found)", self.name));
+                    }
+                    _ => self.optional = Some(name),
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Check if field position overlap with another field
@@ -1510,6 +1545,7 @@ impl RifFieldInst {
             nb_frac: 0,
             array: ArrayIdx::default(),
             limit: Limit::default(),
+            optional: None,
         }
     }
 
@@ -1863,7 +1899,7 @@ impl RifmuxInst {
                 match e.eval_with_gen(&params, &rifmux.generics)? {
                     ExprValue::Value(v) => if v==0 {continue;}
                     ExprValue::Range(name, _) => {
-                        optional = Some(LogicExpr::eq(name.into(),LogicExpr::ValueU(1, 1)));
+                        optional = Some(LogicExpr::generic_en(&name));
                     }
                 }
             }
@@ -1992,4 +2028,74 @@ impl Comp {
         }
     }
 
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parser::parser_expr::parse_expr;
+    use crate::rifgen::GenericRange;
+
+    /// Compile a default field with the given optional condition and return the instance
+    fn field_inst(cond: &str, params: &[(&str, isize)], generics: &[(&str, GenericRange)]) -> Result<RifFieldInst, String> {
+        let rifs = HashMap::new();
+        let mut p = ParamValues::new();
+        for (k, v) in params {
+            p.insert(k.to_string(), *v);
+        }
+        let mut g = GenericValues::new();
+        for (k, v) in generics {
+            g.insert(k.to_string(), v.clone());
+        }
+        let info = RifsInfo::new(&rifs, p, g, Vec::new().into());
+        let field = Field { name: "f".to_owned(), optional: parse_expr(cond).unwrap(), ..Default::default() };
+        let mut next_lsb = 0;
+        let inst = RifFieldInst::new(&field, InterruptRegKind::None, &mut next_lsb, &info, None, None)?;
+        Ok(inst.unwrap())
+    }
+
+    fn gen_range(min: u16, default: u16, max: u16) -> GenericRange {
+        GenericRange {min, default, max, desc: None}
+    }
+
+    #[test]
+    fn optional_param() {
+        let f = field_inst("$P", &[("P", 1)], &[]).unwrap();
+        assert!(!f.is_disabled() && f.optional.is_none());
+        let f = field_inst("$P", &[("P", 0)], &[]).unwrap();
+        assert!(f.is_disabled() && f.optional.is_none());
+        let f = field_inst("not $P", &[("P", 0)], &[]).unwrap();
+        assert!(!f.is_disabled());
+        let f = field_inst("$P < 16 * $E", &[("P", 8), ("E", 1)], &[]).unwrap();
+        assert!(!f.is_disabled());
+        assert!(field_inst("$UNKNOWN", &[], &[]).is_err());
+    }
+
+    #[test]
+    fn optional_generic() {
+        // Generic which can be 0: field condition depends on the generic
+        let f = field_inst("$G", &[], &[("G", gen_range(0, 1, 1))]).unwrap();
+        assert!(!f.is_disabled());
+        assert_eq!(f.optional, Some("G".to_owned()));
+        let f = field_inst("$G", &[], &[("G", gen_range(0, 2, 8))]).unwrap();
+        assert_eq!(f.optional, Some("G".to_owned()));
+        // Generic never 0: field always enabled
+        let f = field_inst("$G", &[], &[("G", gen_range(1, 4, 4))]).unwrap();
+        assert!(!f.is_disabled() && f.optional.is_none());
+        // Generic always 0: field always disabled
+        let f = field_inst("$G", &[], &[("G", gen_range(0, 0, 0))]).unwrap();
+        assert!(f.is_disabled() && f.optional.is_none());
+        // Parameter has priority over generic with the same name
+        let f = field_inst("$G", &[("G", 0)], &[("G", gen_range(0, 1, 1))]).unwrap();
+        assert!(f.is_disabled() && f.optional.is_none());
+    }
+
+    #[test]
+    fn optional_generic_unsupported() {
+        let g = [("G", gen_range(0, 1, 1)), ("H", gen_range(0, 1, 1))];
+        // Generic can only be used alone
+        assert!(field_inst("not $G", &[], &g).is_err());
+        assert!(field_inst("$G + $H", &[], &g).is_err());
+        assert!(field_inst("$G * 2", &[], &g).is_err());
+    }
 }
