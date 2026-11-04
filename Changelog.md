@@ -1,5 +1,14 @@
 # Change Log
 
+## [0.26.2]
+### Added
+  - Option to control suffix of interrupt register (status/enable/mask/pending):
+    `[interrupt]` table with `status`, `enable`, `mask` and `pending` keys in the configuration, or `--interrupt_status`, `--interrupt_enable`, `--interrupt_mask` and `--interrupt_pending` on the command-line.
+    Defaults are unchanged (no suffix for status, `en`, `mask` and `pending`).
+
+### Fix
+  - HDL generator: signe reset valud in hexa now have the proper number of nibble
+
 ## [0.26.1]
 ### Added
   - Syntax: `optional` property of a field (definition or instance override) now supports a generic: `optional: $GEN` enables the field when the generic is not 0.

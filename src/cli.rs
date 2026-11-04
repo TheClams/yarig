@@ -31,6 +31,18 @@ pub struct RifGenArgs{
     /// Use legacy order for interrupts (mask before enable)
     #[arg(long, action)]
     pub auto_legacy: bool,
+    /// Suffix of the interrupt status register (default: none)
+    #[arg(long)]
+    pub interrupt_status: Option<String>,
+    /// Suffix of the interrupt enable register (default: en)
+    #[arg(long)]
+    pub interrupt_enable: Option<String>,
+    /// Suffix of the interrupt mask register (default: mask)
+    #[arg(long)]
+    pub interrupt_mask: Option<String>,
+    /// Suffix of the interrupt pending register (default: pending)
+    #[arg(long)]
+    pub interrupt_pending: Option<String>,
     /// List of included component to generate. Use "*" to select all.
     #[arg(long, num_args = 0..)]
     pub gen_inc: Vec<String>,

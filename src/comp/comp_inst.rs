@@ -6,7 +6,7 @@ use crate::{
     rifgen::{
         Access, Address, AddressKind, AddressOffset, ClockingInfo, CounterInfo, DeclLine, DescIdx, Description, EnumDef, EnumDefs, EnumKind,
         ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, GenericRange, GenericValues, Interface, InterruptRegKind,
-        InterruptTrigger, Limit, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegOverride, RegPulseKind, ResetVal, ResetValOverride,
+        InterruptSuffixes, InterruptTrigger, Limit, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegOverride, RegPulseKind, ResetVal, ResetValOverride,
         Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SuffixInfo, SuffixTarget, SuffixTargets, Visibility, Width,
         order_dict::{OrderDict, OrderedDictIterV}
     }
@@ -281,6 +281,8 @@ pub struct RifsInfo<'a> {
     pub enums: EnumDefs,
     /// Partial field dictionnary: allows checking all part of a field are present at the end
     pub partials: PartialFieldDict,
+    /// Suffixes used to name registers derived from interrupts
+    pub intr_sfx: InterruptSuffixes,
 }
 
 impl<'a> RifsInfo<'a>  {
@@ -290,7 +292,8 @@ impl<'a> RifsInfo<'a>  {
             params,
             generics,
             enums,
-            partials: PartialFieldDict::new()
+            partials: PartialFieldDict::new(),
+            intr_sfx: InterruptSuffixes::default(),
         }
     }
 
@@ -329,6 +332,8 @@ pub struct RifInst {
     pub interface: Interface,
     /// Suffix information
     pub suffix: Option<SuffixInfo>,
+    /// Suffixes used to name registers derived from interrupts
+    pub intr_sfx: InterruptSuffixes,
     /// Software interface clock definition
     pub sw_clocking: Vec<ClockingInfo>,
     /// Hardware interface clock definition
@@ -342,7 +347,15 @@ pub struct RifInst {
 }
 
 impl RifInst {
-    pub fn new(name: &str, rif: &Rif, top_params: &ParamValues, rifs: &HashMap<String, Rif>, description: Description, suffix: Option<SuffixInfo>) -> Result<Self, String> {
+    pub fn new(
+        name: &str,
+        rif: &Rif,
+        top_params: &ParamValues,
+        rifs: &HashMap<String, Rif>,
+        description: Description,
+        suffix: Option<SuffixInfo>,
+        intr_sfx: &InterruptSuffixes,
+    ) -> Result<Self, String> {
         let addr_incr = rif.data_width.nb_byte(); // Address align in byte
         // println!("[RifInst] Params in {} | Top={:?}, local={:?}",
         //     rif.name,
@@ -382,6 +395,7 @@ impl RifInst {
         // Collect all register instantiated in a page
         let mut pages : Vec<RifPageInst> = Vec::with_capacity(rif.pages.len());
         let mut rifs_info = RifsInfo::new(rifs, params, rif.generics.clone(), enum_defs);
+        rifs_info.intr_sfx = intr_sfx.clone();
         for page in rif.pages.iter() {
             // Create page instance
             let inst = RifPageInst::new(&mut rifs_info, page, addr_incr)?;
@@ -406,6 +420,7 @@ impl RifInst {
             ports,
             interface: rif.interface.clone(),
             suffix,
+            intr_sfx: intr_sfx.clone(),
             sw_clocking: rif.sw_clocking.clone(),
             hw_clocking: rif.hw_clocking.clone(),
             info: rif.info.clone(),
@@ -513,7 +528,7 @@ impl RifPageInst {
                         }
                         continue;
                 }
-                if let Some(regdef) = page.find_regdef(&reg.type_name,rifs.rifs ) {
+                if let Some(regdef) = page.find_regdef_with(&reg.type_name, rifs.rifs, &rifs.intr_sfx) {
                     let addr = inst_addr.updt(&reg.addr, &rifs.params);
                     let range : Option<(String,GenericRange)>;
                     let nb : u16;
@@ -673,7 +688,9 @@ impl RifPageInst {
             }
             let name = r.reg_name.clone();
             let mut reg_override = HashMap::new();
-            if let Some(regdef) = page.find_regdef(&r.reg_name, rifs)
+            // Derived interrupt registers are looked up with their definition name since their suffix is configurable
+            let def_name = if r.intr_info.0.is_derived() {&r.reg_type} else {&r.reg_name};
+            if let Some(regdef) = page.find_regdef(def_name, rifs)
                 && !regdef.def.optional.is_empty() {
                 let mut optional = ExprTokens::new(1);
                 optional.push(Token::Var(regdef.def.optional.clone()));
@@ -902,6 +919,8 @@ pub struct RifRegInst {
     pub base_description: Description,
     /// Interrupt configuration
     pub intr_info: (InterruptRegKind, String),
+    /// Suffix identifying a derived interrupt register in RTL signals and type names (empty otherwise)
+    pub intr_suffix: String,
     /// Instance address inside a page
     pub addr: u64,
     /// reset value
@@ -956,13 +975,14 @@ impl RifRegInst {
         if let RegInstArgs::Intr(kind,idx,is_auto) = args {
             let intr_name = if idx > 0 && !def.interrupt[idx].name.is_empty() {format!("_{}",def.interrupt[idx].name)} else {"".to_owned()};
             let alt_name = if idx > 0 && is_auto {&intr_name} else {""};
-            let suffix = if is_auto {kind.get_suffix()} else {""};
+            let suffix = if is_auto {rifs.intr_sfx.inst_suffix(kind)} else {String::new()};
             reg_name = format!("{inst_name}{alt_name}{suffix}",);
             intr_info = (kind, intr_name.to_owned());
         } else {
             reg_name = inst_name;
             intr_info = (InterruptRegKind::None,"".to_owned());
         };
+        let intr_suffix = intr_info.0.get_suffix(&rifs.intr_sfx);
         let params = &rifs.params;
         let param_gen = rifs.param_gen();
         let description = if let RegInstArgs::Arr(idx) = &args {
@@ -999,6 +1019,7 @@ impl RifRegInst {
             description,
             base_description: def.description.no_dollar(),
             intr_info,
+            intr_suffix,
             addr,
             reset: 0,
             group_idx: 0,
@@ -1198,7 +1219,7 @@ impl RifRegInst {
     /// Return the register type with interrupt suffix when register is a derived interrupt
     pub fn expanded_type_name(&self) -> String {
         if self.intr_info.0.is_derived() {
-            format!("{}{}", self.reg_type, self.intr_info.0.get_suffix())
+            format!("{}{}", self.reg_type, self.intr_suffix)
         } else {
             self.reg_type.to_owned()
         }
@@ -1877,7 +1898,15 @@ impl RifmuxInst {
         }
     }
 
-    pub fn build(src: &RifGenSrc, inst_name: &str, rifmux: &Rifmux, top_params: &ParamValues, suffixes: &HashMap<String,SuffixInfo>, targets: SuffixTargets) -> Result<Self, String> {
+    pub fn build(
+        src: &RifGenSrc,
+        inst_name: &str,
+        rifmux: &Rifmux,
+        top_params: &ParamValues,
+        suffixes: &HashMap<String,SuffixInfo>,
+        targets: SuffixTargets,
+        intr_sfx: &InterruptSuffixes,
+    ) -> Result<Self, String> {
         // let params = ParamValues::from_items(rifmux.parameters.items())?;
         let mut params = ParamValues::new();
         for (k,v) in top_params.items().filter(|(k,_)| !k.contains('.')) {
@@ -1929,11 +1958,11 @@ impl RifmuxInst {
                             .map(|s| s.clone().with_targets(targets));
                         // if rif_suffix.is_some() {println!("Found Suffix {:?} for {}", rif_suffix, i.name);}
                         // if !i_params.is_empty() {println!("Parameter in sub-rif {}.{} = {}", rifmux.name, i.name, i_params);}
-                        let inst = RifInst::new(&i.name, rif_def, &i_params, &src.rifs, i.description.clone(), rif_suffix)?;
+                        let inst = RifInst::new(&i.name, rif_def, &i_params, &src.rifs, i.description.clone(), rif_suffix, intr_sfx)?;
                         rm.components.push(CompInst::new_rif(inst, addr, &i.group, optional).with_access_en(access_en));
                     } else if let Some(rifmux) = src.get_rifmux(typename) {
                         // if !i_params.is_empty() {println!("Parameter in sub-rifmux {}.{} = {:?}", rifmux.name, i.name, i_params);}
-                        let inst = RifmuxInst::build(src, &i.name, rifmux, &i_params, &i.suffixes, targets)?;
+                        let inst = RifmuxInst::build(src, &i.name, rifmux, &i_params, &i.suffixes, targets, intr_sfx)?;
                         rm.components.push(CompInst::new_mux(inst, addr, &i.group, optional).with_access_en(access_en));
                     } else {
                         return Err(format!("No RIF definition found for {typename} in {inst_name} ! Available RIFs are: {:?}", src.rifs.keys().collect::<Vec<&String>>()));
@@ -1967,16 +1996,29 @@ impl Comp {
     /// Compile the RIF definition into instances.
     /// The suffix targets define on which artifacts the suffixes are applied (in addition to the flags of each suffix)
     pub fn compile_with_targets(src: &RifGenSrc, suffixes: &HashMap<String, SuffixInfo>, targets: SuffixTargets, params: &ParamValues) -> Result<Self, String> {
+        Self::compile_with_cfg(src, suffixes, targets, &InterruptSuffixes::default(), params)
+    }
+
+    /// Compile the RIF definition into instances.
+    /// In addition to the suffix targets, the interrupt suffixes define the names of the registers derived from an interrupt
+    pub fn compile_with_cfg(
+        src: &RifGenSrc,
+        suffixes: &HashMap<String, SuffixInfo>,
+        targets: SuffixTargets,
+        intr_sfx: &InterruptSuffixes,
+        params: &ParamValues
+    ) -> Result<Self, String> {
+        intr_sfx.validate()?;
         let r: Comp;
         match &src.top {
             RifGenTop::Rifmux(s) => {
                 let Some(def) = src.get_rifmux(s) else {return Err(format!("Rifmux {s} not defined !"));} ;
-                r = Comp::Rifmux(Box::new(RifmuxInst::build(src, s, def, params, suffixes, targets)?));
+                r = Comp::Rifmux(Box::new(RifmuxInst::build(src, s, def, params, suffixes, targets, intr_sfx)?));
             }
             RifGenTop::Rif(s) => {
                 if let Some(rifdef) = src.rifs.get(s) {
                     let suffix = suffixes.get("").map(|s| s.clone().with_targets(targets));
-                    r = Comp::Rif(Box::new(RifInst::new(s, rifdef, params, &src.rifs, rifdef.description.clone(), suffix)?));
+                    r = Comp::Rif(Box::new(RifInst::new(s, rifdef, params, &src.rifs, rifdef.description.clone(), suffix, intr_sfx)?));
                 } else {
                     return Err(format!("Rif {s} not defined !"));
                 }

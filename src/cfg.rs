@@ -65,7 +65,7 @@ use crate::{
         gen_ral::GeneratorRal, gen_sv::GeneratorSv, gen_svd::GeneratorSvd, gen_vhdl::GeneratorVhdl,
     },
     parser::{ParserCfg, RifGenSrc, RsvdKeywordSel, parser_expr::ParamValues},
-    rifgen::{Interface, SuffixInfo, SuffixTarget, SuffixTargetSel, SuffixTargets}
+    rifgen::{Interface, InterruptSuffixes, SuffixInfo, SuffixTarget, SuffixTargetSel, SuffixTargets}
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -280,6 +280,7 @@ impl RtlLimitCfg {
 /// - `suffix_targets`: Artifacts on which suffixes are applied (rtl, rtl_type, rtl_pkg, doc, doc_file, doc_type, sw, sim)
 /// - `suffix_rtl_only`: Deprecated, same as `suffix_targets = ["rtl_type"]`
 /// - `auto_legacy`: Use legacy order for interrupt registers
+/// - `interrupt`: Suffixes of the status/enable/mask/pending registers of an interrupt
 ///
 /// ## Output Configuration
 /// - `outputs`: Map of target names to output directories
@@ -331,6 +332,8 @@ pub struct YarigCfg {
     pub outputs: HashMap<String,String>,
     /// Use legacy order for interrupts (mask before enable)
     pub auto_legacy: bool,
+    /// Suffixes of the registers generated from an interrupt (status/enable/mask/pending)
+    pub interrupt: InterruptSuffixes,
     /// Documentation base address offset
     pub doc_base_offset: Option<usize>,
     /// Use suffix only for RTL generation (deprecated: equivalent to `suffix_targets = ["rtl_type"]`)
@@ -629,6 +632,10 @@ impl YarigCfg {
         if !args.targets.is_empty() {self.targets = args.targets.to_owned()};
         if args.public {self.public = true};
         if args.auto_legacy {self.auto_legacy = true};
+        if let Some(s) = args.interrupt_status {self.interrupt.status = s;}
+        if let Some(s) = args.interrupt_enable {self.interrupt.enable = s;}
+        if let Some(s) = args.interrupt_mask {self.interrupt.mask = s;}
+        if let Some(s) = args.interrupt_pending {self.interrupt.pending = s;}
         // Clear target if check is enabled and override target if at least one is defined on the command-line
         if args.check {self.targets.clear();}
         else if !args.targets.is_empty() {self.targets = args.targets.to_owned()};
@@ -851,7 +858,7 @@ impl YarigCfg {
         let rif_src = RifGenSrc::from_file(&rif_path, &self.include, &parser_cfg)
             .map_err(|e| format!("Parsing Error : {e}"))?;
         // Compile
-        let mut rif_obj = Comp::compile_with_targets(&rif_src, &self.suffixes, self.get_suffix_targets(), &params)
+        let mut rif_obj = Comp::compile_with_cfg(&rif_src, &self.suffixes, self.get_suffix_targets(), &self.interrupt, &params)
             .map_err(|e| format!("Compilation failed: {e}"))?;
         // Force interface if specified in the configuration
         if let Some(intf) = &self.interface {

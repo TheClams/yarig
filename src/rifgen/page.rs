@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{comp::comp_inst::ArrayIdx, parser::{get_rif, parser_expr::{ExprTokens, ParamValues}}};
 
-use super::{Access, ClkEn, DeclLine, Description, DescBlockKind, InterruptRegKind, LimitP, PropBlocks, PropLines, RegDef, RegDefOrIncl, ResetValP, Rif, Visibility};
+use super::{Access, ClkEn, DeclLine, Description, DescBlockKind, InterruptRegKind, InterruptSuffixes, LimitP, PropBlocks, PropLines, RegDef, RegDefOrIncl, ResetValP, Rif, Visibility};
 
 /// Result of register definition search
 /// Contains the register definition itself, information about the interrupt kind and its RIF source if included
@@ -82,14 +82,20 @@ impl RifPage {
         }
     }
 
+    /// Find a register definition by name, using the default interrupt suffixes
     pub fn find_regdef<'a>(&'a self, name: &'a str, rifs: &'a HashMap<String, Rif>) -> Option<RegDefMatch<'a>> {
+        self.find_regdef_with(name, rifs, &InterruptSuffixes::default())
+    }
+
+    /// Find a register definition by name, derived interrupt registers being identified with the given suffixes
+    pub fn find_regdef_with<'a>(&'a self, name: &'a str, rifs: &'a HashMap<String, Rif>, intr_sfx: &InterruptSuffixes) -> Option<RegDefMatch<'a>> {
         for r in self.registers.iter() {
             match r {
                 RegDefOrIncl::Include(inc) => {
                     let s: Vec<&str> = inc.split('.').collect();
                     if (s.len()<3 || s.get(2)==Some(&name) || s.get(2)==Some(&"*")) && let Some(rif_def) = get_rif(rifs,s[0]) {
                         for inc_page in rif_def.pages.iter() {
-                            if (s.len()==1 || s.get(1)==Some(&inc_page.name.as_str())) && let Some(d) = inc_page.find_regdef(name, rifs) {
+                            if (s.len()==1 || s.get(1)==Some(&inc_page.name.as_str())) && let Some(d) = inc_page.find_regdef_with(name, rifs, intr_sfx) {
                                     return Some(d.with_inc(s[0]));
                             }
                         }
@@ -104,16 +110,20 @@ impl RifPage {
                         let name_suffix = &name[d.name.len()..];
                         for (idx,info) in d.interrupt.iter().enumerate() {
                             let intr_name = if info.name.is_empty() {"".to_owned()} else {format!("_{}",info.name)};
+                            // Status register when it uses a suffix
+                            if !intr_sfx.status.is_empty() && name_suffix == format!("{intr_name}{}", intr_sfx.status_suffix()) {
+                                return Some(RegDefMatch::new_intr(d,InterruptRegKind::Base,idx));
+                            }
                             // Check if enable interrupt is enabled
-                            if info.enable.is_some() && name_suffix == format!("{intr_name}_en") {
+                            if info.enable.is_some() && name_suffix == format!("{intr_name}{}", intr_sfx.enable_suffix()) {
                                 return Some(RegDefMatch::new_intr(d,InterruptRegKind::Enable,idx));
                             }
                             // Check if mask interrupt is enabled
-                            if info.mask.is_some() && name_suffix == format!("{intr_name}_mask") {
+                            if info.mask.is_some() && name_suffix == format!("{intr_name}{}", intr_sfx.mask_suffix()) {
                                 return Some(RegDefMatch::new_intr(d,InterruptRegKind::Mask,idx));
                             }
-                            // Check if mask interrupt is enabled
-                            if info.pending && name_suffix == format!("{intr_name}_pending") {
+                            // Check if pending interrupt is enabled
+                            if info.pending && name_suffix == format!("{intr_name}{}", intr_sfx.pending_suffix()) {
                                 return Some(RegDefMatch::new_intr(d,InterruptRegKind::Pending,idx));
                             }
                         }

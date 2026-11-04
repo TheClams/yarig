@@ -509,6 +509,11 @@ pub trait GeneratorHw : GeneratorBase {
         }
         self.write("\n");
 
+        // Suffixes of the registers derived from interrupts
+        let sfx_en = rif.intr_sfx.enable_suffix();
+        let sfx_mask = rif.intr_sfx.mask_suffix();
+        let sfx_pending = rif.intr_sfx.pending_suffix();
+
         // Declare local signal per register group
         for (inst_name, hw_reg) in rif.hw_regs.items().filter(|(_,r)| !r.intr_derived) {
             let group_name = self.casing(inst_name);
@@ -559,24 +564,24 @@ pub trait GeneratorHw : GeneratorBase {
                         }
                         // Add optional enable/mask register
                         if intr_info.enable.is_some() {
-                            let n = format!("{inst_name}_en");
+                            let n = format!("{inst_name}{sfx_en}");
                             if let Some(hw_reg_en) = rif.hw_regs.get(&n) && !hw_reg_en.port.is_out() {
                                 self.write_signal_decl(&SignalDef::new_ud(
-                                    format!("rif_{name}{idx}_en"),
+                                    format!("rif_{name}{idx}{sfx_en}"),
                                     pkg_name.clone(), group_type_hw.clone()).into());
                             }
                         }
                         if intr_info.mask.is_some() {
-                            let n = format!("{inst_name}_mask");
+                            let n = format!("{inst_name}{sfx_mask}");
                             if let Some(hw_reg_mask) = rif.hw_regs.get(&n) && !hw_reg_mask.port.is_out() {
                                 self.write_signal_decl(&SignalDef::new_ud(
-                                    format!("rif_{name}{idx}_mask"),
+                                    format!("rif_{name}{idx}{sfx_mask}"),
                                     pkg_name.clone(), group_type_hw.clone()).into());
                             }
                         }
                         // Internal pending signal is always present (used to generate the irq output)
                         self.write_signal_decl(&SignalDef::new_ud(
-                            format!("rif_{name}{idx}_pending"),
+                            format!("rif_{name}{idx}{sfx_pending}"),
                             pkg_name.clone(), group_type_hw.clone()).into());
                         self.write_signal_decl(&SignalDef::new_bit(format!("clk_en_intr_{name}{idx}")).into());
                         // Add next signal for each field
@@ -589,11 +594,11 @@ pub trait GeneratorHw : GeneratorBase {
                                     format!("{name}{idx}_{f_name}__next"), f.width(), false).into());
                                 if intr_info.enable.is_some() {
                                     self.write_signal_decl(&SignalDef::new_bus(
-                                        format!("{name}{idx}_en_{f_name}__next"), f.width(), false).into());
+                                        format!("{name}{idx}{sfx_en}_{f_name}__next"), f.width(), false).into());
                                 }
                                 if intr_info.mask.is_some() {
                                     self.write_signal_decl(&SignalDef::new_bus(
-                                        format!("{name}{idx}_mask_{f_name}__next"), f.width(), false).into());
+                                        format!("{name}{idx}{sfx_mask}_{f_name}__next"), f.width(), false).into());
                                 }
                             } else {
                                 for fi in 0..f.array.value() {
@@ -603,11 +608,11 @@ pub trait GeneratorHw : GeneratorBase {
                                         format!("{name}{idx}_{f_name}{fi}__next"), f.width(), false).into());
                                     if intr_info.enable.is_some() {
                                         self.write_signal_decl(&SignalDef::new_bus(
-                                            format!("{name}{idx}_en_{f_name}{fi}__next"), f.width(), false).into());
+                                            format!("{name}{idx}{sfx_en}_{f_name}{fi}__next"), f.width(), false).into());
                                     }
                                     if intr_info.mask.is_some() {
                                         self.write_signal_decl(&SignalDef::new_bus(
-                                            format!("{name}{idx}_mask_{f_name}{fi}__next"), f.width(), false).into());
+                                            format!("{name}{idx}{sfx_mask}_{f_name}{fi}__next"), f.width(), false).into());
                                     }
                                 }
                             }
@@ -915,7 +920,7 @@ pub trait GeneratorHw : GeneratorBase {
                 let group_id : ExprId = (group_name.clone(), reg_idx).into();
                 let sw_groupd_id : ExprId = (format!("rif_{group_name}"), reg_idx).into();
                 let reg_idxf   = if let Some(idx) = reg_idx {format!("{idx}")} else {"".to_owned()};
-                let intr_suffix = reg.intr_info.0.get_suffix();
+                let intr_suffix = reg.intr_suffix.as_str();
                 let decode : LogicExpr = format!("{reg_name}__decode").into();
                 let reg_def_idx = reg.def_idx();
                 self.write("\n");
@@ -1163,8 +1168,7 @@ pub trait GeneratorHw : GeneratorBase {
                         let mut rhs : LogicExpr = ExprId::new_field_range(group_name_base, None, field_name.to_owned(), field_range.clone()).into();
 
                         if intr_info.enable.is_some() {
-                            // let en : LogicExpr = (format!("rif_{group_name}_en"), field_name.clone()).into();
-                            let en : LogicExpr = ExprId::new_field_range(format!("rif_{group_name}_en"), None, field_name.to_owned(), field_range).into();
+                            let en : LogicExpr = ExprId::new_field_range(format!("rif_{group_name}{sfx_en}"), None, field_name.to_owned(), field_range).into();
                             rhs = LogicExpr::and_b(rhs.clone(), en);
                         }
                         self.write_assign(intr_l_id.clone(), rhs);
@@ -1771,11 +1775,11 @@ pub trait GeneratorHw : GeneratorBase {
                         } else if intr_info.mask.is_some() {
                             LogicExpr::and_b(
                                 format!("rif_{group_name}.{field_name}").into(),
-                                format!("rif_{group_name}_mask.{field_name}").into())
+                                format!("rif_{group_name}{sfx_mask}.{field_name}").into())
                         } else {
                             format!("rif_{group_name}.{field_name}").into()
                         };
-                        let pending : ExprId = format!("rif_{group_name}_pending.{field_name}").into();
+                        let pending : ExprId = format!("rif_{group_name}{sfx_pending}.{field_name}").into();
                         if !field.is_disabled() {
                             if field.width() > 1 {
                                 pendings.push(LogicExpr::neq(pending.clone().into(), LogicExpr::ValueU(0, field.width().into())));

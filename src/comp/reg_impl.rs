@@ -688,7 +688,7 @@ impl HwRegs {
         let mut hw_regs = HwRegs::new();
         for page in pages {
             for reg in &page.regs {
-                let group_name = format!("{}{}", reg.group_name, reg.intr_info.0.get_suffix());
+                let group_name = format!("{}{}", reg.group_name, reg.intr_suffix);
                 // If instance already exists remove every field from the register instance
                 if let Some(hw_reg) = hw_regs.get_mut(&group_name) {
                     for fr in reg.fields.iter() {

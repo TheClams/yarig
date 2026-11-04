@@ -157,6 +157,34 @@ suffix_targets = ["doc_type"]
 The option `suffix_rtl_only` is deprecated: it is equivalent to `suffix_targets = ["rtl_type"]`.
 When both options are set, `suffix_targets` is used.
 
+### Interrupt registers
+
+A register with the `interrupt` property automatically generates up to four registers: the status register
+and the optional enable, mask and pending registers. Each register name is the name of the interrupt register
+followed by an underscore and a configurable suffix.
+
+```toml
+[interrupt]
+status  = ""        # Default: no suffix, the status register keeps the name of the register definition
+enable  = "en"      # Default: en
+mask    = "mask"    # Default: mask
+pending = "pending" # Default: pending
+```
+
+All keys are optional. The suffixes are given without the leading underscore, which is added automatically when the suffix is not empty.
+The same options are available on the command-line with `--interrupt_status`, `--interrupt_enable`, `--interrupt_mask` and `--interrupt_pending`
+(e.g. `--interrupt_status status --interrupt_enable ie`), and override the configuration file.
+
+With `status = "status"`, `enable = "ie"` and `mask = "msk"`, an interrupt register `intr` is instantiated as `intr_status`, `intr_ie`, `intr_msk` and `intr_pending`.
+
+Rules:
+ - the `enable`, `mask` and `pending` suffixes cannot be empty, and the four suffixes must be different
+ - suffixes can only contain letters, digits and underscores, and cannot start with an underscore
+ - the suffixes apply to the name of the register instances in all targets, to the type name of the enable/mask/pending registers
+   and to the RTL signals of these registers. The status suffix only changes the register instance name:
+   the RTL signals, the hardware port and the register type of the status register keep the name of the register definition.
+ - with manual instances (no `instances: auto`), the registers are referenced by their suffixed name, e.g. `- intr_ie` instead of `- intr_en`
+
 ### Casing
 
 It is possible to specify the casing use in regiater/field name either globaly or for each generator (if supported by the generator).
@@ -475,6 +503,11 @@ alt_pos = true
 [html]
 css = "./docs/custom.css"
 split = true
+
+# Interrupt register suffixes
+[interrupt]
+status = "status"
+mask = "msk"
 
 [c]
 base_offset = "SOC_BASE_ADDR"
