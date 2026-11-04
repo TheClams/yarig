@@ -21,13 +21,13 @@ rif: test_rif
         wrPulse
         description:
           More detailled information on current register
-        - field0 = 0      7:0  "Field 8b"
+        - field0 = 0      3:0  "Field 8b"
           description:
             More detailled information on current field
             Can span multiple lines.
-        - field1 = 1     15:8  "Signed Field"
+        - field1 = -1     23:4  "Signed Field"
           signed
-        - field2 = 0x45  31:16 "Field with hexa init"
+        - field2 = 0x45  31:24 "Field with hexa init"
       - reg_group0 : (reg_group) "Group multiple registers in one struct (first half)"
         rdPulse
         - field0 = 10     7:0  "Enum with no type"

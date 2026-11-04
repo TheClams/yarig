@@ -140,7 +140,10 @@ impl GeneratorSv {
                             self.core.write(&format!("{w}'sd{v}"))
                         }
                     }
-                    _ => self.core.write(&format!("{w}'sh{v:0n$x}")),
+                    _ => {
+                        let u = LogicExpr::twos_complement(*v, *w);
+                        self.core.write(&format!("{w}'sh{u:0n$x}"))
+                    }
                 }
             }
             LogicExpr::Not(e) => {
@@ -313,7 +316,8 @@ impl GeneratorHw for GeneratorSv {
                     self.write(&format!("{v}"))
                 } else {
                     let n = (w+3)>>2;
-                    self.write(&format!("{w}'sh{v:0n$x}"))
+                    let u = LogicExpr::twos_complement(*v, *w);
+                    self.write(&format!("{w}'sh{u:0n$x}"))
                 }
             }
             _ => self.add_logic_expr(&value, 0, false),

@@ -426,6 +426,15 @@ impl LogicExpr {
         }
     }
 
+    /// Two's complement representation of a signed value truncated to `w` bits (no truncation if w is 0 or >=128)
+    pub fn twos_complement(v: i128, w: usize) -> u128 {
+        if w == 0 || w >= 128 {
+            v as u128
+        } else {
+            (v as u128) & ((1u128 << w) - 1)
+        }
+    }
+
     pub fn width(&self) -> usize {
         match self {
             LogicExpr::ValueU(_, w) => *w,

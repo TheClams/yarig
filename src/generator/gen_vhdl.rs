@@ -163,10 +163,14 @@ impl GeneratorVhdl {
             LogicExpr::ValueI(v, w) => {
                 match w {
                     0 => self.core.write(&format!("{v}")),
-                    1..7 => self.core.write(&format!("\"{v:0w$b}\"")),
+                    1..7 => {
+                        let u = LogicExpr::twos_complement(*v, *w);
+                        self.core.write(&format!("\"{u:0w$b}\""))
+                    }
                     _ => {
                         let n = (w+3)>>2;
-                        self.core.write(&format!("{w}x\"{v:0n$x}\""))
+                        let u = LogicExpr::twos_complement(*v, *w);
+                        self.core.write(&format!("{w}x\"{u:0n$x}\""))
                     },
                 }
             }
@@ -446,7 +450,8 @@ impl GeneratorHw for GeneratorVhdl {
                     self.core.write(&format!("'{v}'"))
                 } else {
                     let n = (w+3)>>2;
-                    self.core.write(&format!("{w}x\"{v:0n$x}\""))
+                    let u = LogicExpr::twos_complement(*v, *w);
+                    self.core.write(&format!("{w}x\"{u:0n$x}\""))
                 }
             }
             _ => self.add_logic_expr(&value, 0, LogicExprKind::Basic, false),
