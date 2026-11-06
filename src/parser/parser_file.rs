@@ -670,6 +670,14 @@ impl RifGenSrc {
                                     println!("[WARNING] Field name {} is a reserved keyword !", f.name);
                                 }
                             }
+                            // A field name must be unique within a register
+                            // (fields split over registers of the same group are handled at compilation with the partial property)
+                            if self.last_reg().fields.iter().any(|fi| fi.name == f.name) {
+                                return Err(RifError::duplicated(
+                                    Context::Field,
+                                    &format!("{} in register {}", f.name, self.last_reg().name)
+                                ));
+                            }
                             self.last_reg_mut().add_field(f);
                             context_stack.push((Context::Field, ilvl + 1));
                         }
@@ -1373,4 +1381,36 @@ pub fn get_rif_mut<'a,T>(dict: &'a mut HashMap<String,T>, key: &'a str) -> Optio
     // Everything failed ? return None
     // println!("[get_rif] Unable to find {} in {:?}", key, dict.keys().collect::<Vec<&String>>());
     None
+}
+
+#[cfg(test)]
+mod tests_parsing {
+    use super::*;
+
+    /// Parse a RIF content written in a temporary file
+    fn parse_rif(name: &str, regs: &str) -> Result<RifGenSrc, RifError> {
+        let dir = std::env::temp_dir().join(format!("yarig_test_{}_{name}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(format!("{name}.rif"));
+        let content = format!(
+            "rif: {name}\n  addrWidth: 9\n  dataWidth: 32\n  interface: apb\n  swClock: clk_rif\n  swReset: rst_rif_n activeLow async\n  - Main : \"Main Page\"\n    baseAddress : 0x0\n    registers:\n{regs}"
+        );
+        fs::write(&path, content).unwrap();
+        let cfg = ParserCfg::new(RsvdKeywordSel { sv: false, vhdl: false, error: false }, false);
+        let res = RifGenSrc::from_file(&path, &[], &cfg);
+        let _ = fs::remove_dir_all(&dir);
+        res
+    }
+
+    #[test]
+    fn test_duplicated_field() {
+        // Same field name in the same register must be rejected
+        let err = parse_rif("dup_field", "      - reg0 : \"Register\"\n        - fa = 0 3:0 \"Field A\"\n        - fb = 0 7:4 \"Field B\"\n        - fa = 0 11:8 \"Field A again\"\n")
+            .expect_err("Duplicated field in a register should be an error");
+        assert_eq!(err.kind, RifErrorKind::Duplicated);
+        assert!(err.txt.contains("fa") && err.txt.contains("reg0"), "{}", err.txt);
+        // Same field name in different registers is fine (checked later if registers are in the same group)
+        parse_rif("uniq_field", "      - reg0 : \"Register\"\n        - fa = 0 3:0 \"Field A\"\n      - reg1 : \"Register\"\n        - fa = 0 3:0 \"Field A\"\n")
+            .expect("Same field name in different registers should be accepted");
+    }
 }

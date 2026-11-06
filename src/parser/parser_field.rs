@@ -50,12 +50,19 @@ pub fn field_pos<'a>(input: &mut &'a str) -> Res<'a, FieldPos> {
     .parse_next(input)
 }
 
+/// Parse an array size `[size]` following a field/register name, allowing spaces before and inside the brackets
+pub fn array_size<'a>(input: &mut &'a str) -> Res<'a, Width> {
+    delimited((space0, "[", space0), val_u8_or_param, (space0, "]"))
+        .context(StrContext::Label("array size"))
+        .parse_next(input)
+}
+
 // Field declaration format is the following
 // - field_name[array_size] = rst_val pos&width attributes "field short description"
 // where the (group_name) and description are optionnal
 pub fn field_decl<'a>(input: &mut &'a str) -> Res<'a, Field> {
     let name = identifier(input)?;
-    let array_size = opt(delimited("[", val_u8_or_param, "]")).parse_next(input)?;
+    let array_size = opt(array_size).parse_next(input)?;
     let reset_val = opt(preceded(
         ws("="),
         alt((
@@ -471,6 +478,26 @@ mod tests_parsing {
                     ..Default::default()
                 }
             )
+        );
+    }
+
+    #[test]
+    fn test_field_decl_array_space() {
+        // Spaces between the field name and the array size must be accepted
+        let expected = field_decl(&mut "array[4] = {13,-37}  4+:8  \"Array 2 reset\"").unwrap();
+        assert_eq!(
+            field_decl(&mut "array [4] = {13,-37}  4+:8  \"Array 2 reset\"").unwrap(),
+            expected
+        );
+        assert_eq!(
+            field_decl(&mut "array  [ 4 ] = {13,-37}  4+:8  \"Array 2 reset\"").unwrap(),
+            expected
+        );
+        // Without reset value
+        let expected = field_decl(&mut "array[4] 7:0 \"Array\"").unwrap();
+        assert_eq!(
+            field_decl(&mut "array [4] 7:0 \"Array\"").unwrap(),
+            expected
         );
     }
 

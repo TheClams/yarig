@@ -6,14 +6,14 @@ use winnow::{
     ascii::{space0, Caseless}, combinator::{alt, delimited, opt, preceded, terminated, unordered_seq}, error::StrContext, Parser
 };
 
-use super::{identifier, scoped_identifier, item_start, quoted_string, reset_val, val_u8_or_param, ws, Res, ResF};
+use super::{array_size, identifier, scoped_identifier, item_start, quoted_string, reset_val, ws, Res, ResF};
 
 // Register declaration format is the following
 // - reg_name : (group_name) "register description"
 // where the (group_name) and description are optional
 fn reg_decl_l<'a>(input: &mut &'a str) -> Res<'a, RegDef> {
     let name = identifier(input)?;
-    let array_size = opt(delimited("[", val_u8_or_param, "]")).parse_next(input)?;
+    let array_size = opt(array_size).parse_next(input)?;
     ws(":").parse_next(input)?;
     let group_name = opt(delimited("(", scoped_identifier, ")")).parse_next(input)?;
     let desc = opt(quoted_string).parse_next(input)?;
@@ -203,7 +203,17 @@ pub fn reg_pulse_info<'a>(input: &mut &'a str, reg_clk: &str, init: bool) -> Res
 #[cfg(test)]
 mod tests_parsing {
     use super::*;
-    use crate::rifgen::{InterruptDesc, InterruptInfo, ResetValP};
+    use crate::rifgen::{InterruptDesc, InterruptInfo, ResetValP, Width};
+
+    #[test]
+    fn test_reg_decl_array() {
+        let expected = reg_decl("reg_arr[4] : \"Description\"").unwrap();
+        assert_eq!(expected.array, Width::Value(4));
+        // Spaces between the register name and the array size must be accepted
+        assert_eq!(reg_decl("reg_arr [4] : \"Description\"").unwrap(), expected);
+        assert_eq!(reg_decl("reg_arr  [ 4 ]: \"Description\"").unwrap(), expected);
+        assert_eq!(reg_decl("reg_arr [4]: \"Description\"").unwrap(), expected);
+    }
 
     #[test]
     fn test_interrupt() {

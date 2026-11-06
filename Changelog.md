@@ -1,5 +1,10 @@
 # Change Log
 
+## [0.26.3]
+
+### Fix
+  - Parser: support spaces before/inside array size for register and field
+
 ## [0.26.2]
 ### Added
   - Option to control suffix of interrupt register (status/enable/mask/pending):
