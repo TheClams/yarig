@@ -1,23 +1,41 @@
 use crate::rifgen::{
-    Context, InterruptClr, InterruptPropTuple, InterruptTrigger, RegDef, ResetValP,
+    Context, InterruptClr, InterruptPropTuple, InterruptTrigger, RegArrayKind, RegDef, ResetValP, Width,
 };
 
 use winnow::{
     ascii::{space0, Caseless}, combinator::{alt, delimited, opt, preceded, terminated, unordered_seq}, error::StrContext, Parser
 };
 
-use super::{array_size, identifier, scoped_identifier, item_start, quoted_string, reset_val, ws, Res, ResF};
+use super::{array_size, identifier, scoped_identifier, item_start, quoted_string, reset_val, val_u8_or_param, ws, Res, ResF};
+
+/// Parse the array size of a register: `[size]` (array folded into the fields) or `{size}` (array of register instances).
+/// Spaces are allowed before and inside the brackets
+pub fn reg_array_size<'a>(input: &mut &'a str) -> Res<'a, (Width, RegArrayKind)> {
+    alt((
+        array_size.map(|w| (w, RegArrayKind::Fold)),
+        delimited((space0, "{", space0), val_u8_or_param, (space0, "}"))
+            .map(|w| (w, RegArrayKind::Inst))
+            .context(StrContext::Label("array size")),
+    ))
+    .parse_next(input)
+}
 
 // Register declaration format is the following
-// - reg_name : (group_name) "register description"
-// where the (group_name) and description are optional
+// - reg_name[array_size] : (group_name) "register description"
+// where the array size, (group_name) and description are optional
+// The array size uses square bracket for an array folded into the fields, or curly bracket for an array of register instances
 fn reg_decl_l<'a>(input: &mut &'a str) -> Res<'a, RegDef> {
     let name = identifier(input)?;
-    let array_size = opt(array_size).parse_next(input)?;
+    let array = opt(reg_array_size).parse_next(input)?;
     ws(":").parse_next(input)?;
     let group_name = opt(delimited("(", scoped_identifier, ")")).parse_next(input)?;
     let desc = opt(quoted_string).parse_next(input)?;
+    let (array_size, array_kind) = match array {
+        Some((size, kind)) => (Some(size), kind),
+        None => (None, RegArrayKind::default()),
+    };
     let mut r = RegDef::new(name, group_name, array_size, desc.unwrap_or_default());
+    r.array_kind = array_kind;
     r.src.has_inline_desc = desc.is_some();
     Ok(r)
 }
@@ -203,7 +221,7 @@ pub fn reg_pulse_info<'a>(input: &mut &'a str, reg_clk: &str, init: bool) -> Res
 #[cfg(test)]
 mod tests_parsing {
     use super::*;
-    use crate::rifgen::{InterruptDesc, InterruptInfo, ResetValP, Width};
+    use crate::rifgen::{InterruptDesc, InterruptInfo, RegArrayKind, ResetValP, Width};
 
     #[test]
     fn test_reg_decl_array() {
@@ -213,6 +231,44 @@ mod tests_parsing {
         assert_eq!(reg_decl("reg_arr [4] : \"Description\"").unwrap(), expected);
         assert_eq!(reg_decl("reg_arr  [ 4 ]: \"Description\"").unwrap(), expected);
         assert_eq!(reg_decl("reg_arr [4]: \"Description\"").unwrap(), expected);
+    }
+
+    #[test]
+    fn test_reg_decl_array_kind() {
+        // Square brackets: array folded into the fields (default)
+        let r = reg_decl("reg_arr[4] : \"Description\"").unwrap();
+        assert_eq!((r.array.clone(), r.array_kind), (Width::Value(4), RegArrayKind::Fold));
+        // Curly brackets: array of registers instances
+        let r = reg_decl("reg_arr{4} : \"Description\"").unwrap();
+        assert_eq!((r.array.clone(), r.array_kind), (Width::Value(4), RegArrayKind::Inst));
+        assert_eq!(reg_decl("reg_arr {4} : \"Description\"").unwrap(), r);
+        assert_eq!(reg_decl("reg_arr  { 4 }: \"Description\"").unwrap(), r);
+        // Parameter as size
+        let r = reg_decl("reg_arr{$NB} : (grp) \"Description\"").unwrap();
+        assert_eq!((r.array.clone(), r.array_kind), (Width::Param("NB".to_owned()), RegArrayKind::Inst));
+        // No array: default kind
+        let r = reg_decl("reg_single : \"Description\"").unwrap();
+        assert_eq!((r.array.clone(), r.array_kind), (Width::Value(0), RegArrayKind::Fold));
+        // Mismatched or incomplete brackets are rejected
+        assert!(reg_decl("reg_arr{4] : \"Description\"").is_err());
+        assert!(reg_decl("reg_arr[4} : \"Description\"").is_err());
+        assert!(reg_decl("reg_arr{4 : \"Description\"").is_err());
+        assert!(reg_decl("reg_arr{} : \"Description\"").is_err());
+    }
+
+    #[test]
+    fn test_reg_decl_array_fmt() {
+        // Declaration is reproduced with the same kind of bracket
+        for decl in [
+            "- reg_single : \"Description\"",
+            "- reg_arr[4] : \"Description\"",
+            "- reg_arr{4} : \"Description\"",
+            "- reg_arr{$NB} : (grp) \"Description\"",
+            "- reg_arr[$NB] : (pkg::grp) \"Description\"",
+        ] {
+            let r = reg_decl(decl.strip_prefix("- ").unwrap()).unwrap();
+            assert_eq!(r.fmt_decl(""), decl);
+        }
     }
 
     #[test]

@@ -411,6 +411,9 @@ pub struct RegImpl {
     pub port: RegPortKind,
     /// Optional package name where the struct is already defined
     pub pkg: Option<String>,
+    /// Size of the array of register instances (register declared as `reg{N}`): 0 when not an array.
+    /// All registers of a group must use the same value
+    pub inst_array: u16,
 }
 
 
@@ -418,9 +421,11 @@ impl RegImpl {
 
     /// Create a register hardware implementation based on a register definition
     fn new(reg: &RegDef, rifs: &RifsInfo) -> Result<Self, String> {
+        reg.check_inst_array()?;
         let mut fields = Vec::with_capacity(reg.fields.len());
         let mut port = RegPortKind::from_reg(reg);
-        let array = reg.array.value(&rifs.params)? as u16;
+        let array = reg.fold_array_size(&rifs.params)? as u16;
+        let inst_array = reg.inst_array_size(&rifs.params)? as u16;
         let mut sw_access = Access::NA;
         let partials = rifs.partials.get(reg.get_group_name());
         // Copy all fields
@@ -439,6 +444,7 @@ impl RegImpl {
             clk_en: reg.clk_en.clone(),
             clear: reg.clear.clone(),
             pkg: reg.group.pkg.clone(),
+            inst_array,
             regs_ctrl: vec![RegHwCtrl::new(reg.name.clone(), reg.pulse.clone(), reg.external.with_access(&sw_access))],
         })
     }
@@ -451,7 +457,16 @@ impl RegImpl {
     pub fn merge_with(&mut self, reg: &RegDef, rifs: &RifsInfo, reg_rst: &str) -> Result<(),String>{
         let params = &rifs.params;
         let partials = rifs.partials.get(reg.get_group_name());
-        let array = reg.array.value(params)? as u16;
+        reg.check_inst_array()?;
+        let array = reg.fold_array_size(params)? as u16;
+        // All registers in a group share the same hardware structure: they must be arrays of instances of the same size, or none of them
+        let inst_array = reg.inst_array_size(params)? as u16;
+        if inst_array != self.inst_array {
+            return Err(format!(
+                "Register {} (array of instances: {inst_array}) does not match the other registers of group {} (array of instances: {}). All registers of a group must use the same `{{N}}` array size (0 means no array of instances)",
+                reg.name, reg.get_group_name(), self.inst_array
+            ));
+        }
         // println!("Merging {} in {} : clk_en = {:?} | group clock_enable = {:?}", reg.name, reg.group.name, reg.clk_en, self.clk_en);
         self.port.updt(RegPortKind::from_reg(reg));
         // Field reset: handle case where register in a register group do not share the same

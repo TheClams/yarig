@@ -80,6 +80,9 @@ rif: test_rif
       - reg_fields_pos :
         - coeffs[8] = 0 2:0 "Coefficient 0 to 3"
           arrayPosIncr 4
+      - reg_inst_array{3} : "Array of register instances $i"
+        - en   = 0         0:0 "Enable of instance $i"
+        - gain = {1,2,4}   7:4 "Gain of instance $i"
     instances: auto
   - Memory : "External memory"
     baseAddress : 0x100

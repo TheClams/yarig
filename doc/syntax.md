@@ -124,10 +124,16 @@ The available options, indented by one level compare to the page, are:
 The register is a group of fields with some basic properties.
 
 Its declaration is indented by one level compare to the registers keyword and follow the syntax:
-`- <reg_name>: [(<regGroup>)] ["Register short description"]`
+`- <reg_name>[<arraySize>|{<arraySize>}]: [(<regGroup>)] ["Register short description"]`
 
 The optional register group is specific to the RTL view and allows to regroup multiple registers under the same structure.
 regGroup can be in the form of rifname::groupname to reference a structure from another RIF.
+
+The register can also be declared as an array, with the size (a number or a parameter) in square or curly bracket. The two kinds of array are different:
+ - `<reg_name>[<arraySize>]`: the array is folded into the fields. The result in hardware is a single register where each field is an array (or a wider field if the field is not an array) with a size multiplied by the array size.
+   See [Field array](#field-array).
+ - `<reg_name>{<arraySize>}`: the array is an array of register instances. Each element has its own copy of all the fields, and the hardware is an array of structures.
+   See [Array of register instances](#array-of-register-instances).
 
 
 The register properties, indented by one level compare to the register declaration, are:
@@ -295,9 +301,11 @@ A field can also be declared as array by simply giving the array size with the f
   - The others are auto-instantiated, with a position that increment by the size of the fields by default. To change the increment, add the property `arrayPosIncr <value>`.
   - It is also possible to have an array that extends on more than one register: this works like the partial field, with the property `arrayPartial <offset>`.
     The registers must belong to the same register group.
-    Another possibility is to declared the register itself as an array: the total field array size will be given by
+    Another possibility is to declared the register itself as an array with square bracket (`<reg_name>[<arraySize>]`): the total field array size will be given by
     the register array size multiply by the field array size or the length of the reset value array if it is bigger than the field array itself.
-    In this case all fields of the register must be arrays.
+    A field which is not an array becomes a wider field, with one slice for each register: this is equivalent to multiple registers with a partial field.
+    Its reset value is the whole value of the wider field (a list of reset values is not allowed on a field which is not an array).
+    To have one structure per register instead, use an [array of register instances](#array-of-register-instances).
   - In the description, the field index can be referenced by `$i` or even in a formula such as `${2*i+1}`.
 
 First example of field array split on two distinct register. This create a field array `coeff` with a total size of 5 elements of 7 bits.
@@ -320,6 +328,24 @@ This second example shows the use of a register array definition. The total size
   - reg_kv[5] : (ctrl) "Key value pairs $i"
     - key[1] = {0,1,2,3,4} 7:0 "Key $i"
     - val[1] = {0x101,0x202,0x303,0x404,0x505} 27:8 "Value $i"
+```
+
+### Array of register instances
+When the register is declared with curly bracket `- <reg_name>{<arraySize>} ...`, it defines `arraySize` instances of the register, at consecutive addresses.
+In hardware this is an array of structures, the same as a register instantiated as an array (`- <reg_name>[<arraySize>]` in the instances).
+The difference is that the size is part of the register definition, so it also works with `instances: auto`.
+ - The reset value of a field can be a single value used by all instances, or a list of values `{v0,v1,...}` with exactly one value per instance.
+   A reset value can still be overridden for one instance in the register instances (e.g. `[1].field.reset = 3`).
+ - `$i` in the description of the register and of its fields is replaced by the index of the instance.
+ - All registers belonging to the same register group must be declared with the same array size.
+ - The fields can not be an array, and the register can not have a partial field nor be an interrupt.
+ - The array can not be defined again in the register instance.
+
+This example creates 4 registers `chan` at address 0, 4, 8 and 12, each with a field `gain` with a different reset value:
+```yaml
+  - chan{4} : "Channel $i control"
+    - en   = 0            0:0 "Enable of channel $i"
+    - gain = {1,2,4,8}    7:4 "Gain of channel $i"
 ```
 
 

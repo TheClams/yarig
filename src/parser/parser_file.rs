@@ -16,7 +16,7 @@ use crate::rifgen::{
     Access, AddressOffset, ClockingInfo, Context, DataWidth, DescBlockKind, EnumDef, EnumKind, ExternalKind,
     Field, FieldHwKind, FieldOverrideProp, FieldPos, FieldProp, FieldSwKind, GenericValues, InstMode, Interface, InterruptInfo, InterruptInfoField, ItemOptional,
     Lock, OverrideIndex, RegDef, RegDefOrIncl, RegInst, RegOverrideProp, RegProp, RegPulseKind,
-    Rif, RifPage, RifProp, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility, Width
+    RegArrayKind, Rif, RifPage, RifProp, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility, Width
 };
 use crate::hdl::LogicExpr;
 
@@ -658,6 +658,18 @@ impl RifGenSrc {
                             f.src.decl_line = Some(line_num);
                             if f.array != Width::Value(0) && matches!(f.pos, FieldPos::Size(Width::Param(_))) {
                                 return Err(RifError::unsupported(info, &format!("Field {} is an array with generic width: not supported yet !", f.name)));
+                            }
+                            if f.array != Width::Value(0) && self.last_reg().array_kind == RegArrayKind::Inst {
+                                return Err(RifError::unsupported(info, &format!(
+                                    "Field {} is an array: not supported in register {} which is an array of register instances", f.name, self.last_reg().name
+                                )));
+                            }
+                            // A list of reset values only makes sense for a field array, or for a scalar field in an array of register instances (`reg{N}`).
+                            // Otherwise only the first value would be used
+                            if f.array == Width::Value(0) && f.reset.len() > 1 && self.last_reg().array_kind != RegArrayKind::Inst {
+                                return Err(RifError::unsupported(info, &format!(
+                                    "Field {} is not an array but has a list of {} reset values: use a single value or declare the field as an array", f.name, f.reset.len()
+                                )));
                             }
                             if !self.last_reg().interrupt.is_empty() {
                                 f.hw_acc = Access::WO;
@@ -1384,22 +1396,52 @@ pub fn get_rif_mut<'a,T>(dict: &'a mut HashMap<String,T>, key: &'a str) -> Optio
 }
 
 #[cfg(test)]
-mod tests_parsing {
+pub(crate) mod tests_parsing {
     use super::*;
 
-    /// Parse a RIF content written in a temporary file
-    fn parse_rif(name: &str, regs: &str) -> Result<RifGenSrc, RifError> {
+    /// Parse a RIF content written in a temporary file: `regs` is the content of the page (registers and instances)
+    pub(crate) fn parse_rif(name: &str, regs: &str) -> Result<RifGenSrc, RifError> {
+        parse_rif_with(name, "", regs)
+    }
+
+    /// Same as `parse_rif` with extra RIF properties (e.g. parameters), indented by 2 spaces, added before the page
+    pub(crate) fn parse_rif_with(name: &str, props: &str, regs: &str) -> Result<RifGenSrc, RifError> {
         let dir = std::env::temp_dir().join(format!("yarig_test_{}_{name}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join(format!("{name}.rif"));
         let content = format!(
-            "rif: {name}\n  addrWidth: 9\n  dataWidth: 32\n  interface: apb\n  swClock: clk_rif\n  swReset: rst_rif_n activeLow async\n  - Main : \"Main Page\"\n    baseAddress : 0x0\n    registers:\n{regs}"
+            "rif: {name}\n  addrWidth: 9\n  dataWidth: 32\n  interface: apb\n  swClock: clk_rif\n  swReset: rst_rif_n activeLow async\n{props}  - Main : \"Main Page\"\n    baseAddress : 0x0\n    registers:\n{regs}"
         );
         fs::write(&path, content).unwrap();
         let cfg = ParserCfg::new(RsvdKeywordSel { sv: false, vhdl: false, error: false }, false);
         let res = RifGenSrc::from_file(&path, &[], &cfg);
         let _ = fs::remove_dir_all(&dir);
         res
+    }
+
+    #[test]
+    fn test_scalar_field_reset_list() {
+        // A reset list on a scalar field is meaningless (only the first value would be used): reject it
+        for regs in [
+            "      - reg0 : \"Register\"\n        - fa = {1,2,3} 3:0 \"Field A\"\n",
+            "      - reg0[3] : \"Register array\"\n        - fa = {1,2,3} 3:0 \"Field A\"\n",
+        ] {
+            let err = parse_rif("scalar_rst_list", regs)
+                .expect_err("Reset list on a scalar field should be an error");
+            assert_eq!(err.kind, RifErrorKind::Unsupported, "{err}");
+            assert!(err.txt.contains("fa"), "{}", err.txt);
+        }
+        // Single value (even in braces), lists on field arrays and lists on a register instances array are fine
+        for regs in [
+            "      - reg0{3} : \"Register instances array\"\n        - fa = {1,2,3} 3:0 \"Field A\"\n",
+            "      - reg0 : \"Register\"\n        - fa = 1 3:0 \"Field A\"\n",
+            "      - reg0 : \"Register\"\n        - fa = {1} 3:0 \"Field A\"\n",
+            "      - reg0[3] : \"Register array\"\n        - fa = 0x321 11:0 \"Field A\"\n",
+            "      - reg0 : \"Register\"\n        - key[3] = {1,2,3} 3:0 \"Keys\"\n          arrayPosIncr 4\n",
+            "      - reg0[2] : \"Register array\"\n        - key[2] = {1,2,3,4} 7:0 \"Keys\"\n",
+        ] {
+            parse_rif("scalar_rst_ok", regs).unwrap_or_else(|e| panic!("{regs}\n=> {e}"));
+        }
     }
 
     #[test]

@@ -152,6 +152,18 @@ impl PartialEq for RegSrcInfo {
     }
 }
 
+/// Kind of array declared on a register definition
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum RegArrayKind {
+    /// Declared with square brackets `reg[N]`: the array is folded into the fields.
+    /// Fields become arrays (or wider fields when they are not an array) inside a single hardware register
+    #[default]
+    Fold,
+    /// Declared with curly brackets `reg{N}`: the array is an array of N register instances.
+    /// Each instance has its own fields, and a scalar field can use a list of reset values (one per instance)
+    Inst,
+}
+
 /// Register deifnition: name, description, clk/reset, list of fields, ...
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct RegDef {
@@ -184,6 +196,8 @@ pub struct RegDef {
     pub info: HashMap<String, String>,
     /// Width of the array (fixed or from parameter). Null when register is not an array
     pub array: Width,
+    /// Kind of array (square or curly bracket): only meaningful when register is an array
+    pub array_kind: RegArrayKind,
     /// Indicates if the register logic is internal, fully external or just for the register access done
     pub external: ExternalKind,
     /// Indicates the register instance is controlled by a parameter
@@ -305,6 +319,42 @@ impl RegDef {
         !self.optional.is_empty() && params.get(&self.optional).is_some_and(|&x| x == 0)
     }
 
+    /// Size of the array folded into the fields (register declared as `reg[N]`): 0 for any other register
+    pub fn fold_array_size(&self, params: &ParamValues) -> Result<u8, String> {
+        if self.array_kind == RegArrayKind::Inst {
+            return Ok(0);
+        }
+        self.array.value(params)
+    }
+
+    /// Size of the array of register instances (register declared as `reg{N}`): 0 for any other register
+    /// (and for a single instance, which is equivalent to a register which is not an array)
+    pub fn inst_array_size(&self, params: &ParamValues) -> Result<u8, String> {
+        if self.array_kind != RegArrayKind::Inst {
+            return Ok(0);
+        }
+        let size = self.array.value(params)?;
+        Ok(if size > 1 {size} else {0})
+    }
+
+    /// Check that the register properties are compatible with an array of register instances (`reg{N}`)
+    /// Nothing is checked for the other registers
+    pub fn check_inst_array(&self) -> Result<(), String> {
+        if self.array_kind != RegArrayKind::Inst {
+            return Ok(());
+        }
+        if !self.interrupt.is_empty() {
+            return Err(format!("Register {}: interrupt is not supported in an array of register instances", self.name));
+        }
+        if let Some(f) = self.fields.iter().find(|f| f.is_partial()) {
+            return Err(format!("Register {}: partial field {} is not supported in an array of register instances", self.name, f.name));
+        }
+        if let Some(f) = self.fields.iter().find(|f| f.array != Width::Value(0)) {
+            return Err(format!("Register {}: field array {} is not supported in an array of register instances", self.name, f.name));
+        }
+        Ok(())
+    }
+
     /// Get the register group name
     pub fn get_group_name(&self) -> &str {
         &self.group.name
@@ -316,16 +366,20 @@ impl RegDef {
     }
 
     /// Serialize the register's *declaration line* back to `.rif` syntax, prefixed with `indent`.
-    /// Produces `{indent}- name[array] : (group) "description"`
+    /// Produces `{indent}- name[array] : (group) "description"` (or `name{array}` for an array of register instances)
     pub fn fmt_decl(&self, indent: &str) -> String {
         let mut s = String::with_capacity(indent.len() + self.name.len() + 16);
         s.push_str(indent);
         s.push_str("- ");
         s.push_str(&self.name);
         if !matches!(self.array, Width::Value(0)) {
-            s.push('[');
+            let (open, close) = match self.array_kind {
+                RegArrayKind::Fold => ('[', ']'),
+                RegArrayKind::Inst => ('{', '}'),
+            };
+            s.push(open);
             s.push_str(&self.array.to_string());
-            s.push(']');
+            s.push(close);
         }
         s.push_str(" :");
         let is_default_group = self.group.pkg.is_none() && self.group.name == self.name;

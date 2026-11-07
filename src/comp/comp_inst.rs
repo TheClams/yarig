@@ -6,7 +6,7 @@ use crate::{
     rifgen::{
         Access, Address, AddressKind, AddressOffset, ClockingInfo, CounterInfo, DeclLine, DescIdx, Description, EnumDef, EnumDefs, EnumKind,
         ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, GenericRange, GenericValues, Interface, InterruptRegKind,
-        InterruptSuffixes, InterruptTrigger, Limit, PasswordInfo, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegOverride, RegPulseKind, ResetVal, ResetValOverride,
+        InterruptSuffixes, InterruptTrigger, Limit, PasswordInfo, RegArrayKind, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegOverride, RegPulseKind, ResetVal, ResetValOverride,
         Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SuffixInfo, SuffixTarget, SuffixTargets, Visibility, Width,
         order_dict::{OrderDict, OrderedDictIterV}
     }
@@ -532,10 +532,12 @@ impl RifPageInst {
                     let addr = inst_addr.updt(&reg.addr, &rifs.params);
                     let range : Option<(String,GenericRange)>;
                     let nb : u16;
-                    let array_size_def = regdef.def.array.value(&rifs.params)?;
+                    // Array declared by the definition: either folded into the fields `[N]`, or array of register instances `{N}`
+                    let array_size_def = regdef.def.fold_array_size(&rifs.params)?;
+                    let inst_size_def = regdef.def.inst_array_size(&rifs.params)?;
                     let array_size_inst = reg.array.eval_with_gen(&rifs.params, &rifs.generics)?;
-                    if array_size_def > 1 {
-                        nb = array_size_def as u16;
+                    if array_size_def > 1 || inst_size_def > 1 {
+                        nb = array_size_def.max(inst_size_def) as u16;
                         range = None;
                         if array_size_inst.max() > 1 {
                             return Err(format!("Register array in both definition and instance not supported yet (Register {})", regdef.def.name));
@@ -633,7 +635,9 @@ impl RifPageInst {
                             }
                         }
                     } else {
-                        let nb = d.array.value(&rifs.params)? as u16;
+                        // Array folded into the fields `[N]` or array of register instances `{N}`
+                        let nb_fold = d.fold_array_size(&rifs.params)? as u16;
+                        let nb = nb_fold.max(d.inst_array_size(&rifs.params)? as u16);
                         if nb > 1 {
                             for i in 0..nb {
                                 let addr_ovr = inst
@@ -641,7 +645,8 @@ impl RifPageInst {
                                     .and_then(|ovr| ovr.addr.clone())
                                     .unwrap_or_default();
                                 let _addr = inst_addr.updt(&addr_ovr, &rifs.params);
-                                self.add_reg(RifRegInst::new(d, _addr, inst, RegInstArgs::arr_def(i, nb), None, rifs)?);
+                                let args = if nb_fold > 1 {RegInstArgs::arr_def(i, nb)} else {RegInstArgs::arr(i, nb, None)};
+                                self.add_reg(RifRegInst::new(d, _addr, inst, args, None, rifs)?);
                             }
                         } else {
                             let addr_updt = inst
@@ -672,9 +677,11 @@ impl RifPageInst {
         let mut instances = Vec::with_capacity(self.regs.len());
         for r in self.regs.iter() {
             if let Some(idx) = r.array.opt_idx() {
-                if !r.array.is_def() {
+                // In an automatic page, an array always comes from the register definition: either `[N]` (Def) or `{N}` (Inst)
+                // The array is then still declared by the definition, so only the first element is converted
+                if !r.array.is_def() && !r.array.is_inst() {
                     return Err(format!(
-                        "Register '{}' uses an instance- or generic-driven array; converting is not supported yet", r.reg_name
+                        "Register '{}' uses a generic-driven array; converting is not supported yet", r.reg_name
                     ));
                 }
                 if idx > 0 {
@@ -987,7 +994,8 @@ impl RifRegInst {
         let param_gen = rifs.param_gen();
         let description = if let RegInstArgs::Arr(idx) = &args {
             let Some(f0) = def.fields.first() else {return Err(format!("Register {reg_name} has no fields !"));};
-            let desc_idx = if def.fields.len() == 1 && f0.array.value(params)? == 0 {
+            // A single scalar field in a register array folded into the field is described as a slice of a bus
+            let desc_idx = if def.array_kind != RegArrayKind::Inst && def.fields.len() == 1 && f0.array.value(params)? == 0 {
                 DescIdx::reg_bus(f0.width(param_gen)?.into() ,idx.idx())
             } else {
                 DescIdx::array(idx.idx())
@@ -1031,6 +1039,17 @@ impl RifRegInst {
         };
         let mut next_lsb = 0;
         let reg_array_idx = r.def_idx();
+        // Index of the register in an array of register instances `{N}`: used to select the field reset value
+        let reg_inst_idx = if def.array_kind == RegArrayKind::Inst {r.array.opt_idx()} else {None};
+        if def.array_kind == RegArrayKind::Inst {
+            let nb_inst = r.array.dim().max(1) as usize;
+            for f in def.fields.iter().filter(|f| f.reset.len() > 1 && f.reset.len() != nb_inst) {
+                return Err(format!(
+                    "Field {}.{} has {} reset values but the register array has {} instances: use a single value or one value per instance",
+                    def.name, f.name, f.reset.len(), nb_inst
+                ));
+            }
+        }
         // let param_gen = rifs.param_gen();
         for f in def.fields.iter() {
             let array_size = f.array.value_g(param_gen).map_err(|msg| format!("{msg} (register {}.{})", def.name, f.name))? as u16;
@@ -1042,7 +1061,7 @@ impl RifRegInst {
                         if r.array.dim()>0 && r.array.is_def() {Some(ArrayIdx::Def(i,offset))}
                         else {Some(ArrayIdx::Inst(i,offset))}
                     } else { None };
-                if let Some(fi) = RifFieldInst::new(f, intr_kind, &mut next_lsb, rifs, reg_array_idx, arr_idx)? {
+                if let Some(fi) = RifFieldInst::new(f, intr_kind, &mut next_lsb, rifs, reg_array_idx, reg_inst_idx, arr_idx)? {
                     r.fields.push(fi);
                 }
             }
@@ -1386,6 +1405,7 @@ impl RifFieldInst {
         next_lsb: &mut u8,
         rifs: &RifsInfo,
         reg_array: Option<u16>,
+        reg_inst: Option<u16>,
         field_array: Option<ArrayIdx>,
     ) -> Result<Option<Self>,String> {
         let params = &rifs.params;
@@ -1405,7 +1425,9 @@ impl RifFieldInst {
             }
         }
         // Get reset value (could be defined as a param, a float or an enum)
-        let mut reset = field.reset.first()
+        // In an array of register instances, a list of reset values gives one value per register instance
+        let rst_inst = if field.reset.len() > 1 {reg_inst.unwrap_or(0) as usize} else {0};
+        let mut reset = field.reset.get(rst_inst)
             .unwrap_or_default()
             .compile(field.signed, field.nb_frac, params, enum_def)
             .map_err(|msg| format!("{msg} in reset value of field {}", field.name))?;
@@ -1460,7 +1482,11 @@ impl RifFieldInst {
             } else {
                 field.description.with_format(&format_str)
             };
-            desc_idx = if let Some(i) = reg_array {DescIdx::reg_bus(width as u16,i)} else {DescIdx::None};
+            desc_idx = match (reg_array, reg_inst) {
+                (Some(i), _) => DescIdx::reg_bus(width as u16,i),
+                (None, Some(i)) => DescIdx::array(i),
+                (None, None) => DescIdx::None,
+            };
             desc_idx_base = if let Some(i) = reg_array {DescIdx::field_bus(width as u16,i)} else {DescIdx::None};
         }
         let description = desc.interpolate(desc_idx);
@@ -2092,7 +2118,7 @@ mod tests {
         let info = RifsInfo::new(&rifs, p, g, Vec::new().into());
         let field = Field { name: "f".to_owned(), optional: parse_expr(cond).unwrap(), ..Default::default() };
         let mut next_lsb = 0;
-        let inst = RifFieldInst::new(&field, InterruptRegKind::None, &mut next_lsb, &info, None, None)?;
+        let inst = RifFieldInst::new(&field, InterruptRegKind::None, &mut next_lsb, &info, None, None, None)?;
         Ok(inst.unwrap())
     }
 
@@ -2139,5 +2165,179 @@ mod tests {
         assert!(field_inst("not $G", &[], &g).is_err());
         assert!(field_inst("$G + $H", &[], &g).is_err());
         assert!(field_inst("$G * 2", &[], &g).is_err());
+    }
+
+    // ---- Register array of instances, declared with curly bracket: `reg{N}` ----
+
+    use crate::parser::parser_file::tests_parsing::{parse_rif, parse_rif_with};
+    use crate::hdl::SignalDim;
+    use crate::rifgen::InstMode;
+
+    /// Compile a parsed RIF and return the top RIF instance
+    fn compile_src(src: &RifGenSrc) -> Result<RifInst, String> {
+        match Comp::compile(src, &HashMap::new(), &ParamValues::new())? {
+            Comp::Rif(r) => Ok(*r),
+            _ => unreachable!("Top should be a RIF"),
+        }
+    }
+
+    /// Parse and compile a RIF defined by the content of its page (registers and instances)
+    fn compile_rif(name: &str, page: &str) -> Result<RifInst, String> {
+        let src = parse_rif(name, page).map_err(|e| e.to_string())?;
+        compile_src(&src)
+    }
+
+    /// Summary of the register instances of the first page: name, address, array index and register reset value
+    fn reg_summary(r: &RifInst) -> Vec<(String, u64, String, u128)> {
+        r.pages[0].regs.iter().map(|x| (x.reg_name.clone(), x.addr, x.array.to_string(), x.reset)).collect()
+    }
+
+    fn summary(name: &str, addr: u64, array: &str, reset: u128) -> (String, u64, String, u128) {
+        (name.to_owned(), addr, array.to_owned(), reset)
+    }
+
+    /// Register array of 3 instances with a different reset value for field `fa`
+    const CH: &str = "      - ch{3} : \"Channel $i\"\n        - fa = {1,2,3} 3:0 \"Field A of $i\"\n        - fb = 0xF 7:4 \"Field B\"\n";
+
+    #[test]
+    fn reg_inst_array_auto() {
+        let r = compile_rif("ra_auto", &format!("{CH}    instances: auto\n")).unwrap();
+        assert_eq!(reg_summary(&r), vec![
+            summary("ch", 0, "0/3 (Inst)", 0xF1),
+            summary("ch", 4, "1/3 (Inst)", 0xF2),
+            summary("ch", 8, "2/3 (Inst)", 0xF3),
+        ]);
+        // Descriptions are interpolated with the register index
+        let regs = &r.pages[0].regs;
+        assert_eq!(regs[1].description.get_short(false), "Channel 1");
+        assert_eq!(regs[2].fields[0].description.get_short(false), "Field A of 2");
+        // Hardware is an array of structure: the fields are not folded
+        assert_eq!(r.hw_regs.get(&"ch".to_owned()).unwrap().dim, SignalDim::Fixed(3));
+        let fa = &r.reg_impl_defs.get(&"ch".to_owned()).unwrap().fields[0];
+        assert_eq!((fa.width(), fa.array.value()), (4, 0));
+    }
+
+    #[test]
+    fn reg_inst_array_reset_broadcast() {
+        // A single reset value is used by all instances
+        let r = compile_rif("ra_bcast", "      - ch{3} : \"Channel\"\n        - fa = 5 3:0 \"Field A\"\n    instances: auto\n").unwrap();
+        assert_eq!(reg_summary(&r).iter().map(|s| s.3).collect::<Vec<_>>(), vec![5, 5, 5]);
+    }
+
+    #[test]
+    fn reg_inst_array_reset_len() {
+        // List length must match the array size
+        let err = compile_rif("ra_len", "      - ch{3} : \"Channel\"\n        - fa = {1,2} 3:0 \"Field A\"\n    instances: auto\n")
+            .err().expect("Reset list shorter than the array should fail");
+        assert!(err.contains("fa") && err.contains('3') && err.contains('2'), "{err}");
+        let err = compile_rif("ra_len", "      - ch{2} : \"Channel\"\n        - fa = {1,2,3} 3:0 \"Field A\"\n    instances: auto\n")
+            .err().expect("Reset list longer than the array should fail");
+        assert!(err.contains("fa"), "{err}");
+        // A single instance is not an array but still needs a matching list
+        let err = compile_rif("ra_len", "      - ch{1} : \"Channel\"\n        - fa = {1,2} 3:0 \"Field A\"\n    instances: auto\n")
+            .err().expect("Reset list on a single instance should fail");
+        assert!(err.contains("fa"), "{err}");
+        compile_rif("ra_len", "      - ch{1} : \"Channel\"\n        - fa = {7} 3:0 \"Field A\"\n    instances: auto\n").unwrap();
+        // Size can be a parameter
+        let page ="      - ch{$NB} : \"Channel\"\n        - fa = {1,2,3} 3:0 \"Field A\"\n    instances: auto\n";
+        let src = parse_rif_with("ra_param", "  parameters :\n    - NB = 3\n", page).unwrap();
+        assert_eq!(reg_summary(&compile_src(&src).unwrap()).len(), 3);
+        // A parameter value which does not match the reset list is an error
+        let src = parse_rif_with("ra_param", "  parameters :\n    - NB = 4\n", page).unwrap();
+        assert!(compile_src(&src).is_err());
+    }
+
+    #[test]
+    fn reg_inst_array_group() {
+        let a = "      - cha{3} : (ch) \"Channel control\"\n        - fa = {1,2,3} 3:0 \"Field A\"\n";
+        // Same array in all registers of the group
+        let b = "      - chb{3} : (ch) \"Channel status\"\n        - fb = {4,5,6} 3:0 ro \"Field B\"\n";
+        let r = compile_rif("ra_grp", &format!("{a}{b}    instances: auto\n")).unwrap();
+        assert_eq!(reg_summary(&r).len(), 6);
+        assert_eq!(r.hw_regs.get(&"ch".to_owned()).unwrap().dim, SignalDim::Fixed(3));
+        let ch = r.reg_impl_defs.get(&"ch".to_owned()).unwrap();
+        assert_eq!(ch.fields.iter().map(|f| (f.name.as_str(), f.array.value())).collect::<Vec<_>>(), vec![("fa", 0), ("fb", 0)]);
+        // Different sizes, scalar register or square bracket array in the same group are rejected
+        for other in [
+            "      - chb{2} : (ch) \"Channel status\"\n        - fb = 4 3:0 ro \"Field B\"\n",
+            "      - chb : (ch) \"Channel status\"\n        - fb = 4 3:0 ro \"Field B\"\n",
+            "      - chb[3] : (ch) \"Channel status\"\n        - fb = 4 3:0 ro \"Field B\"\n",
+        ] {
+            let err = compile_rif("ra_grp_err", &format!("{a}{other}    instances: auto\n"))
+                .err().unwrap_or_else(|| panic!("Group with mismatching array should fail:\n{other}"));
+            assert!(err.contains("chb") && err.contains("ch"), "{err}");
+        }
+        // And the other way around: first register is a scalar
+        let first = "      - chz : (ch) \"Channel\"\n        - fz = 4 3:0 ro \"Field Z\"\n";
+        let err = compile_rif("ra_grp_err", &format!("{first}{a}    instances: auto\n"))
+            .err().expect("Group mixing scalar register and array should fail");
+        assert!(err.contains("cha"), "{err}");
+    }
+
+    #[test]
+    fn reg_inst_array_unsupported() {
+        // Field array inside a register array of instances is rejected by the parser
+        let err = parse_rif("ra_farr", "      - ch{3} : \"Channel\"\n        - key[2] = 0 3:0 \"Key\"\n")
+            .expect_err("Field array in a register instances array should fail");
+        assert_eq!(err.kind, crate::error::RifErrorKind::Unsupported, "{err}");
+        // Partial field and interrupt are rejected at compilation
+        for regs in [
+            "      - ch{3} : \"Channel\"\n        - fa = 0 3:0 \"A\"\n          partial 0\n",
+            "      - ch{3} : \"Channel\"\n        interrupt high w1clr\n        - ev = 0 0:0 \"Event\"\n",
+        ] {
+            let err = compile_rif("ra_unsupported", &format!("{regs}    instances: auto\n"))
+                .err().unwrap_or_else(|| panic!("Should not compile:\n{regs}"));
+            assert!(err.contains("ch") && err.contains("not supported"), "{err}");
+        }
+    }
+
+    #[test]
+    fn reg_inst_array_manual() {
+        // Manual instance with the array defined by the register definition and an override on one instance
+        let page = format!("{CH}    instances:\n      - ch\n        [1].fa.reset = 9\n");
+        let r = compile_rif("ra_manual", &page).unwrap();
+        assert_eq!(reg_summary(&r), vec![
+            summary("ch", 0, "0/3 (Inst)", 0xF1),
+            summary("ch", 4, "1/3 (Inst)", 0xF9),
+            summary("ch", 8, "2/3 (Inst)", 0xF3),
+        ]);
+        // Array in both definition and instance is rejected
+        let err = compile_rif("ra_both", &format!("{CH}    instances:\n      - ch[2]\n"))
+            .err().expect("Array in definition and instance should fail");
+        assert!(err.contains("ch") && err.contains("both"), "{err}");
+    }
+
+    #[test]
+    fn reg_inst_array_same_as_instance_array() {
+        // Array of instances in the definition gives the same result as an array in the instance with reset overrides
+        let regs_def = format!("{CH}    instances: auto\n");
+        let regs_inst = "      - ch : \"Channel $i\"\n        - fa = 0 3:0 \"Field A of $i\"\n        - fb = 0xF 7:4 \"Field B\"\n    instances:\n      - ch[3]\n        [0].fa.reset = 1\n        [1].fa.reset = 2\n        [2].fa.reset = 3\n";
+        let r_def = compile_rif("ra_eq_def", &regs_def).unwrap();
+        let r_inst = compile_rif("ra_eq_inst", regs_inst).unwrap();
+        assert_eq!(reg_summary(&r_def), reg_summary(&r_inst));
+        for (d, i) in r_def.pages[0].regs.iter().zip(r_inst.pages[0].regs.iter()) {
+            assert_eq!(d.description.get_short(false), i.description.get_short(false));
+            assert_eq!(d.group_name, i.group_name);
+            assert_eq!(d.fields.len(), i.fields.len());
+            for (fd, fi) in d.fields.iter().zip(i.fields.iter()) {
+                assert_eq!((fd.lsb, fd.width(), &fd.reset), (fi.lsb, fi.width(), &fi.reset));
+            }
+        }
+        assert_eq!(r_def.hw_regs.get(&"ch".to_owned()).unwrap().dim, r_inst.hw_regs.get(&"ch".to_owned()).unwrap().dim);
+    }
+
+    #[test]
+    fn reg_inst_array_convert_to_manual() {
+        let mut src = parse_rif("ra_conv", &format!("      - single : \"Single\"\n        - fs = 1 3:0 \"Field\"\n{CH}    instances: auto\n")).unwrap();
+        let r = compile_src(&src).unwrap();
+        let rif = src.rifs.get_mut("ra_conv").unwrap();
+        // The array is only declared by the definition: the converted instance has no array
+        let rifs = HashMap::from([(rif.name.clone(), rif.clone())]);
+        let insts = r.pages[0].convert_to_manual(&rif.pages[0], &rifs).unwrap();
+        assert_eq!(insts.iter().map(|i| (i.inst_name.as_str(), i.array.is_empty())).collect::<Vec<_>>(), vec![("single", true), ("ch", true)]);
+        rif.pages[0].instances = insts;
+        rif.pages[0].inst_auto = InstMode::Manual;
+        let r_manual = compile_src(&src).unwrap();
+        assert_eq!(reg_summary(&r), reg_summary(&r_manual));
     }
 }

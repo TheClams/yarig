@@ -2,8 +2,13 @@
 
 ## [0.26.3]
 
+### Added
+  - Syntax: register declared as array with curly bracket `reg{N}` defines an array of register instances (an array of structures in hardware) rather than an array folded into the fields (`reg[N]`).
+    Works with `instances: auto`, and a field reset value can be a list with one value for each instance.
+
 ### Fix
   - Parser: support spaces before/inside array size for register and field
+  - Parser: reject a list of reset values on a field which is not an array (only the first value was used)
 
 ## [0.26.2]
 ### Added
