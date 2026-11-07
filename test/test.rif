@@ -83,6 +83,8 @@ rif: test_rif
       - reg_inst_array{3} : "Array of register instances $i"
         - en   = 0         0:0 "Enable of instance $i"
         - gain = {1,2,4}   7:4 "Gain of instance $i"
+      - reg_inst_array_farr{2} : "Array of register instances with a field array $i"
+        - tap[2] = {1,2,3,4} 7:0 "Tap $i"
     instances: auto
   - Memory : "External memory"
     baseAddress : 0x100

@@ -233,6 +233,7 @@ This trait is used by the generators for AsciiDoc, HTML, Latex and Mif (FrameMak
   - [ ] Add test for setting parameters through hierarchy (e.g. top.block1.subblock.name) from the config file or command line (currently generate a warning)
   - [ ] Support bridges with parameters (other than dimension): propagate extra parameters to the RIF instance and
   - [ ] Support register array simulatenously in definition and instance (i.e. an array of array...)
+  - [ ] Support override of a single element of a field array in a single register of a register array (e.g. register index `[1]` combined with field index `key[0].reset = 3`): currently the register index and the field index cannot be combined in the instance override
   - [ ] Support byte mask on interface (TBD if really needed)
 
 

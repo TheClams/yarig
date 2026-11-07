@@ -1039,22 +1039,29 @@ impl RifRegInst {
         };
         let mut next_lsb = 0;
         let reg_array_idx = r.def_idx();
-        // Index of the register in an array of register instances `{N}`: used to select the field reset value
-        let reg_inst_idx = if def.array_kind == RegArrayKind::Inst {r.array.opt_idx()} else {None};
+        // Index of the register in an array of register instances (`{N}` in the definition or array in the instance):
+        // used to interpolate the field description and to select the field reset value
+        let reg_inst_idx = if r.array.is_def() {None} else {r.array.opt_idx()};
         if def.array_kind == RegArrayKind::Inst {
             let nb_inst = r.array.dim().max(1) as usize;
-            for f in def.fields.iter().filter(|f| f.reset.len() > 1 && f.reset.len() != nb_inst) {
-                return Err(format!(
-                    "Field {}.{} has {} reset values but the register array has {} instances: use a single value or one value per instance",
-                    def.name, f.name, f.reset.len(), nb_inst
-                ));
+            for f in def.fields.iter().filter(|f| f.reset.len() > 1) {
+                // Scalar field: one value per instance. Field array: same values for all instances, or one list per instance
+                let nb_field = f.array.value_g(param_gen).map_err(|msg| format!("{msg} (register {}.{})", def.name, f.name))? as usize;
+                let valid = if nb_field == 0 {f.reset.len() == nb_inst} else {f.reset.len() == nb_field || f.reset.len() == nb_field * nb_inst};
+                if !valid {
+                    return Err(format!(
+                        "Field {}.{} has {} reset values but the register array has {} instances (and the field {} elements): use a single value, or one value per instance (or per field element and instance)",
+                        def.name, f.name, f.reset.len(), nb_inst, nb_field
+                    ));
+                }
             }
         }
         // let param_gen = rifs.param_gen();
         for f in def.fields.iter() {
             let array_size = f.array.value_g(param_gen).map_err(|msg| format!("{msg} (register {}.{})", def.name, f.name))? as u16;
             let nb = array_size.max(1);
-            let offset = r.array.idx() * nb + f.partial.1;
+            // Index of the first field element: arrays folded into the fields continue over the registers of the array, while each register instance has its own elements
+            let offset = if r.array.is_def() {r.array.idx() * nb} else {0} + f.partial.1;
             for i in 0..nb {
                 let arr_idx =
                     if array_size > 0 {
@@ -1451,9 +1458,14 @@ impl RifFieldInst {
             // If the reset size is the same as a register field array size, then repeat reset modulo the field array size
             // If the reset size is bigger then a register field array size, and the index is out-of-range, then skip field instance
             // (otherwise simply repeat the one at indice 0)
-            let mut rst_idx = array.idx() as usize
-                        + if array.is_def() {array.dim() as usize} else {0};
             let field_array_dim = field.array.value_g(param_gen).map_err(|msg| format!("{msg} (Field {})", field.name))? as usize;
+            // In an array of register instances, a list holding one sub-list per register instance uses the sub-list of the current register
+            let rst_reg_off = match reg_inst {
+                Some(r) if field.reset.len() > field_array_dim && (r as usize + 1) * field_array_dim <= field.reset.len() => r as usize * field_array_dim,
+                _ => 0,
+            };
+            let mut rst_idx = array.idx() as usize
+                        + if array.is_def() {array.dim() as usize} else {rst_reg_off};
             if rst_idx > field.reset.len() && field.reset.len() == field_array_dim {
                 rst_idx %= field_array_dim;
             }
@@ -2276,13 +2288,10 @@ mod tests {
 
     #[test]
     fn reg_inst_array_unsupported() {
-        // Field array inside a register array of instances is rejected by the parser
-        let err = parse_rif("ra_farr", "      - ch{3} : \"Channel\"\n        - key[2] = 0 3:0 \"Key\"\n")
-            .expect_err("Field array in a register instances array should fail");
-        assert_eq!(err.kind, crate::error::RifErrorKind::Unsupported, "{err}");
-        // Partial field and interrupt are rejected at compilation
+        // Partial field, field array split over registers and interrupt are rejected at compilation
         for regs in [
             "      - ch{3} : \"Channel\"\n        - fa = 0 3:0 \"A\"\n          partial 0\n",
+            "      - ch{3} : \"Channel\"\n        - key[2] = 0 3:0 \"A\"\n          arrayPartial 2\n",
             "      - ch{3} : \"Channel\"\n        interrupt high w1clr\n        - ev = 0 0:0 \"Event\"\n",
         ] {
             let err = compile_rif("ra_unsupported", &format!("{regs}    instances: auto\n"))
@@ -2321,9 +2330,91 @@ mod tests {
             assert_eq!(d.fields.len(), i.fields.len());
             for (fd, fi) in d.fields.iter().zip(i.fields.iter()) {
                 assert_eq!((fd.lsb, fd.width(), &fd.reset), (fi.lsb, fi.width(), &fi.reset));
+                assert_eq!(fd.description.get_short(false), fi.description.get_short(false));
             }
         }
         assert_eq!(r_def.hw_regs.get(&"ch".to_owned()).unwrap().dim, r_inst.hw_regs.get(&"ch".to_owned()).unwrap().dim);
+    }
+
+    /// Summary of the fields of a register instance: name and index in the field array
+    fn field_summary(r: &RifRegInst) -> Vec<(String, u16)> {
+        r.fields.iter().map(|f| (f.name(), f.array.idx())).collect()
+    }
+
+    #[test]
+    fn reg_inst_array_field_array() {
+        // Field array inside an array of register instances: same list of reset values for all instances
+        let regs = "      - ch{3} : \"Channel $i\"\n        - en = {1,0,1} 0:0 \"Enable of channel $i\"\n        - key[2] = {1,2} 15:8 \"Key $i\"\n        - tap[2] = 7 27:24 \"Tap $i\"\n    instances: auto\n";
+        let r = compile_rif("ra_farr", regs).unwrap();
+        assert_eq!(reg_summary(&r), vec![
+            summary("ch", 0, "0/3 (Inst)", 0x7702_0101),
+            summary("ch", 4, "1/3 (Inst)", 0x7702_0100),
+            summary("ch", 8, "2/3 (Inst)", 0x7702_0101),
+        ]);
+        // Field elements are numbered inside each register (and not over the whole array of registers)
+        for (i, reg) in r.pages[0].regs.iter().enumerate() {
+            assert_eq!(
+                field_summary(reg),
+                vec![("en".to_owned(), 0), ("key[0]".to_owned(), 0), ("key[1]".to_owned(), 1), ("tap[0]".to_owned(), 0), ("tap[1]".to_owned(), 1)],
+                "register {i}"
+            );
+        }
+        // Element index in the description
+        assert_eq!(r.pages[0].regs[2].fields[2].description.get_short(false), "Key 1");
+        // Hardware: array of structure, each containing the whole field array
+        assert_eq!(r.hw_regs.get(&"ch".to_owned()).unwrap().dim, SignalDim::Fixed(3));
+        let key = r.reg_impl_defs.get(&"ch".to_owned()).unwrap().fields.iter().find(|f| f.name == "key").unwrap();
+        assert_eq!((key.width(), key.array.value()), (8, 2));
+    }
+
+    #[test]
+    fn reg_inst_array_field_array_reset() {
+        let compile = |reset: &str| compile_rif("ra_farr_rst", &format!("      - ch{{3}} : \"Channel\"\n        - key[2] = {reset} 15:8 \"Key $i\"\n    instances: auto\n"));
+        let resets = |r: &RifInst| reg_summary(r).iter().map(|s| s.3).collect::<Vec<_>>();
+        // One list of reset values per register instance
+        assert_eq!(resets(&compile("{1,2,3,4,5,6}").unwrap()), vec![0x2_0100, 0x4_0300, 0x6_0500]);
+        // Same list for all instances
+        assert_eq!(resets(&compile("{1,2}").unwrap()), vec![0x2_0100; 3]);
+        // Single value for all elements
+        assert_eq!(resets(&compile("5").unwrap()), vec![0x5_0500; 3]);
+        // Other number of values are rejected
+        for list in ["{1,2,3}", "{1,2,3,4}", "{1,2,3,4,5,6,7}"] {
+            let err = compile(list).err().unwrap_or_else(|| panic!("{list} should be rejected"));
+            assert!(err.contains("key"), "{err}");
+        }
+    }
+
+    #[test]
+    fn reg_inst_array_field_array_same_as_instance_array() {
+        // Same result as the register array declared in the instance, which must also number the field elements inside each register
+        let regs_def = "      - ch{3} : \"Channel $i\"\n        - en = {1,0,1} 0:0 \"Enable of channel $i\"\n        - key[2] = {1,2} 15:8 \"Key $i\"\n    instances: auto\n";
+        let regs_inst = "      - ch : \"Channel $i\"\n        - en = 1 0:0 \"Enable of channel $i\"\n        - key[2] = {1,2} 15:8 \"Key $i\"\n    instances:\n      - ch[3]\n        [1].en.reset = 0\n";
+        let r_def = compile_rif("ra_farr_eq_def", regs_def).unwrap();
+        let r_inst = compile_rif("ra_farr_eq_inst", regs_inst).unwrap();
+        assert_eq!(reg_summary(&r_def), reg_summary(&r_inst));
+        for (d, i) in r_def.pages[0].regs.iter().zip(r_inst.pages[0].regs.iter()) {
+            assert_eq!(field_summary(d), field_summary(i));
+            assert_eq!(
+                d.fields.iter().map(|f| f.description.get_short(false)).collect::<Vec<_>>(),
+                i.fields.iter().map(|f| f.description.get_short(false)).collect::<Vec<_>>()
+            );
+        }
+        let key = r_inst.reg_impl_defs.get(&"ch".to_owned()).unwrap().fields.iter().find(|f| f.name == "key").unwrap();
+        assert_eq!(key.array.value(), 2);
+    }
+
+    #[test]
+    fn reg_inst_array_instance_field_description() {
+        // `$i` in a field description is the index of the register when the array is declared in the instance
+        let regs = "      - ch : \"Channel $i\"\n        - en = 0 0:0 \"Enable of channel $i\"\n    instances:\n      - ch[3]\n";
+        let r = compile_rif("ra_inst_desc", regs).unwrap();
+        assert_eq!(
+            r.pages[0].regs.iter().map(|x| x.fields[0].description.get_short(false)).collect::<Vec<_>>(),
+            vec!["Enable of channel 0", "Enable of channel 1", "Enable of channel 2"]
+        );
+        // The base description is not specific to an instance
+        let regs = &r.pages[0].regs;
+        assert_eq!(regs[0].fields[0].base_description, regs[2].fields[0].base_description);
     }
 
     #[test]

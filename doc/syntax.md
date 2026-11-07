@@ -336,9 +336,12 @@ In hardware this is an array of structures, the same as a register instantiated 
 The difference is that the size is part of the register definition, so it also works with `instances: auto`.
  - The reset value of a field can be a single value used by all instances, or a list of values `{v0,v1,...}` with exactly one value per instance.
    A reset value can still be overridden for one instance in the register instances (e.g. `[1].field.reset = 3`).
- - `$i` in the description of the register and of its fields is replaced by the index of the instance.
+ - A field can be an array: each instance then contains the whole field array.
+   Its reset value can be a single value, a list with one value per element (used by all instances), or a list with one value per element for each instance (instance 0 first).
+ - `$i` in the description of the register is replaced by the index of the instance, as well as in the description of its fields which are not an array.
+   In the description of a field array, `$i` is the index of the field element.
  - All registers belonging to the same register group must be declared with the same array size.
- - The fields can not be an array, and the register can not have a partial field nor be an interrupt.
+ - The register can not have a `partial` field, a field array split over multiple registers (`arrayPartial`), nor be an interrupt.
  - The array can not be defined again in the register instance.
 
 This example creates 4 registers `chan` at address 0, 4, 8 and 12, each with a field `gain` with a different reset value:
@@ -346,6 +349,12 @@ This example creates 4 registers `chan` at address 0, 4, 8 and 12, each with a f
   - chan{4} : "Channel $i control"
     - en   = 0            0:0 "Enable of channel $i"
     - gain = {1,2,4,8}    7:4 "Gain of channel $i"
+```
+
+Example with a field array: the 4 registers each contain two `tap` elements, with the reset value of each element given for each register.
+```yaml
+  - filt{4} : "Filter $i"
+    - tap[2] = {1,2, 3,4, 5,6, 7,8}  15:8 "Tap $i"
 ```
 
 
@@ -375,7 +384,7 @@ It is possible to override some properties at the instance level. Here the synta
  - `optional_acc: [na|ro|rw]`: Control the software access (ro) of register which are due to parameters value. Default is `na` (any access will generate a bus access error).
 
 It is also possible to create an array of register by specifying `- <regname>[<arraysize>]`.
-The address is auto-incremented for each register instance.
+The address is auto-incremented for each register instance. `$i` in the description of the register and of its fields is replaced by the index of the register.
 Note that if the register is part of a group, all the register must be instantiated with the same array size.
 
 It is possible to override properties of array element (register or fields). The array index can be a single value (`[0]`), a comma separated list (`[1,5]`) and/or a range (`[0:3]`).

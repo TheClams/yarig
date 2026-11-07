@@ -5,8 +5,11 @@
 ### Added
   - Syntax: register declared as array with curly bracket `reg{N}` defines an array of register instances (an array of structures in hardware) rather than an array folded into the fields (`reg[N]`).
     Works with `instances: auto`, and a field reset value can be a list with one value for each instance.
+    Fields can be arrays, with a reset list either shared by all instances or with one sub-list per instance.
 
 ### Fix
+  - Register array in the instance: `$i` in the description of a field is now the index of the register (it was always 0)
+  - Register array in the instance with a field array: the elements of the field array are now numbered inside each register (generated RTL was using out-of-range indexes for the registers after the first)
   - Parser: support spaces before/inside array size for register and field
   - Parser: reject a list of reset values on a field which is not an array (only the first value was used)
 

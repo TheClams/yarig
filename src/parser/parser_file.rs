@@ -659,11 +659,6 @@ impl RifGenSrc {
                             if f.array != Width::Value(0) && matches!(f.pos, FieldPos::Size(Width::Param(_))) {
                                 return Err(RifError::unsupported(info, &format!("Field {} is an array with generic width: not supported yet !", f.name)));
                             }
-                            if f.array != Width::Value(0) && self.last_reg().array_kind == RegArrayKind::Inst {
-                                return Err(RifError::unsupported(info, &format!(
-                                    "Field {} is an array: not supported in register {} which is an array of register instances", f.name, self.last_reg().name
-                                )));
-                            }
                             // A list of reset values only makes sense for a field array, or for a scalar field in an array of register instances (`reg{N}`).
                             // Otherwise only the first value would be used
                             if f.array == Width::Value(0) && f.reset.len() > 1 && self.last_reg().array_kind != RegArrayKind::Inst {

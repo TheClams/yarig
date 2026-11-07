@@ -349,8 +349,8 @@ impl RegDef {
         if let Some(f) = self.fields.iter().find(|f| f.is_partial()) {
             return Err(format!("Register {}: partial field {} is not supported in an array of register instances", self.name, f.name));
         }
-        if let Some(f) = self.fields.iter().find(|f| f.array != Width::Value(0)) {
-            return Err(format!("Register {}: field array {} is not supported in an array of register instances", self.name, f.name));
+        if let Some(f) = self.fields.iter().find(|f| f.partial.1 > 0) {
+            return Err(format!("Register {}: field array {} split over multiple registers (arrayPartial) is not supported in an array of register instances", self.name, f.name));
         }
         Ok(())
     }
