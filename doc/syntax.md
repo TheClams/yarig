@@ -377,7 +377,7 @@ It is possible to override some properties at the instance level. Here the synta
  - `description : <bla bla>` : register description, can be multi-line as long as it is indented by another level. Quotation mark on first line are removed.
  - `hw r|w|rw|na` : change the hardware access of a register
  - `<field_name>.description <bla bla>` : change a field description
- - `<field_name>.reset = <rst_val>` : change a field reset value
+ - `<field_name>.reset = <rst_val>` : change a field reset value. For a field array, the value is used by all elements, or a list `{v0,v1,...}` gives the value of each element (see [array override](#array-override)).
  - `<field_name>.disable [= <disable_val>]` : disable a field (i.e. value is fixed). If no value is provided, it default to the reset value.
  - `<field_name>.optional : <condition>` : Same as the field `optional` property: the field is disabled if the _condition_ is false. The condition can be a parameter expression or a generic.
  - `optional : <condition>` : Indicate that the register is created only if the _condition_ is true or different from 0.
@@ -397,6 +397,30 @@ Here is an example with a register array and various override:
         description:  GPIO[$i]  configuration register
         [0,5,6].pull_mode.reset = 2
         [0:6,12:14].clk_en.disable = 0
+```
+
+### Array override
+The reset value of a field can be overridden with a list `{v0,v1,...}`, following the same rules as in the field definition. The name of a field array (without index) applies to all its elements.
+ - Field array: `<field>.reset = {v0,v1,...}` gives one value per element. A single value is used by all elements.
+ - Scalar field in an [array of register instances](#array-of-register-instances) (or in an array of registers declared in the instance): `<field>.reset = {v0,v1,...}` gives one value per register.
+ - Field array in an array of register instances: the list has either one value per element (same for all registers), or one value per element for each register (register 0 first).
+ - With a register index (e.g. `[1].<field>.reset = {v0,v1}`) only the field of this register is changed: the list then has one value per element of the field array.
+ - A list is rejected when used on explicit elements of a field array (e.g. `<field>[1].reset = {1,2}`): use a single value.
+ - The size of the list must match one of the cases above.
+
+```yaml
+    registers:
+      - taps : "Filter taps"
+        - coef[4] = 0 7:0 "Coefficient $i"
+      - chan{4} : "Channel $i"
+        - gain = 0 3:0 "Gain"
+        - tap[2] = 0 15:8 "Tap $i"
+    instances:
+      - taps
+        coef.reset = {1,2,4,8}
+      - chan
+        gain.reset = {1,2,4,8}
+        tap.reset = {1,2,3,4,5,6,7,8}
 ```
 
 ## Extra information

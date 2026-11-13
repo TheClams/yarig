@@ -24,7 +24,7 @@ use super::{
     comment, counter_def, decl_top, desc, enum_entry, field_decl, field_acc, field_interrupt,
     field_properties, identifier, identifier_last, indentation, is_auto, key_val,
     opt_signal_or_expr, page_properties, pulse_kind, reg_decl, reg_inst,
-    reg_inst_field_properties, reg_interrupt, reg_properties_or_item, reset_def, reset_val,
+    reg_inst_field_properties, reg_interrupt, reg_properties_or_item, reset_def, reset_val_list,
     rif_inst, rif_inst_properties, rif_properties_or_item, rifmux_group_properties, rifmux_properties,
     val_intf, val_u64, val_u8, vec_id
 };
@@ -1267,13 +1267,13 @@ impl RifGenSrc {
             }
             Context::Disabled => {
                 self.last_reg_inst().set_visibility(ovr_idx, Visibility::Disabled);
-                if let Ok(r) = reset_val(line) {
-                    self.last_reg_inst().set_reset(ovr_idx, r);
+                if let Ok(r) = reset_val_list(line) {
+                    self.last_reg_inst().set_reset(ovr_idx, r).map_err(|e| RifError::generic(&e))?;
                 }
                 stamp(self, FieldOverrideProp::Reset);
             }
             Context::HwReset => {
-                self.last_reg_inst().set_reset(ovr_idx, reset_val(line)?);
+                self.last_reg_inst().set_reset(ovr_idx, reset_val_list(line)?).map_err(|e| RifError::generic(&e))?;
                 stamp(self, FieldOverrideProp::Reset);
             }
             Context::Limit => {

@@ -37,6 +37,14 @@ pub fn reset_val_arr<'a>(input: &mut &'a str) -> Res<'a, Vec<ResetValP>> {
         .parse_next(input)
 }
 
+/// Parse a reset value which is either a single value or a list between curly brackets
+pub fn reset_val_list<'a>(input: &mut &'a str) -> Res<'a, Vec<ResetValP>> {
+    alt((
+        reset_val.map(|v: ResetValP| vec![v]),
+        reset_val_arr,
+    )).parse_next(input)
+}
+
 /// Parse possible field position format:
 /// `msb:lsb` `lsb+:width` `5b` or `$width`
 pub fn field_pos<'a>(input: &mut &'a str) -> Res<'a, FieldPos> {
@@ -65,10 +73,7 @@ pub fn field_decl<'a>(input: &mut &'a str) -> Res<'a, Field> {
     let array_size = opt(array_size).parse_next(input)?;
     let reset_val = opt(preceded(
         ws("="),
-        alt((
-            reset_val.map(|v: ResetValP| vec![v]),
-            reset_val_arr,
-        )),
+        reset_val_list,
     ))
     .context(StrContext::Label("reset value"))
     .parse_next(input)?;

@@ -6,7 +6,7 @@ use crate::{
     rifgen::{
         Access, Address, AddressKind, AddressOffset, ClockingInfo, CounterInfo, DeclLine, DescIdx, Description, EnumDef, EnumDefs, EnumKind,
         ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, GenericRange, GenericValues, Interface, InterruptRegKind,
-        InterruptSuffixes, InterruptTrigger, Limit, PasswordInfo, RegArrayKind, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegOverride, RegPulseKind, ResetVal, ResetValOverride,
+        InterruptSuffixes, InterruptTrigger, Limit, PasswordInfo, RegArrayKind, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegOverride, RegPulseKind, ResetVal, ResetValOverride, ResetValP,
         Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SuffixInfo, SuffixTarget, SuffixTargets, Visibility, Width,
         order_dict::{OrderDict, OrderedDictIterV}
     }
@@ -1140,37 +1140,50 @@ impl RifRegInst {
                 r.hw_access = hw_access;
             }
             // Field override : Description, optional visbility, reset, limit, info
+            // The name of a field array applies to all its elements, while a name with an index applies only to this element
             for (k,ovr_f) in ovr.fields.iter() {
-                let Some(reg_field) = r.fields.iter_mut()
-                    .find(|field| field.name == *k || field.name() == *k) else {
-                        return Err(
-                            format!("Field {k} must exist in {} | Fields available {:?}",
-                                r.reg_type, r.fields.iter().map(|f| f.name()).collect::<Vec<String>>() )
-                        );
-                    };
-                if let Some(desc) = &ovr_f.description {
-                    let desc_idx =
-                        if reg_field.array.dim() > 1 {DescIdx::Array(reg_field.array.idx())}
-                        else if r.array.dim() > 1 {DescIdx::Array(r.array.idx())}
-                        else {DescIdx::None};
-                    reg_field.description = desc.interpolate(desc_idx);
+                let targets: Vec<usize> = r.fields.iter().enumerate()
+                    .filter(|(_,field)| field.name == *k || field.name() == *k)
+                    .map(|(i,_)| i)
+                    .collect();
+                if targets.is_empty() {
+                    return Err(
+                        format!("Field {k} must exist in {} | Fields available {:?}",
+                            r.reg_type, r.fields.iter().map(|f| f.name()).collect::<Vec<String>>() )
+                    );
                 }
-                if let Some(visibility) = ovr_f.visibility {
-                    reg_field.visibility = visibility;
-                }
-                reg_field.apply_optional(&ovr_f.optional, rifs)?;
-                let enum_def : Option<&EnumDef> = reg_field.enum_kind.get_def(&rifs.enums);
-                match &ovr_f.reset {
-                    ResetValOverride::Reset(reset_val) => reg_field.reset = reset_val.compile(reg_field.is_signed(), reg_field.nb_frac, &rifs.params, enum_def)?,
-                    ResetValOverride::Disable(reset_val) => {
-                        reg_field.reset = reset_val.compile(reg_field.is_signed(), reg_field.nb_frac, &rifs.params, enum_def)?;
-                        reg_field.visibility = Visibility::Disabled;
-                    },
-                    // Nothing
-                    ResetValOverride::None => {},
-                }
-                if let Some(limit) = &ovr_f.limit {
-                    reg_field.limit = limit.compile(reg_field.is_signed(), reg_field.nb_frac, &rifs.params, enum_def)?;
+                for i in targets {
+                    let reg_field = &mut r.fields[i];
+                    if let Some(desc) = &ovr_f.description {
+                        let desc_idx =
+                            if reg_field.array.dim() > 1 {DescIdx::Array(reg_field.array.idx())}
+                            else if r.array.dim() > 1 {DescIdx::Array(r.array.idx())}
+                            else {DescIdx::None};
+                        reg_field.description = desc.interpolate(desc_idx);
+                    }
+                    if let Some(visibility) = ovr_f.visibility {
+                        reg_field.visibility = visibility;
+                    }
+                    reg_field.apply_optional(&ovr_f.optional, rifs)?;
+                    let enum_def : Option<&EnumDef> = reg_field.enum_kind.get_def(&rifs.enums);
+                    match &ovr_f.reset {
+                        ResetValOverride::Reset(list) => {
+                            reg_field.reset = reg_field.override_reset(list, &r.array)
+                                .map_err(|msg| format!("{msg} (register {}, override of field {k})", r.reg_name))?
+                                .compile(reg_field.is_signed(), reg_field.nb_frac, &rifs.params, enum_def)?;
+                        }
+                        ResetValOverride::Disable(list) => {
+                            reg_field.reset = reg_field.override_reset(list, &r.array)
+                                .map_err(|msg| format!("{msg} (register {}, override of field {k})", r.reg_name))?
+                                .compile(reg_field.is_signed(), reg_field.nb_frac, &rifs.params, enum_def)?;
+                            reg_field.visibility = Visibility::Disabled;
+                        },
+                        // Nothing
+                        ResetValOverride::None => {},
+                    }
+                    if let Some(limit) = &ovr_f.limit {
+                        reg_field.limit = limit.compile(reg_field.is_signed(), reg_field.nb_frac, &rifs.params, enum_def)?;
+                    }
                 }
             }
         }
@@ -1541,6 +1554,49 @@ impl RifFieldInst {
         // Optional field evaluating to 0 is disabled (i.e. forced to its reset value)
         field_inst.apply_optional(&field.optional, rifs)?;
         Ok(Some(field_inst))
+    }
+
+    /// Select, in the list of reset values of an override, the one of this field element.
+    /// `reg_array` is the index of the register instance containing the field.
+    /// Like in the field definition:
+    /// - a single value is used by all elements and all register instances
+    /// - a scalar field in an array of register instances has one value per register instance
+    /// - a field array has one value per element (same for all register instances), or one value per element for each register instance (instance 0 first)
+    /// - a field array folded into an array of registers (`reg[N]`) has either one value per element of a register, or one per element of all registers
+    pub fn override_reset<'a>(&self, list: &'a [ResetValP], reg_array: &ArrayIdx) -> Result<&'a ResetValP, String> {
+        let nb = list.len();
+        if nb == 1 {
+            return Ok(&list[0]);
+        }
+        let field_dim = self.array.dim() as usize;
+        let reg_dim = reg_array.dim() as usize;
+        // Elements of a folded field array are numbered over all registers, while register instances have their own elements
+        let folded = reg_array.is_def() && reg_dim > 0;
+        let reg_idx = if reg_array.is_def() {0} else {reg_array.idx() as usize};
+        let elem = self.array.idx() as usize;
+        // Accepted sizes of the list, besides a single value
+        let mut valid = Vec::new();
+        let idx = if field_dim == 0 {
+            if reg_dim > 0 && !folded {valid.push(reg_dim);}
+            (valid.contains(&nb)).then_some(reg_idx)
+        } else {
+            valid.push(field_dim);
+            if reg_dim > 0 {valid.push(reg_dim * field_dim);}
+            if nb == field_dim {Some(elem % field_dim)}
+            else if nb == reg_dim * field_dim {Some(if folded {elem} else {reg_idx * field_dim + elem})}
+            else {None}
+        };
+        valid.retain(|&v| v > 1);
+        valid.dedup();
+        idx.map(|i| &list[i]).ok_or_else(|| {
+            if valid.is_empty() {
+                let kind = if field_dim == 0 {"is not an array"} else {"has a single element"};
+                format!("{nb} reset values provided but field {} {kind}: use a single value", self.name)
+            } else {
+                format!("{nb} reset values provided for field {}: expected 1 or {}",
+                    self.name, valid.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(" or "))
+            }
+        })
     }
 
     /// Apply an optional condition: a field is disabled when the condition is 0
@@ -2183,7 +2239,7 @@ mod tests {
 
     use crate::parser::parser_file::tests_parsing::{parse_rif, parse_rif_with};
     use crate::hdl::SignalDim;
-    use crate::rifgen::InstMode;
+    use crate::rifgen::{InstMode, OverrideIndex};
 
     /// Compile a parsed RIF and return the top RIF instance
     fn compile_src(src: &RifGenSrc) -> Result<RifInst, String> {
@@ -2430,5 +2486,186 @@ mod tests {
         rif.pages[0].inst_auto = InstMode::Manual;
         let r_manual = compile_src(&src).unwrap();
         assert_eq!(reg_summary(&r), reg_summary(&r_manual));
+    }
+
+    // ---- Override of reset value with a list of values ----
+
+    /// Reset values of each field of every register instance: one list per register instance
+    fn field_resets(r: &RifInst) -> Vec<Vec<(String, u128)>> {
+        r.pages[0].regs.iter()
+            .map(|reg| reg.fields.iter().map(|f| (f.name(), f.reset.to_u128(f.width() as u8))).collect())
+            .collect()
+    }
+
+    /// Compile a page with a manual instance and the given override lines
+    fn compile_ovr(regs: &str, inst: &str, ovr: &str) -> Result<Vec<Vec<(String, u128)>>, String> {
+        let page = format!("{regs}    instances:\n      - {inst}\n{}", ovr.lines().map(|l| format!("        {l}\n")).collect::<String>());
+        // Each call needs its own RIF name since tests run in parallel and the name gives the temporary file
+        static NB_CALL: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let name = format!("ovr{}", NB_CALL.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
+        compile_rif(&name, &page).map(|r| field_resets(&r))
+    }
+
+    fn vals(v: &[(&str, u128)]) -> Vec<(String, u128)> {
+        v.iter().map(|(n, x)| (n.to_string(), *x)).collect()
+    }
+
+    /// Register with a field array
+    const FARR: &str = "      - r : \"R\"\n        - f[4] = 1 3:0 \"F $i\"\n";
+
+    #[test]
+    fn override_reset_field_array() {
+        // Whole field array
+        let r = compile_ovr(FARR, "r", "f.reset = {5,6,7,8}").unwrap();
+        assert_eq!(r, vec![vals(&[("f[0]", 5), ("f[1]", 6), ("f[2]", 7), ("f[3]", 8)])]);
+        // A single value is used by all elements
+        let r = compile_ovr(FARR, "r", "f.reset = 5").unwrap();
+        assert_eq!(r, vec![vals(&[("f[0]", 5), ("f[1]", 5), ("f[2]", 5), ("f[3]", 5)])]);
+        // Explicit elements
+        let r = compile_ovr(FARR, "r", "f[1,2].reset = 7").unwrap();
+        assert_eq!(r, vec![vals(&[("f[0]", 1), ("f[1]", 7), ("f[2]", 7), ("f[3]", 1)])]);
+        // Hexadecimal values
+        let r = compile_ovr(FARR, "r", "f.reset = {0x2,3,4,0xF}").unwrap();
+        assert_eq!(r, vec![vals(&[("f[0]", 2), ("f[1]", 3), ("f[2]", 4), ("f[3]", 15)])]);
+        // Wrong number of values
+        for list in ["{1,2}", "{1,2,3,4,5}"] {
+            let err = compile_ovr(FARR, "r", &format!("f.reset = {list}")).err().expect("Wrong list length should fail");
+            assert!(err.contains('f') && err.contains("expected 1 or 4"), "{err}");
+        }
+    }
+
+    #[test]
+    fn override_reset_field_array_in_register_array() {
+        // Instance array: the list is shared by all registers, or has one sub-list per register
+        let r = compile_ovr(FARR, "r[2]", "f.reset = {5,6,7,8}").unwrap();
+        assert_eq!(r, vec![vals(&[("f[0]", 5), ("f[1]", 6), ("f[2]", 7), ("f[3]", 8)]); 2]);
+        let r = compile_ovr(FARR, "r[2]", "f.reset = {1,2,3,4,5,6,7,8}").unwrap();
+        assert_eq!(r, vec![
+            vals(&[("f[0]", 1), ("f[1]", 2), ("f[2]", 3), ("f[3]", 4)]),
+            vals(&[("f[0]", 5), ("f[1]", 6), ("f[2]", 7), ("f[3]", 8)]),
+        ]);
+        let err = compile_ovr(FARR, "r[2]", "f.reset = {1,2,3,4,5}").err().expect("Wrong list length should fail");
+        assert!(err.contains("expected 1 or 4 or 8"), "{err}");
+        // Only one register of the array
+        let r = compile_ovr(FARR, "r[2]", "[1].f.reset = {5,6,7,8}").unwrap();
+        assert_eq!(r, vec![
+            vals(&[("f[0]", 1), ("f[1]", 1), ("f[2]", 1), ("f[3]", 1)]),
+            vals(&[("f[0]", 5), ("f[1]", 6), ("f[2]", 7), ("f[3]", 8)]),
+        ]);
+    }
+
+    #[test]
+    fn override_reset_element_rejects_list() {
+        // A list of values on explicit elements of a field array is rejected by the parser
+        for list in ["f[1].reset = {1,2}", "f[1,2].reset = {1,2}", "f[1].disable = {1,2}"] {
+            let err = compile_ovr(FARR, "r", list).err().unwrap_or_else(|| panic!("Should be rejected: {list}"));
+            assert!(err.contains("cannot be used on the element"), "{err}");
+        }
+        // Same rule directly on the override index, including when combined with a register index
+        let mut inst: RegInst = ("r", ExprTokens::new(0), None, None, None).into();
+        let mut idx = OverrideIndex::default();
+        idx.set_reg_list(vec![0]);
+        idx.set_field_list("f".to_owned(), vec![1]);
+        assert!(inst.set_reset(&idx, vec![ResetValP::Unsigned(1), ResetValP::Unsigned(2)]).is_err());
+        assert!(inst.set_reset(&idx, vec![ResetValP::Unsigned(1)]).is_ok());
+        // Whole field array (of one register)
+        idx.set_reg_list(vec![0]);
+        idx.set_field_name("f".to_owned());
+        assert!(inst.set_reset(&idx, vec![ResetValP::Unsigned(1), ResetValP::Unsigned(2)]).is_ok());
+    }
+
+    /// Array of register instances, with a scalar field and a field array
+    const CH3: &str = "      - c{3} : \"C\"\n        - g = {1,2,3} 3:0 \"G\"\n        - t[2] = {1,2} 15:8 \"T $i\"\n";
+
+    #[test]
+    fn override_reset_scalar_field_in_register_array() {
+        // One value per register instance, for all instances
+        let r = compile_ovr(CH3, "c", "g.reset = {7,8,9}").unwrap();
+        assert_eq!(r.iter().map(|f| f[0].1).collect::<Vec<_>>(), vec![7, 8, 9]);
+        // Same with an array defined in the instance
+        let regs = "      - r : \"R\"\n        - g = 0 3:0 \"G\"\n";
+        let r = compile_ovr(regs, "r[3]", "g.reset = {7,8,9}").unwrap();
+        assert_eq!(r.iter().map(|f| f[0].1).collect::<Vec<_>>(), vec![7, 8, 9]);
+        // A register override has priority over the list for all registers
+        let r = compile_ovr(CH3, "c", "g.reset = {7,8,9}\n[1].g.reset = 4").unwrap();
+        assert_eq!(r.iter().map(|f| f[0].1).collect::<Vec<_>>(), vec![7, 4, 9]);
+        // A single value is used by all registers
+        let r = compile_ovr(CH3, "c", "g.reset = 5").unwrap();
+        assert_eq!(r.iter().map(|f| f[0].1).collect::<Vec<_>>(), vec![5, 5, 5]);
+        // The number of values must be the register array size
+        let err = compile_ovr(CH3, "c", "g.reset = {7,8}").err().expect("Wrong list length should fail");
+        assert!(err.contains("2 reset values") && err.contains("expected 1 or 3"), "{err}");
+        // List is not allowed on a scalar field in a register which is not an array
+        let regs = "      - r : \"R\"\n        - g = 0 3:0 \"G\"\n";
+        let err = compile_ovr(regs, "r", "g.reset = {7,8}").err().expect("List on a scalar field should fail");
+        assert!(err.contains("not an array"), "{err}");
+        // Nor on the wider field of a register array folded into the fields
+        let regs = "      - r[3] : \"R\"\n        - g = 0 3:0 \"G\"\n";
+        let err = compile_ovr(regs, "r", "g.reset = {7,8,9}").err().expect("List on a folded scalar field should fail");
+        assert!(err.contains("not an array"), "{err}");
+    }
+
+    #[test]
+    fn override_reset_field_array_in_register_array_def() {
+        // Same list for all registers
+        let r = compile_ovr(CH3, "c", "t.reset = {5,6}").unwrap();
+        assert!(r.iter().all(|f| f[1].1 == 5 && f[2].1 == 6), "{r:?}");
+        // One sub-list per register
+        let r = compile_ovr(CH3, "c", "t.reset = {1,2,3,4,5,6}").unwrap();
+        assert_eq!(r.iter().map(|f| (f[1].1, f[2].1)).collect::<Vec<_>>(), vec![(1, 2), (3, 4), (5, 6)]);
+        // Scalar field is untouched
+        assert_eq!(r.iter().map(|f| f[0].1).collect::<Vec<_>>(), vec![1, 2, 3]);
+        // Single register
+        let r = compile_ovr(CH3, "c", "[1].t.reset = {5,6}").unwrap();
+        assert_eq!(r.iter().map(|f| (f[1].1, f[2].1)).collect::<Vec<_>>(), vec![(1, 2), (5, 6), (1, 2)]);
+        // Wrong size
+        let err = compile_ovr(CH3, "c", "t.reset = {1,2,3}").err().expect("Wrong list length should fail");
+        assert!(err.contains("expected 1 or 2 or 6"), "{err}");
+    }
+
+    #[test]
+    fn override_reset_folded_field_array() {
+        // Field array spread over a register array folded into the fields: one value per element (or one list per register)
+        let regs = "      - k[3] : \"K\"\n        - a[1] = {1,2,3} 7:0 \"A $i\"\n";
+        let r = compile_ovr(regs, "k", "a.reset = {7,8,9}").unwrap();
+        assert_eq!(r, vec![vals(&[("a[0]", 7)]), vals(&[("a[1]", 8)]), vals(&[("a[2]", 9)])]);
+        let err = compile_ovr(regs, "k", "a.reset = {7,8}").err().expect("Wrong list length should fail");
+        assert!(err.contains("expected 1 or 3"), "{err}");
+        let regs = "      - k[2] : \"K\"\n        - a[2] = {1,2,3,4} 7:0 \"A $i\"\n";
+        let r = compile_ovr(regs, "k", "a.reset = {7,8}").unwrap();
+        assert_eq!(r, vec![vals(&[("a[0]", 7), ("a[1]", 8)]), vals(&[("a[2]", 7), ("a[3]", 8)])]);
+        let r = compile_ovr(regs, "k", "a.reset = {5,6,7,8}").unwrap();
+        assert_eq!(r, vec![vals(&[("a[0]", 5), ("a[1]", 6)]), vals(&[("a[2]", 7), ("a[3]", 8)])]);
+    }
+
+    #[test]
+    fn override_whole_field_applies_to_all_elements() {
+        // The other properties of a field array override also apply to all elements
+        let r = compile_rif("ovr_all_dis", &format!("{FARR}    instances:\n      - r\n        f.disable = {{1,2,3,4}}\n")).unwrap();
+        assert!(r.pages[0].regs[0].fields.iter().all(|f| f.is_disabled()));
+        assert_eq!(field_resets(&r), vec![vals(&[("f[0]", 1), ("f[1]", 2), ("f[2]", 3), ("f[3]", 4)])]);
+        let r = compile_rif("ovr_all_desc", &format!("{FARR}    instances:\n      - r\n        f.description Tap $i\n")).unwrap();
+        let descs: Vec<_> = r.pages[0].regs[0].fields.iter().map(|f| f.description.get_short(false)).collect();
+        assert_eq!(descs, vec!["Tap 0", "Tap 1", "Tap 2", "Tap 3"]);
+    }
+
+    #[test]
+    fn override_reset_to_rif() {
+        use crate::rifgen::{FieldOverride, FieldOverrideProp, reset_list_to_rif};
+        let one = vec![ResetValP::Unsigned(5)];
+        let many = vec![ResetValP::Unsigned(1), ResetValP::Signed(-2), ResetValP::Unsigned(0x10)];
+        assert_eq!(reset_list_to_rif(&one), "5");
+        assert_eq!(reset_list_to_rif(&many), "{1,-2,0x10}");
+        let mut ovr = FieldOverride::default();
+        ovr.reset = ResetValOverride::Reset(many);
+        assert_eq!(
+            ovr.fmt_prop("f", FieldOverrideProp::Reset, "  ", &ResetValP::Unsigned(0)),
+            Some("  f.reset = {1,-2,0x10}".to_owned())
+        );
+        ovr.reset = ResetValOverride::Reset(one);
+        assert_eq!(
+            ovr.fmt_prop("f", FieldOverrideProp::Reset, "", &ResetValP::Unsigned(0)),
+            Some("f.reset = 5".to_owned())
+        );
     }
 }

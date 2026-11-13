@@ -241,13 +241,24 @@ impl From<(AddressKind,AddressOffset)> for Address {
 
 #[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq)]
+/// Override of a field reset value.
+/// The reset is a list, like in the field definition: a single value applies to all elements of the field,
+/// while several values are spread over the field array and/or the register array (see `RifFieldInst::override_reset`).
 pub enum ResetValOverride {
     /// No override
     None,
-    /// Relative to the last absolute value provided
-    Reset(ResetValP),
-    /// Like Relative but also set current address as absolute value
-    Disable(ResetValP),
+    /// Reset value(s) of the field
+    Reset(Vec<ResetValP>),
+    /// Reset value(s) of the field, which is also disabled
+    Disable(Vec<ResetValP>),
+}
+
+/// Serialize a list of reset values: a single value, or curly brackets and comma separated for a list
+pub fn reset_list_to_rif(list: &[ResetValP]) -> String {
+    match list {
+        [v] => v.to_rif(),
+        _ => format!("{{{}}}", list.iter().map(|r| r.to_rif()).collect::<Vec<_>>().join(",")),
+    }
 }
 
 /// Identifies a field-override sub-property
@@ -345,10 +356,10 @@ impl FieldOverride {
             FieldOverrideProp::Reset => {
                 let disabled = self.visibility == Some(Visibility::Disabled);
                 match (&self.reset, disabled) {
-                    (ResetValOverride::Reset(v), true) if v == field_reset => Some(format!("{indent}{field_name}.disable")),
-                    (ResetValOverride::Reset(v), true) => Some(format!("{indent}{field_name}.disable = {}", v.to_rif())),
+                    (ResetValOverride::Reset(v), true) if v.as_slice() == std::slice::from_ref(field_reset) => Some(format!("{indent}{field_name}.disable")),
+                    (ResetValOverride::Reset(v), true) => Some(format!("{indent}{field_name}.disable = {}", reset_list_to_rif(v))),
                     (ResetValOverride::None, true) => Some(format!("{indent}{field_name}.disable")),
-                    (ResetValOverride::Reset(v), false) => Some(format!("{indent}{field_name}.reset = {}", v.to_rif())),
+                    (ResetValOverride::Reset(v), false) => Some(format!("{indent}{field_name}.reset = {}", reset_list_to_rif(v))),
                     _ => None,
                 }
             }
@@ -757,8 +768,16 @@ impl RegInst {
         }
     }
 
-    /// Override reset valye of register/field
-    pub fn set_reset(&mut self, idx: &OverrideIndex, v: ResetValP) {
+    /// Override reset value(s) of a field
+    /// A list of values is only accepted when the override targets a whole field (all its elements if it is an array):
+    /// it is rejected when the override targets explicit elements of a field array (e.g. `field[1].reset`)
+    pub fn set_reset(&mut self, idx: &OverrideIndex, v: Vec<ResetValP>) -> Result<(), String> {
+        if v.len() > 1 && let Some(name) = idx.field_name() && !idx.2.is_empty() {
+            return Err(format!(
+                "A list of {} reset values cannot be used on the element(s) of field array {name}: use one value, or override the whole field array",
+                v.len()
+            ));
+        }
         for reg_idx in idx.iter_reg() {
             let reg = self.reg_override.entry(reg_idx).or_default();
             if let Some(name) = &idx.1 {
@@ -768,6 +787,7 @@ impl RegInst {
                 }
             }
         }
+        Ok(())
     }
 
     /// Override limit of a field

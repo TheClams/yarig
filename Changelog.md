@@ -1,5 +1,15 @@
 # Change Log
 
+## [0.27.0]
+
+### Added
+  - Syntax: the reset value of a field can be overridden in the register instance with a list `{v0,v1,...}`, e.g. `field.reset = {0,1,2,3}`.
+    The list gives one value per element of a field array and/or one value per register of an array of registers, following the same rules as in the field definition.
+    A list on explicit elements of a field array (`field[1].reset = {1,2}`) is rejected.
+
+### Fix
+  - Override of a field array in the register instance: the name of the field without index now applies to all elements (it was only applied to the first element). This concerns every field property (reset, description, disable, limit, ...).
+
 ## [0.26.3]
 
 ### Added
