@@ -8,6 +8,7 @@
     A list on explicit elements of a field array (`field[1].reset = {1,2}`) is rejected.
 
 ### Fix
+  - Description: the formula syntax `${2*i+1}` described in the documentation is now supported (only `$(2*i+1)` was); a malformed formula is left unchanged instead of crashing
   - Override of a field array in the register instance: the name of the field without index now applies to all elements (it was only applied to the first element). This concerns every field property (reset, description, disable, limit, ...).
 
 ## [0.26.3]

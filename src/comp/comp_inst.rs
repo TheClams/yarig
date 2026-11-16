@@ -2474,6 +2474,30 @@ mod tests {
     }
 
     #[test]
+    fn reg_inst_array_description_formula() {
+        // Formula in descriptions: `${...}` (and legacy `$(...)`), in register and field descriptions
+        let regs = "      - ch{3} : \"Channel ${i+1}\"\n        - en = 0 0:0 \"Enable of $(i+1) / ${2*i+1}\"\n        - bad = 0 7:4 \"Bad ${i+ and $(i+ stay\"\n    instances: auto\n";
+        let r = compile_rif("ra_formula", regs).unwrap();
+        assert_eq!(
+            r.pages[0].regs.iter().map(|x| x.description.get_short(false)).collect::<Vec<_>>(),
+            vec!["Channel 1", "Channel 2", "Channel 3"]
+        );
+        assert_eq!(
+            r.pages[0].regs.iter().map(|x| x.fields[0].description.get_short(false)).collect::<Vec<_>>(),
+            vec!["Enable of 1 / 1", "Enable of 2 / 3", "Enable of 3 / 5"]
+        );
+        // Malformed equations are left unchanged (no panic)
+        assert_eq!(r.pages[0].regs[0].fields[1].description.get_short(false), "Bad ${i+ and $(i+ stay");
+    }
+
+    #[test]
+    fn description_no_dollar_formula() {
+        use crate::rifgen::description::Description;
+        let d = Description::from("A $i B ${i+1} C $(i) D $[]");
+        assert_eq!(d.no_dollar().get(true), "A  B  C (i) D ");
+    }
+
+    #[test]
     fn reg_inst_array_convert_to_manual() {
         let mut src = parse_rif("ra_conv", &format!("      - single : \"Single\"\n        - fs = 1 3:0 \"Field\"\n{CH}    instances: auto\n")).unwrap();
         let r = compile_src(&src).unwrap();

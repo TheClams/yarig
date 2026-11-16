@@ -107,19 +107,57 @@ impl Description {
                 }
                 desc.push_str(stripped);
             }
-            // Start of an equation
-            else if s.starts_with('(') {
-                let expr_s = logic_expr(&mut s).unwrap();
-                let expr = parse_expr(expr_s).unwrap();
-                if let Ok(val) = expr.eval(&params) {
-                    desc.push_str(&format!("{val}"));
+            // Start of an equation: `$(expr)` or `${expr}`
+            else if s.starts_with('(') || s.starts_with('{') {
+                let orig = s;
+                let (expr_s, rest) = if s.starts_with('{') {
+                    match Self::split_braces(s) {
+                        Some((e, r)) => (Some(e), r),
+                        None => (None, s),
+                    }
+                } else {
+                    match logic_expr(&mut s) {
+                        Ok(e) => (Some(e), s),
+                        Err(_) => (None, orig),
+                    }
+                };
+                // Replace by the value when the equation is valid, otherwise leave text unchanged
+                let val = expr_s
+                    .and_then(|e| parse_expr(e).ok())
+                    .and_then(|expr| expr.eval(&params).ok());
+                match val {
+                    Some(val) => {
+                        desc.push_str(&format!("{val}"));
+                        desc.push_str(rest);
+                    }
+                    None => {
+                        desc.push('$');
+                        desc.push_str(orig);
+                    }
                 }
-                desc.push_str(s);
             } else {
                 desc.push_str(s);
             }
         }
         desc
+    }
+
+    /// Split a string starting with a curly bracket into (content of the balanced brackets, remainder)
+    fn split_braces(s: &str) -> Option<(&str, &str)> {
+        let mut depth = 0usize;
+        for (pos, c) in s.char_indices() {
+            match c {
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some((&s[1..pos], &s[pos + 1..]));
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
     }
 
     /// Create a description with $f replace by a format string (for example u8.0 or s5.3)
@@ -132,9 +170,31 @@ impl Description {
     /// Remove the $ special character from description:
     ///  used when we do not want the interpolated version (for register base description typically)
     pub fn no_dollar(&self) -> Description {
-        let public = self.public.replace("$i", "").replace("$[]", "").replace('$', "");
-        let private = self.private.replace("$i", "").replace("$[]", "").replace('$', "");
-        Description{public, private}
+        Description{
+            public: Self::no_dollar_str(&self.public),
+            private: Self::no_dollar_str(&self.private),
+        }
+    }
+
+    fn no_dollar_str(s: &str) -> String {
+        let mut out = String::with_capacity(s.len());
+        let mut parts = s.split('$');
+        out.push_str(parts.next().unwrap_or(""));
+        for part in parts {
+            // Remove complete `${...}` equation
+            if part.starts_with('{') {
+                if let Some((_, rest)) = Self::split_braces(part) {
+                    out.push_str(rest);
+                    continue;
+                }
+            }
+            if let Some(rest) = part.strip_prefix('i').or_else(|| part.strip_prefix("[]")) {
+                out.push_str(rest);
+            } else {
+                out.push_str(part);
+            }
+        }
+        out
     }
 }
 
