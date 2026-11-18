@@ -182,12 +182,11 @@ impl Description {
         out.push_str(parts.next().unwrap_or(""));
         for part in parts {
             // Remove complete `${...}` equation
-            if part.starts_with('{') {
-                if let Some((_, rest)) = Self::split_braces(part) {
+            if part.starts_with('{')
+                && let Some((_, rest)) = Self::split_braces(part) {
                     out.push_str(rest);
                     continue;
                 }
-            }
             if let Some(rest) = part.strip_prefix('i').or_else(|| part.strip_prefix("[]")) {
                 out.push_str(rest);
             } else {

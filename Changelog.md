@@ -4,10 +4,15 @@
 
 ### Added
   - Syntax: the reset value of a field can be overridden in the register instance with a list `{v0,v1,...}`, e.g. `field.reset = {0,1,2,3}`.
-    The list gives one value per element of a field array and/or one value per register of an array of registers, following the same rules as in the field definition.
+    The list gives one value per element of a field array and/or one value per register of an array of registers,
+    following the same rules as in the field definition.
     A list on explicit elements of a field array (`field[1].reset = {1,2}`) is rejected.
+  - Interrupt can now be declared with a `toggle` flag: this changes the RTL generation to use a toggle mechanism
+    for set and clear to handle cases where hardware and software clock are gated with a different logic.
+    Without a toggle approach, the clear is ignored if the hardware clock is not enabled.
 
 ### Fix
+  - Python: the `init` argument of a register constructor was dropped (applied before the fields were created), so `get_value()` returned the field class defaults instead of the register reset value, e.g. for registers of an array with different resets. It is now applied at the end of the generated constructor.
   - Description: the formula syntax `${2*i+1}` described in the documentation is now supported (only `$(2*i+1)` was); a malformed formula is left unchanged instead of crashing
   - Override of a field array in the register instance: the name of the field without index now applies to all elements (it was only applied to the first element). This concerns every field property (reset, description, disable, limit, ...).
 

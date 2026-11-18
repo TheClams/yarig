@@ -244,6 +244,10 @@ impl GeneratorSw for GeneratorPy {
         let ro = if reg.sw_access.is_writable() {"False"} else {"True"};
         self.write(&format!("            super().__init__(parent, name, addr, {ro}, init)\n"));
         self.pop_stash(0);
+        // Apply init once the fields exist: the base class constructor runs before their creation
+        // and would otherwise find no field to set
+        self.write("            if init is not None:\n");
+        self.write("                self.set_value(init)\n");
         self.write("\n");
     }
 
