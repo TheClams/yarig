@@ -1,5 +1,5 @@
 use crate::{
-    cfg::{CfgRtl, RtlLimit, RtlLimitCfg},
+    cfg::{CfgRtl, InterruptClearMode, RtlLimit, RtlLimitCfg},
     comp::{comp_inst::RifInst,},
     hdl::{CastInfo, ExprId, LogicExpr, SignalRange, PortDir, PortInfo, SignalDecl, SignalDef, SignalInfo, SignalKind},
     rifgen::{EnumEntry, GenericRange, ResetDef}
@@ -26,6 +26,8 @@ pub struct GeneratorSv {
     limit: RtlLimitCfg,
     /// add a pipe level to the generation of invalid address flag when no RIF is selected
     rifmux_pipe_invalid: bool,
+    /// How software-cleared interrupts are implemented
+    interrupt_clear: InterruptClearMode,
     /// Software clock for curren RIF
     sw_clk: String,
     /// Flag when UVM library should be imported for current RIF
@@ -47,6 +49,7 @@ impl GeneratorSv {
             const_reg: extra.const_reg.unwrap_or(false),
             const_field: extra.const_field.unwrap_or(false),
             rifmux_pipe_invalid: extra.rifmux_pipe_invalid.unwrap_or(false),
+            interrupt_clear: extra.interrupt_clear.unwrap_or_default(),
             is_bridge: false,
             limit,
             sw_clk: "clk".to_owned(),
@@ -266,6 +269,11 @@ impl GeneratorHw for GeneratorSv {
     /// Return the RifMux address invalid pipe configuration
     fn rifmux_pipe_invalid(&self) -> bool {
         self.rifmux_pipe_invalid
+    }
+
+    /// Return how software-cleared interrupts are implemented
+    fn interrupt_clear(&self) -> InterruptClearMode {
+        self.interrupt_clear
     }
 
     /// Write generic header for a file

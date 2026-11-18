@@ -3,7 +3,7 @@ use std::error::Error;
 use clap::Parser;
 
 use crate::{
-    cfg::{RifGenTarget, RtlLimit},
+    cfg::{InterruptClearMode, RifGenTarget, RtlLimit},
     generator::{casing::Casing, gen_common::Skippable, gen_py::PyVersion},
     rifgen::{Interface, SuffixInfo, SuffixTargetSel}
 };
@@ -140,6 +140,9 @@ pub struct RifGenArgs{
     /// Force generation of limits on all enums
     #[arg(long, action)]
     pub rtl_force_limit: Option<RtlLimit>,
+    /// How software-cleared interrupts are implemented: rif (follow the `toggle` property of the RIF, default), toggle (force it) or direct (never use it)
+    #[arg(long)]
+    pub rtl_interrupt_clear: Option<InterruptClearMode>,
     /// Add pipe level in Rifmux when generating invalid address signal due to no RIF being selected
     #[arg(long)]
     pub rifmux_pipe_invalid: Option<bool>,

@@ -165,10 +165,12 @@ pub struct InterruptInfo {
     pub enable: Option<ResetValP>,
     pub mask: Option<ResetValP>,
     pub pending: bool,
+    /// Clear is stored in a software-clocked toggle flop, so that it works with the hardware clock gated
+    pub toggle: bool,
     pub description: InterruptDesc,
 }
 
-pub type InterruptPropTuple = (Option<InterruptTrigger>,Option<InterruptClr>,Option<ResetValP>,Option<ResetValP>,Option<bool>);
+pub type InterruptPropTuple = (Option<InterruptTrigger>,Option<InterruptClr>,Option<ResetValP>,Option<ResetValP>,Option<bool>,Option<bool>);
 impl InterruptInfo {
     pub fn new(name: &str, info: InterruptPropTuple) -> InterruptInfo {
         InterruptInfo {
@@ -178,6 +180,7 @@ impl InterruptInfo {
             enable: info.2,
             mask: info.3,
             pending: info.4.unwrap_or(false),
+            toggle: info.5.unwrap_or(false),
             description : InterruptDesc::default(),
         }
     }
@@ -209,6 +212,15 @@ impl InterruptInfo {
 pub struct InterruptInfoField {
     pub trigger: Option<InterruptTrigger>,
     pub clear: Option<InterruptClr>,
+    /// Override of the register toggle clear scheme (`toggle` / `notoggle`)
+    pub toggle: Option<bool>,
+}
+
+impl InterruptInfoField {
+    /// True when no property is overridden
+    pub fn is_empty(&self) -> bool {
+        self.trigger.is_none() && self.clear.is_none() && self.toggle.is_none()
+    }
 }
 
 #[cfg(test)]

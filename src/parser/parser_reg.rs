@@ -113,7 +113,7 @@ pub fn reg_properties_or_item<'a>(input: &mut &'a str) -> Res<'a, Context> {
     )).parse_next(input)
 }
 
-// Interrupt properties are : high|low|rising|falling|edge [rclr|wclr|w0clr|w1clr|hwclr] [en[=valEnable]] [mask[=valMask]] [pending]`
+// Interrupt properties are : high|low|rising|falling|edge [rclr|wclr|w0clr|w1clr|hwclr] [en[=valEnable]] [mask[=valMask]] [pending] [toggle]`
 pub fn reg_interrupt_trigger<'a>(input: &mut &'a str) -> Res<'a, InterruptTrigger> {
     alt((
         ws("high").value(InterruptTrigger::High),
@@ -133,7 +133,6 @@ pub fn reg_interrupt_clr<'a>(input: &mut &'a str) -> Res<'a, InterruptClr> {
         ws("w1clr").value(InterruptClr::Write1),
         ws("w0clr").value(InterruptClr::Write0),
         ws("hwclr").value(InterruptClr::Hw),
-        ws("hwclr").value(InterruptClr::Read),
     ))
     .context(StrContext::Label("register interrupt clear"))
     .parse_next(input)
@@ -159,6 +158,7 @@ pub fn reg_interrupt_perm<'a>(input: &mut &'a str) -> Res<'a, InterruptPropTuple
         opt(ws(reg_interrupt_en)),
         opt(ws(reg_interrupt_mask)),
         opt(ws("pending").value(true)),
+        opt(ws("toggle").value(true)),
     ))
     .context(StrContext::Label("register interrupt property"))
     .parse_next(input)
@@ -190,6 +190,10 @@ pub fn reg_interrupt<'a>(input: &mut &'a str) -> Res<'a, InterruptPropTuple> {
         }
         if r_tmp.4.is_some() {
             info.4 = r_tmp.4;
+            cont = true;
+        }
+        if r_tmp.5.is_some() {
+            info.5 = r_tmp.5;
             cont = true;
         }
         if !cont {
@@ -283,6 +287,7 @@ mod tests_parsing {
                 enable: Some(ResetValP::Unsigned(0x1337)),
                 mask: Some(ResetValP::Unsigned(0xCAFE)),
                 pending: true,
+                toggle: false,
             }
         );
         assert_eq!(
@@ -295,6 +300,7 @@ mod tests_parsing {
                 enable: Some(ResetValP::Unsigned(0xCAFE)),
                 mask: Some(ResetValP::Unsigned(0)),
                 pending: true,
+                toggle: false,
             }
         );
         // Check default values
@@ -308,7 +314,31 @@ mod tests_parsing {
                 enable: Some(ResetValP::Unsigned(0)),
                 mask: None,
                 pending: false,
+                toggle: false,
             }
         );
+    }
+
+    #[test]
+    fn test_interrupt_toggle() {
+        // toggle can be placed anywhere in the property list
+        for line in [
+            "rising en=0x13 mask=0x37 pending w1clr toggle",
+            "toggle rising w1clr en=0x13 mask=0x37 pending",
+            "rising w1clr toggle en=0x13 mask=0x37 pending",
+        ] {
+            let mut l = line;
+            let info = InterruptInfo::new("", reg_interrupt(&mut l).unwrap());
+            assert!(l.trim().is_empty(), "unparsed '{l}' in '{line}'");
+            assert!(info.toggle, "{line}");
+            assert_eq!(info.trigger, InterruptTrigger::Rising, "{line}");
+            assert_eq!(info.clear, InterruptClr::Write1, "{line}");
+            assert_eq!(info.enable, Some(ResetValP::Unsigned(0x13)), "{line}");
+            assert_eq!(info.mask, Some(ResetValP::Unsigned(0x37)), "{line}");
+            assert!(info.pending, "{line}");
+        }
+        // Not set by default, nor when only the other properties are given
+        assert!(!InterruptInfo::new("", reg_interrupt(&mut "rising w1clr").unwrap()).toggle);
+        assert!(!InterruptInfo::new("", reg_interrupt(&mut "en").unwrap()).toggle);
     }
 }

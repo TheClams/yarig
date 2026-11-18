@@ -49,6 +49,8 @@ pub struct FieldImpl {
     pub lock: Lock,
     /// Optional Interrupt Description
     pub intr_desc: Option<InterruptDesc>,
+    /// Optional override of the register toggle clear scheme for an interrupt field (None: follow the register)
+    pub intr_toggle: Option<bool>,
     /// Values limit
     pub limit: Limit,
     /// High when register value is split on multiple register
@@ -115,6 +117,7 @@ impl FieldImpl {
             clear: field.clear.clone(),
             lock: if field.lock.is_some() { field.lock.clone() } else { reg_lock.clone() },
             intr_desc: field.intr_desc.clone(),
+            intr_toggle: field.intr_ovr.toggle,
             limit,
             is_partial: field.is_partial(),
             ctrl_idx

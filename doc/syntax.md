@@ -155,10 +155,20 @@ The register properties, indented by one level compare to the register declarati
     The pulse can be combinatorial (i.e. the pulse happens at the same time as the register access) or registered (i.e. one clock latency).
     By default, the read pulse is combinatorial while the write/access are registered.
     When registered, a clock can be provided to indicate a different clock than the register one to generate the pulse.
- - `interrupt high|low|rising|falling|edge [en[=<val_enable>]] [mask[=<val_mask>]] [pending] [rclr|wclr|w0clr|w1clr|hwclr]` : Indicates that all fields in the register are interrupts, active either on a level (high or low) or an edge (rising, falling or both).
+ - `interrupt high|low|rising|falling|edge [en[=<val_enable>]] [mask[=<val_mask>]] [pending] [rclr|wclr|w0clr|w1clr|hwclr] [toggle]` : Indicates that all fields in the register are interrupts, active either on a level (high or low) or an edge (rising, falling or both).
     The optional enable property will auto declare a register to enable the interrupt with same name as the interrupt register plus \_en (configurable, see [interrupt suffixes](config.md#interrupt-registers)) with a reset value _valEnable_ (for the whole register). Every hardware interrupt goes through an and of the enable register before updating the status register.
     The optional mask property will auto declare a register to mask the interrupt with same name as the interrupt register plus \_mask (configurable) with a reset value _valMask_ (for the whole register). The interrupt request signal is the OR of an AND between the status register and the mask register. So, when the value for a field is 0, the corresponding interrupt status is asserted but this does not trigger the interrupt request.
     The optional pending property (only allowed if a mask is used) will auto declare a read-only register containing the AND of the status and the mask (which was used to generate the external interrupt request signal).
+    The optional toggle property allows software to clear an interrupt even when the hardware clock is gated off (the software clock being only enabled during a register access).
+    By default the status flops are clocked by the hardware clock, so a clear coming from software is only applied once the hardware clock runs again.
+    With `toggle`, each status bit is instead the XOR of two flops: one toggled by the interrupt events (hardware clock) and one toggled by the software clear (software clock).
+    The clear is thus effective immediately, and the read value and the interrupt request reflect it even if the hardware clock stays off.
+    An interrupt event happening at the same time as a clear is never lost (event has priority, as for a standard clear).
+    This costs two flops per status bit instead of one, and an XOR in the status path, but has no impact on the ports or on the register map.
+    It is valid with the `rclr`, `wclr`, `w0clr` and `w1clr` clear modes (it is an error with `hwclr`), and requires that:
+      - the software and hardware clocks are synchronous, i.e. different gating of the same clock source, since the two flops are not resynchronized
+      - the register reset (see `hwReset`) is asynchronous: both flops must be reset together, even when the hardware clock is off
+    The mechanism can also be forced on or off for a whole generation with the `interrupt_clear` [RTL option](config.md#rtl-generation-systemverilogvhdl).
     Default to level high, with clear on read with no mask, enable or pending if no information is provided.
  - `alt <name> [en[=<val_enable>]] [mask[=<val_mask>]]  [pending]  ["<description>"]`: only valid for interrupt register.
     Allows to define an alternative interrupt register with a different enable/mask/pending settings and a secondary interrupt request output.
@@ -249,7 +259,8 @@ The optional properties of a field, indented by one level compare to the field d
   By default the increment/decrement value signals have the same width as the counter but this can be changed by specifying a number after the incr/decrVal keyword.
   Note: the counter value is not accessible by default from hardware, but this this can be changed with `hw rw` property which must be placed after the counter declaration.
  - `partial <lsb_pos>` : Indicates that this field is larger than the register and that the LSB correspond to the bit _lsb_pos_ of a larger field. The field name must be identical in each register definition.
- - `interrupt high|low|rising|falling|edge [en=<val_enable>] [mask=<val_mask>] [rclr|wclr|w0clr|w1clr|hwclr]` : override default interrupt settings.
+ - `interrupt high|low|rising|falling|edge [en=<val_enable>] [mask=<val_mask>] [rclr|wclr|w0clr|w1clr|hwclr] [toggle|notoggle]` : override default interrupt settings.
+  `toggle` and `notoggle` respectively enable or disable the [toggle clear](#register) mechanism for this field, whatever the register setting.
  - `limit ([<min>:<max>]|{<v0>,<v1>,<...>}|enum|external) [<bypass_signal>]` : Limit valid write value for a field.
     The limit can be a range in the form of `[min:max]` (min & max included, one can be omitted), a set of value with `{v0,v1,v2}`, an external logic (keyword `external`)
     or, when the field is an enum using the keyword `enum` will automatically limit the value to the enumerated values.

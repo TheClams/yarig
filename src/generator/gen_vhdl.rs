@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    cfg::{CfgRtl, RtlLimitCfg},
+    cfg::{CfgRtl, InterruptClearMode, RtlLimitCfg},
     comp::comp_inst::{RifInst, RifmuxInst},
     hdl::{CastInfo, ExprId, LogicExpr,SignalRange, PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalDim, SignalInfo, SignalKind},
     rifgen::{ EnumEntry, GenericRange, Interface, ResetDef, order_dict::OrderDict}
@@ -28,6 +28,8 @@ pub struct GeneratorVhdl {
     limit: RtlLimitCfg,
     /// add a pipe level to the generation of invalid address flag when no RIF is selected
     rifmux_pipe_invalid: bool,
+    /// How software-cleared interrupts are implemented
+    interrupt_clear: InterruptClearMode,
     /// True when current module instance is a bridge
     is_bridge : bool,
     /// Component interface
@@ -59,6 +61,7 @@ impl GeneratorVhdl {
             const_reg: extra.const_reg.unwrap_or(false),
             const_field: extra.const_field.unwrap_or(false),
             rifmux_pipe_invalid: extra.rifmux_pipe_invalid.unwrap_or(false),
+            interrupt_clear: extra.interrupt_clear.unwrap_or_default(),
             limit,
             is_bridge: false,
             generics: HashMap::new(),
@@ -345,6 +348,11 @@ impl GeneratorHw for GeneratorVhdl {
     /// Return the RifMux address invalid pipe configuration
     fn rifmux_pipe_invalid(&self) -> bool {
         self.rifmux_pipe_invalid
+    }
+
+    /// Return how software-cleared interrupts are implemented
+    fn interrupt_clear(&self) -> InterruptClearMode {
+        self.interrupt_clear
     }
 
     /// Write generic header for a file

@@ -254,7 +254,7 @@ impl RegDef {
         let (trigger, clear) = (intr.trigger, intr.clear);
         for f in self.fields.iter_mut() {
             if f.intr_ovr.trigger.is_none() && f.intr_ovr.clear.is_none() {
-                f.set_intr(InterruptInfoField { trigger: Some(trigger), clear: Some(clear) });
+                f.set_intr(InterruptInfoField { trigger: Some(trigger), clear: Some(clear), toggle: None });
             }
         }
     }
@@ -266,6 +266,7 @@ impl RegDef {
             f.set_intr(InterruptInfoField {
                 trigger: Some(intr.trigger),
                 clear: Some(intr.clear),
+                toggle: None,
             });
         }
         // Update external kind to differentiate the different kind based on field access
@@ -430,6 +431,9 @@ impl RegDef {
                 }
                 if intr.pending {
                     body.push_str(" pending");
+                }
+                if intr.toggle {
+                    body.push_str(" toggle");
                 }
                 Some(format!("{indent}{body}"))
             }

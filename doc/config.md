@@ -314,7 +314,35 @@ rifmux_pipe_invalid = true
 limit = Hardware
 # Force limit on all enum definition
 force_limit = UvmError
+
+# Optional: how software-cleared interrupts are implemented (default: "rif")
+#  - "rif"    : follow the `toggle` property of each interrupt in the RIF
+#  - "toggle" : force the toggle scheme on every interrupt with a software clear (rclr, wclr, w0clr, w1clr)
+#  - "direct" : force the direct scheme, ignoring any `toggle` in the RIF
+interrupt_clear = "rif"
 ```
+
+#### Interrupt clear scheme
+
+By default the status of an interrupt register is cleared directly by the hardware-clocked flops, so a software clear is only
+effective when the hardware clock is running. The `toggle` property of the `interrupt` register
+(see [syntax](syntax.md#register)) removes this restriction: the clear is stored in a flop clocked by the software clock,
+and the status is the XOR of this flop with a hardware-clocked event flop. The generated ports and the register map are identical in both schemes.
+
+The `interrupt_clear` option selects which scheme is used at generation time, regardless of the RIF content:
+
+| Value      | Behavior                                                                                         |
+|------------|--------------------------------------------------------------------------------------------------|
+| `"rif"`    | Default. Use the toggle scheme only for interrupts declared with `toggle` (and not `notoggle`)    |
+| `"toggle"` | Use the toggle scheme for all interrupts with a software clear, including `notoggle` fields      |
+| `"direct"` | Use the direct scheme for all interrupts, including those declared with `toggle`                 |
+
+The same option is available on the command-line with `--rtl_interrupt_clear <rif|toggle|direct>`, and overrides the configuration file.
+
+Rules:
+ - the toggle scheme requires synchronous software and hardware clocks and an asynchronous register reset (see [syntax](syntax.md#register))
+ - `hwclr` interrupts never use the toggle scheme: with `"toggle"` they are left unchanged (with a warning), while `toggle` written explicitly in the RIF on an `hwclr` interrupt is an error
+ - forcing `"toggle"` on an interrupt whose reset is not asynchronous is an error
 
 ### Register Abstraction Layer (RAL)
 

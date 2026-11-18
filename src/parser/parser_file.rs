@@ -14,7 +14,7 @@ use crate::parser::{
 };
 use crate::rifgen::{
     Access, AddressOffset, ClockingInfo, Context, DataWidth, DescBlockKind, EnumDef, EnumKind, ExternalKind,
-    Field, FieldHwKind, FieldOverrideProp, FieldPos, FieldProp, FieldSwKind, GenericValues, InstMode, Interface, InterruptInfo, InterruptInfoField, ItemOptional,
+    Field, FieldHwKind, FieldOverrideProp, FieldPos, FieldProp, FieldSwKind, GenericValues, InstMode, Interface, InterruptClr, InterruptInfo, InterruptInfoField, ItemOptional,
     Lock, OverrideIndex, RegDef, RegDefOrIncl, RegInst, RegOverrideProp, RegProp, RegPulseKind,
     RegArrayKind, Rif, RifPage, RifProp, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility, Width
 };
@@ -625,12 +625,19 @@ impl RifGenSrc {
                                 // return Err(RifError::unsupported(Context::Interrupt, &format!("Invalid characters: '{l}'")));
                                 eprintln!("[WARNING] Ignoring extra character '{l}' in interrupt definition of {}.{} (line {line_num})", self.last_rif().name, self.last_reg().name);
                             }
+                            if info.5 == Some(true) && info.1 == Some(InterruptClr::Hw) {
+                                return Err(RifError::unsupported(Context::Interrupt, "toggle is not compatible with hwclr"));
+                            }
                             self.last_reg_mut().interrupt.push(InterruptInfo::new("", info));
                             self.last_reg_mut().src.prop_lines.insert(RegProp::Interrupt, line_num);
                         },
                         Context::InterruptAlt => {
                             let name = identifier(&mut l)?;
                             let mut info = reg_interrupt(&mut l)?;
+                            // The status register is shared with the main interrupt: the clear scheme is always inherited
+                            if info.5.is_some() {
+                                eprintln!("[WARNING] Ignoring toggle in alternative interrupt {name} of {}.{} (line {line_num}): inherited from the main interrupt", self.last_rif().name, self.last_reg().name);
+                            }
                             // Inherit from first defined interrupt
                             if let Some(intf_def) = self.last_reg().interrupt.first() {
                                 if info.0.is_none() {info.0 = Some(intf_def.trigger);}
@@ -638,6 +645,7 @@ impl RifGenSrc {
                                 if info.2.is_none() {info.2 = intf_def.enable.clone();}
                                 if info.3.is_none() {info.3 = intf_def.mask.clone();}
                                 if info.4.is_none() {info.4 = Some(intf_def.pending);}
+                                info.5 = Some(intf_def.toggle);
                             }
                             self.last_reg_mut().interrupt.push(InterruptInfo::new(name, info));
                             self.last_reg_mut().src.prop_lines.insert(RegProp::InterruptAlt, line_num);
@@ -770,9 +778,14 @@ impl RifGenSrc {
                         }
                         Context::Interrupt => {
                             let reg_default = self.last_reg().interrupt.first()
-                                .map(|intr| InterruptInfoField { trigger: Some(intr.trigger), clear: Some(intr.clear) })
+                                .map(|intr| InterruptInfoField { trigger: Some(intr.trigger), clear: Some(intr.clear), toggle: Some(intr.toggle) })
                                 .unwrap_or_default();
-                            self.last_field_mut().set_intr_ovr(field_interrupt(&mut l)?, reg_default);
+                            let ovr = field_interrupt(&mut l)?;
+                            let toggle = ovr.toggle.or(reg_default.toggle).unwrap_or(false);
+                            if toggle && ovr.clear.or(reg_default.clear) == Some(InterruptClr::Hw) {
+                                return Err(RifError::unsupported(Context::Interrupt, "toggle is not compatible with hwclr (use notoggle to disable it on this field)"));
+                            }
+                            self.last_field_mut().set_intr_ovr(ovr, reg_default);
                             self.last_field_mut().src.prop_lines.insert(FieldProp::Interrupt, line_num);
                         }
                         Context::SwSet => {
@@ -1437,6 +1450,74 @@ pub(crate) mod tests_parsing {
         ] {
             parse_rif("scalar_rst_ok", regs).unwrap_or_else(|e| panic!("{regs}\n=> {e}"));
         }
+    }
+
+    fn find_reg<'a>(src: &'a RifGenSrc, name: &str) -> &'a crate::rifgen::RegDef {
+        src.rifs.values()
+            .flat_map(|r| r.pages.iter())
+            .flat_map(|p| p.registers.iter())
+            .find_map(|r| match r {
+                crate::rifgen::RegDefOrIncl::Def(d) if d.name == name => Some(d),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("register {name} not found"))
+    }
+
+    #[test]
+    fn test_interrupt_toggle() {
+        use crate::rifgen::{FieldProp, RegProp};
+        let regs = concat!(
+            "      - reg0 : \"Interrupt\"\n",
+            "        interrupt rising en mask w1clr toggle\n",
+            "        alt other en=1 mask=2\n",
+            "        - fa = 0 0:0 \"Inherit\"\n",
+            "        - fb = 0 1:1 \"Disabled\"\n",
+            "          interrupt notoggle\n",
+            "        - fc = 0 2:2 \"Explicit\"\n",
+            "          interrupt falling toggle\n",
+            "      - reg1 : \"Interrupt without toggle\"\n",
+            "        interrupt high w1clr\n",
+            "        - fa = 0 0:0 \"Default\"\n",
+            "        - fb = 0 1:1 \"Enabled\"\n",
+            "          interrupt toggle\n",
+            "        - fc = 0 2:2 \"Hardware clear\"\n",
+            "          interrupt hwclr\n",
+        );
+        let src = parse_rif("intr_toggle", regs).unwrap_or_else(|e| panic!("{e}"));
+        let r0 = find_reg(&src, "reg0");
+        assert!(r0.interrupt[0].toggle);
+        // Alternative interrupt shares the status register: the clear scheme is inherited
+        assert!(r0.interrupt[1].toggle);
+        let toggles: Vec<_> = r0.fields.iter().map(|f| (f.intr_ovr.toggle, f.intr_toggle(r0.interrupt[0].toggle))).collect();
+        assert_eq!(toggles, [(None, true), (Some(false), false), (Some(true), true)]);
+        let r1 = find_reg(&src, "reg1");
+        assert!(!r1.interrupt[0].toggle);
+        let toggles: Vec<_> = r1.fields.iter().map(|f| (f.intr_ovr.toggle, f.intr_toggle(r1.interrupt[0].toggle))).collect();
+        assert_eq!(toggles, [(None, false), (Some(true), true), (None, false)]);
+        // Serialization keeps the property
+        assert_eq!(r0.fmt_prop(RegProp::Interrupt, ""), Some("interrupt rising w1clr en=0 mask=0 toggle".to_owned()));
+        assert_eq!(r1.fmt_prop(RegProp::Interrupt, ""), Some("interrupt high w1clr".to_owned()));
+        assert_eq!(r0.fields[0].fmt_prop(FieldProp::Interrupt, ""), None);
+        assert_eq!(r0.fields[1].fmt_prop(FieldProp::Interrupt, ""), Some("interrupt notoggle".to_owned()));
+        assert_eq!(r0.fields[2].fmt_prop(FieldProp::Interrupt, ""), Some("interrupt falling toggle".to_owned()));
+        assert_eq!(r1.fields[1].fmt_prop(FieldProp::Interrupt, ""), Some("interrupt toggle".to_owned()));
+    }
+
+    #[test]
+    fn test_interrupt_toggle_hwclr() {
+        // toggle is not compatible with a hardware clear, whether set on the register or inherited by a field
+        for regs in [
+            "      - reg0 : \"Interrupt\"\n        interrupt high hwclr toggle\n        - fa = 0 0:0 \"Field A\"\n",
+            "      - reg0 : \"Interrupt\"\n        interrupt high w1clr toggle\n        - fa = 0 0:0 \"Field A\"\n          interrupt hwclr\n",
+            "      - reg0 : \"Interrupt\"\n        interrupt high hwclr\n        - fa = 0 0:0 \"Field A\"\n          interrupt toggle\n",
+        ] {
+            let err = parse_rif("intr_toggle_hwclr", regs).expect_err(regs);
+            assert_eq!(err.kind, RifErrorKind::Unsupported, "{err}");
+            assert!(err.txt.contains("hwclr"), "{}", err.txt);
+        }
+        // Explicitly disabled on the field it is fine
+        parse_rif("intr_toggle_hwclr_ok", "      - reg0 : \"Interrupt\"\n        interrupt high w1clr toggle\n        - fa = 0 0:0 \"Field A\"\n          interrupt hwclr notoggle\n")
+            .unwrap_or_else(|e| panic!("{e}"));
     }
 
     #[test]

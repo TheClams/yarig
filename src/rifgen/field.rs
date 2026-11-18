@@ -1337,7 +1337,13 @@ impl Field {
         self.set_intr(InterruptInfoField {
             trigger: value.trigger.or(reg_default.trigger),
             clear: value.clear.or(reg_default.clear),
+            toggle: value.toggle.or(reg_default.toggle),
         });
+    }
+
+    /// True when the interrupt clear of this field uses the toggle scheme, given the register setting
+    pub fn intr_toggle(&self, reg_toggle: bool) -> bool {
+        self.intr_ovr.toggle.unwrap_or(reg_toggle)
     }
 
     /// Field width
@@ -1486,7 +1492,7 @@ impl Field {
                 _ => return None,
             },
             FieldProp::Interrupt => {
-                if self.intr_ovr.trigger.is_none() && self.intr_ovr.clear.is_none() {
+                if self.intr_ovr.is_empty() {
                     return None;
                 }
                 let mut body = "interrupt".to_owned();
@@ -1497,6 +1503,9 @@ impl Field {
                 if let Some(clear) = self.intr_ovr.clear {
                     body.push(' ');
                     body.push_str(clear.to_rif());
+                }
+                if let Some(toggle) = self.intr_ovr.toggle {
+                    body.push_str(if toggle {" toggle"} else {" notoggle"});
                 }
                 body
             }

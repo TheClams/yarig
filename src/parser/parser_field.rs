@@ -224,24 +224,28 @@ pub fn enum_entry(input: &str) -> ResF<'_, EnumEntry> {
 }
 
 pub fn field_interrupt<'a>(input: &mut &'a str) -> Res<'a, InterruptInfoField> {
-    let mut info =
-        unordered_seq!((
-            opt(ws(reg_interrupt_trigger)),
-            opt(ws(reg_interrupt_clr))
-        )).context(StrContext::Label("interrupt info"))
-        .parse_next(input)?;
-    if info.1.is_some() && info.0.is_none() {
-        let info_tmp = opt(ws(reg_interrupt_trigger)).context(StrContext::Label("interrupt trigger")).parse_next(input)?;
-        if info_tmp.is_some() {
-            info.0 = info_tmp;
+    let mut info = InterruptInfoField::default();
+    // The properties can be given in any order: an unordered sequence of optional items stops at the first absent one,
+    // so parse it repeatedly and merge until nothing new is found (one pass per property at most)
+    for _ in 0..3 {
+        let (trigger, clear, toggle) =
+            unordered_seq!((
+                opt(ws(reg_interrupt_trigger)),
+                opt(ws(reg_interrupt_clr)),
+                opt(alt((
+                    ws("notoggle").value(false),
+                    ws("toggle").value(true),
+                )))
+            )).context(StrContext::Label("interrupt info"))
+            .parse_next(input)?;
+        if trigger.is_none() && clear.is_none() && toggle.is_none() {
+            break;
         }
+        info.trigger = trigger.or(info.trigger);
+        info.clear = clear.or(info.clear);
+        info.toggle = toggle.or(info.toggle);
     }
-    Ok(
-        InterruptInfoField {
-            trigger: info.0,
-            clear: info.1,
-        },
-    )
+    Ok(info)
 }
 
 /// Pulse kind can be 'reg' or 'comb'. Default to 'reg'.
@@ -380,6 +384,29 @@ mod tests_parsing {
 
     use super::*;
     use crate::rifgen::{DeclLine, FieldSwKind, ResetValP, FieldSrcInfo, Width};
+
+    #[test]
+    fn test_field_interrupt_toggle() {
+        use crate::rifgen::{InterruptClr, InterruptTrigger};
+        let parse = |mut s: &str| {
+            let r = field_interrupt(&mut s).unwrap();
+            assert!(s.trim().is_empty(), "unparsed '{s}'");
+            r
+        };
+        let r = parse("rising w1clr toggle");
+        assert_eq!((r.trigger, r.clear, r.toggle), (Some(InterruptTrigger::Rising), Some(InterruptClr::Write1), Some(true)));
+        let r = parse("notoggle");
+        assert_eq!((r.trigger, r.clear, r.toggle), (None, None, Some(false)));
+        let r = parse("toggle");
+        assert_eq!((r.trigger, r.clear, r.toggle), (None, None, Some(true)));
+        let r = parse("edge notoggle rclr");
+        assert_eq!((r.trigger, r.clear, r.toggle), (Some(InterruptTrigger::Edge), Some(InterruptClr::Read), Some(false)));
+        // No toggle information: register setting is kept
+        let r = parse("falling");
+        assert_eq!(r.toggle, None);
+        assert!(!r.is_empty());
+        assert!(InterruptInfoField::default().is_empty());
+    }
 
     #[test]
     fn test_reset_val() {

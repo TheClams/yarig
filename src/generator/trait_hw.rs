@@ -1,9 +1,9 @@
 use std::{collections::HashSet, ops::Deref};
 
 use crate::{
-    cfg::{RtlLimit, RtlLimitCfg}, comp::{comp_inst::{Comp, CompInst, FieldWidth, RifFieldInst, RifInst, RifRegInst, RifmuxInst}, reg_impl::FieldImpl}, error::RifGenError, hdl::{CastInfo, ExprId, LogicExpr, ModuleInfo, PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalInfo, SignalKind, SignalRange}, parser::parser_expr::ParamValues, rifgen::{
+    cfg::{InterruptClearMode, RtlLimit, RtlLimitCfg}, comp::{comp_inst::{Comp, CompInst, FieldWidth, RifFieldInst, RifInst, RifRegInst, RifmuxInst}, reg_impl::FieldImpl}, error::RifGenError, hdl::{CastInfo, ExprId, LogicExpr, ModuleInfo, PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalInfo, SignalKind, SignalRange}, parser::parser_expr::ParamValues, rifgen::{
         Access, ClkEn, ClockingInfo, EnumEntry, EnumKind, ExternalKind, FieldHwKind, FieldSwKind,
-        GenericRange, Interface, InterruptClr, InterruptRegKind, InterruptTrigger, LimitValue,
+        GenericRange, Interface, InterruptClr, InterruptInfo, InterruptRegKind, InterruptTrigger, LimitValue,
         RegPulseKind, ResetDef, SuffixTarget, order_dict::OrderDict,
     }
 };
@@ -541,6 +541,9 @@ pub trait GeneratorHw : GeneratorBase {
                 if hw_reg_def.is_interrupt() {
                     // Declare all interrupt related signal: event, en, pending, mask, alts
                     for intr_info in hw_reg_def.interrupt.iter() {
+                        if idx_u16 == 0 && self.interrupt_clear().unsupported(intr_info.clear) {
+                            eprintln!("[WARNING] Interrupt {group_name} uses a hardware clear: the toggle clear scheme can not be used");
+                        }
                         let name = if intr_info.name.is_empty() {
                             group_name.to_owned()
                         } else {
@@ -587,11 +590,20 @@ pub trait GeneratorHw : GeneratorBase {
                         // Add next signal for each field
                         for f in hw_reg_def.fields.iter() {
                             let f_name = self.casing(&f.name);
+                            // Toggle clear scheme: event/clear flops and their next value replace the status next value
+                            let tgl = self.intr_use_toggle(f, intr_info);
                             if f.array.value() == 0 {
                                 self.write_signal_decl(&SignalDef::new_bus(
                                     format!("{name}{idx}_{f_name}__cleared"), f.width(), false).into());
-                                self.write_signal_decl(&SignalDef::new_bus(
-                                    format!("{name}{idx}_{f_name}__next"), f.width(), false).into());
+                                if tgl {
+                                    for sfx in ["evt_tgl", "clr_tgl", "evt_next", "clr_next"] {
+                                        self.write_signal_decl(&SignalDef::new_bus(
+                                            format!("{name}{idx}_{f_name}__{sfx}"), f.width(), false).into());
+                                    }
+                                } else {
+                                    self.write_signal_decl(&SignalDef::new_bus(
+                                        format!("{name}{idx}_{f_name}__next"), f.width(), false).into());
+                                }
                                 if intr_info.enable.is_some() {
                                     self.write_signal_decl(&SignalDef::new_bus(
                                         format!("{name}{idx}{sfx_en}_{f_name}__next"), f.width(), false).into());
@@ -604,8 +616,15 @@ pub trait GeneratorHw : GeneratorBase {
                                 for fi in 0..f.array.value() {
                                     self.write_signal_decl(&SignalDef::new_bus(
                                         format!("{name}{idx}_{f_name}{fi}__cleared"), f.width(), false).into());
-                                    self.write_signal_decl(&SignalDef::new_bus(
-                                        format!("{name}{idx}_{f_name}{fi}__next"), f.width(), false).into());
+                                    if tgl {
+                                        for sfx in ["evt_tgl", "clr_tgl", "evt_next", "clr_next"] {
+                                            self.write_signal_decl(&SignalDef::new_bus(
+                                                format!("{name}{idx}_{f_name}{fi}__{sfx}"), f.width(), false).into());
+                                        }
+                                    } else {
+                                        self.write_signal_decl(&SignalDef::new_bus(
+                                            format!("{name}{idx}_{f_name}{fi}__next"), f.width(), false).into());
+                                    }
                                     if intr_info.enable.is_some() {
                                         self.write_signal_decl(&SignalDef::new_bus(
                                             format!("{name}{idx}{sfx_en}_{f_name}{fi}__next"), f.width(), false).into());
@@ -1198,21 +1217,48 @@ pub trait GeneratorHw : GeneratorBase {
                             }
                             InterruptClr::Hw => todo!("Hardware clear interrupt are not supported yet ! :(")
                         };
-                        let intr_clr = LogicExpr::ite(clr_acc, clr_val, field_id.into());
+                        let intr_clr = LogicExpr::ite(clr_acc, clr_val, field_id.clone().into());
                         let field_clr_id = ExprId::new_range(format!("{reg_field_name}__cleared"), partial.clone());
                         self.write_assign(field_clr_id.clone(), intr_clr);
-                        let rhs = LogicExpr::or_b(intr_set, field_clr_id.clone().into());
-                        self.write_assign(field_next_id.clone(), rhs);
+                        // Signals driven by the field, which must be assigned in the else branch of a generate and conditional for a generic width
+                        let mut field_sigs : Vec<ExprId> = Vec::new();
                         if has_gen {
                             gen_else.push((intr_l_id.clone(), LogicExpr::ValueU(0, field.width().into())));
                             gen_else.push((field_clr_id.clone(), LogicExpr::ValueU(0, field.width().into())));
-                            gen_else.push((field_next_id.clone(), reset_gen.clone()));
+                        }
+                        if self.intr_use_toggle(field_impl, intr_info) {
+                            // Toggle clear scheme: the status is the XOR of an event flop (toggled by hardware events, hardware clock)
+                            // and of a clear flop (software clock), so that a software clear does not need the hardware clock.
+                            // `cleared` is the status once the current software access is applied, i.e. `evt ^ clr_next`, hence:
+                            //  - the clear flop copies the event flop for the bits cleared: clr_next = evt ^ cleared
+                            //  - an event toggles the event flop only if the status is not already set (an event has priority over a clear)
+                            let evt_id = ExprId::new_range(format!("{reg_field_name}__evt_tgl"), partial.clone());
+                            let clr_id = ExprId::new_range(format!("{reg_field_name}__clr_tgl"), partial.clone());
+                            let evt_next_id = ExprId::new_range(format!("{reg_field_name}__evt_next"), partial.clone());
+                            let clr_next_id = ExprId::new_range(format!("{reg_field_name}__clr_next"), partial.clone());
+                            self.write_assign(field_id.clone(), LogicExpr::xor(evt_id.clone().into(), clr_id.clone().into()));
+                            let evt_set = LogicExpr::and_b(intr_set, LogicExpr::not_b(field_clr_id.clone().into()));
+                            self.write_assign(evt_next_id.clone(), LogicExpr::xor(evt_id.clone().into(), evt_set));
+                            self.write_assign(clr_next_id.clone(), LogicExpr::xor(evt_id.into(), field_clr_id.clone().into()));
+                            if has_gen {
+                                gen_else.push((field_id.clone(), reset_gen.clone()));
+                                gen_else.push((evt_next_id.clone(), reset_gen.clone()));
+                                gen_else.push((clr_next_id.clone(), LogicExpr::ValueU(0, field.width().into())));
+                            }
+                            field_sigs.extend([field_id, evt_next_id, clr_next_id]);
+                        } else {
+                            let rhs = LogicExpr::or_b(intr_set, field_clr_id.clone().into());
+                            self.write_assign(field_next_id.clone(), rhs);
+                            if has_gen {
+                                gen_else.push((field_next_id.clone(), reset_gen.clone()));
+                            }
+                            field_sigs.push(field_next_id);
                         }
                         // Field with parameterized width
                         if let FieldWidth::Generic((n,r)) = &field.width {
                             cond_assign.push(intr_l_id);
                             cond_assign.push(field_clr_id);
-                            cond_assign.push(field_next_id);
+                            cond_assign.extend(field_sigs);
                             self.write_cond_generic_field(&reg_field_name, n.as_ref(), r, &cond_assign);
                         }
                         if has_gen {
@@ -1639,13 +1685,37 @@ pub trait GeneratorHw : GeneratorBase {
                                 field_reset
                             }
                         };
+                        // Interrupt status with the toggle clear scheme: the status is not a flop but the XOR of
+                        // an event flop (hardware clock) and a clear flop (software clock), both reset by the register reset
+                        let intr_toggle = reg.is_intr() && self.intr_use_toggle(field_impl, reg_impl.intr_info(reg)?);
+                        let mut sw_clear : Option<LogicExpr> = None;
+                        if intr_toggle {
+                            // Both flops must be reset together even when the hardware clock is off
+                            let rst_def = if f_rst == &sw_clk.rst.name {Some(&sw_clk.rst)}
+                                else {rif.hw_clocking.iter().map(|c| &c.rst).find(|r| &r.name == f_rst)};
+                            if rst_def.is_some_and(|r| r.sync) {
+                                return Err(format!(
+                                    "Interrupt {reg_field_name} uses the toggle clear scheme which requires an asynchronous reset, but {f_rst} is synchronous"
+                                ).into());
+                            }
+                            sw_clear = clear.clone();
+                        }
+
                         // Add the signal info the hashmap
                         let k = (f_clk.to_string(),f_rst.to_string());
                         let field_entry = signals.entry(&k);
 
-                        field_entry.push(
-                            SignalInfo::new_with_en_clr(field_id.clone(), reset, value, enable_expr.clone(), clear.clone())
-                        );
+                        if intr_toggle {
+                            let evt_id = ExprId::new_range(format!("{reg_field_name}__evt_tgl"), None);
+                            let evt_next : ExprId = format!("{reg_field_name}__evt_next").into();
+                            field_entry.push(
+                                SignalInfo::new_with_en_clr(evt_id, reset, evt_next.into(), enable_expr.clone(), clear.clone())
+                            );
+                        } else {
+                            field_entry.push(
+                                SignalInfo::new_with_en_clr(field_id.clone(), reset, value, enable_expr.clone(), clear.clone())
+                            );
+                        }
 
                         // For password protected or with both option once/hold, add another signal
                         if let FieldSwKind::Password(info) = &field.sw_kind {
@@ -1665,6 +1735,16 @@ pub trait GeneratorHw : GeneratorBase {
                                 LogicExpr::ValueU(0, 1),
                                 field_id.with_name(format!("{group_name}{intr_suffix}_l")).into(),
                                 enable_expr, clear)
+                            );
+                        }
+                        // Toggle clear scheme: clear flop on the software clock (it copies the event flop when the bits are cleared)
+                        if intr_toggle {
+                            let clr_id = ExprId::new_range(format!("{reg_field_name}__clr_tgl"), None);
+                            let clr_next : ExprId = format!("{reg_field_name}__clr_next").into();
+                            let sw_enable : Option<LogicExpr> = if sw_clk.en.is_empty() {None} else {Some(sw_clk.en.clone().into())};
+                            let k_sw = (sw_clk.clk.to_string(), f_rst.to_string());
+                            signals.entry(&k_sw).push(SignalInfo::new_with_en_clr(
+                                clr_id, LogicExpr::ValueU(0, field.width().into()), clr_next.into(), sw_enable, sw_clear)
                             );
                         }
                     }
@@ -2513,6 +2593,16 @@ pub trait GeneratorHw : GeneratorBase {
 
     /// Return the RifMux address invalid pipe configuration
     fn rifmux_pipe_invalid(&self) -> bool;
+
+    /// Return how software-cleared interrupts are implemented (follow RIF, force toggle or force direct)
+    fn interrupt_clear(&self) -> InterruptClearMode;
+
+    /// True when the status of an interrupt field is implemented with the toggle clear scheme:
+    /// the status is the XOR of a hardware-clocked event flop and a software-clocked clear flop,
+    /// such that a software clear is effective even when the hardware clock is off.
+    fn intr_use_toggle(&self, field: &FieldImpl, info: &InterruptInfo) -> bool {
+        self.interrupt_clear().use_toggle(field.intr_toggle.unwrap_or(info.toggle), info.clear)
+    }
 
 }
 

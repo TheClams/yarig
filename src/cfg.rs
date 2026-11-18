@@ -65,7 +65,7 @@ use crate::{
         gen_ral::GeneratorRal, gen_sv::GeneratorSv, gen_svd::GeneratorSvd, gen_vhdl::GeneratorVhdl,
     },
     parser::{ParserCfg, RifGenSrc, RsvdKeywordSel, parser_expr::ParamValues},
-    rifgen::{Interface, InterruptSuffixes, SuffixInfo, SuffixTarget, SuffixTargetSel, SuffixTargets}
+    rifgen::{Interface, InterruptClr, InterruptSuffixes, SuffixInfo, SuffixTarget, SuffixTargetSel, SuffixTargets}
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -248,6 +248,54 @@ impl RtlLimitCfg {
         self.1 == RtlLimit::UvmError
     }
 
+}
+
+/// Selects how software-cleared interrupts are implemented in RTL
+#[derive(Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum InterruptClearMode {
+    /// Follow the `toggle` property of each interrupt in the RIF
+    #[default]
+    Rif,
+    /// Force the toggle scheme on every interrupt with a software clear
+    Toggle,
+    /// Force the direct scheme, ignoring `toggle` in the RIF
+    Direct,
+}
+
+impl FromStr for InterruptClearMode {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "rif"    => Ok(InterruptClearMode::Rif),
+            "toggle" => Ok(InterruptClearMode::Toggle),
+            "direct" => Ok(InterruptClearMode::Direct),
+            _ => Err(format!("Illegal interrupt clear mode '{s}': expecting rif, toggle or direct"))
+        }
+    }
+}
+
+impl InterruptClearMode {
+    /// Return true when an interrupt must use the toggle clear scheme.
+    ///
+    /// `rif_toggle` is the effective setting coming from the RIF (register property and optional field override).
+    /// An interrupt cleared by hardware never uses the toggle scheme, whatever the mode.
+    pub fn use_toggle(&self, rif_toggle: bool, clear: InterruptClr) -> bool {
+        if clear == InterruptClr::Hw {
+            return false;
+        }
+        match self {
+            InterruptClearMode::Rif    => rif_toggle,
+            InterruptClearMode::Toggle => true,
+            InterruptClearMode::Direct => false,
+        }
+    }
+
+    /// True when the mode forces the scheme on an interrupt cleared by hardware, which can not be honored (a warning should be issued)
+    pub fn unsupported(&self, clear: InterruptClr) -> bool {
+        *self == InterruptClearMode::Toggle && clear == InterruptClr::Hw
+    }
 }
 
 /// Main configuration structure for YARIG code generation.
@@ -448,6 +496,8 @@ pub struct CfgRtl {
     pub limit: Option<RtlLimit>,
     /// Option to automatically add limits on all enums
     pub force_limit: Option<RtlLimit>,
+    /// Select how software-cleared interrupts are implemented (rif, toggle or direct)
+    pub interrupt_clear: Option<InterruptClearMode>,
 }
 
 /// Configuration specific to RAL target
@@ -663,6 +713,7 @@ impl YarigCfg {
         if args.rtl_const_field {self.rtl.const_field = Some(true);}
         if args.rtl_limit.is_some() {self.rtl.limit = args.rtl_limit;}
         if args.rtl_force_limit.is_some() {self.rtl.force_limit = args.rtl_force_limit;}
+        if args.rtl_interrupt_clear.is_some() {self.rtl.interrupt_clear = args.rtl_interrupt_clear;}
         if !args.rtl_path.is_empty() {
             if let Some(bridge_path) = &mut self.rtl.bridge_path {
                 bridge_path.extend(args.rtl_path);
@@ -990,4 +1041,69 @@ pub fn updt_intf_path_rifmux(inst: &mut RifmuxInst, bridge_path: &[String], base
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests_interrupt_clear {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn parse_mode() {
+        assert_eq!("rif".parse::<InterruptClearMode>(), Ok(InterruptClearMode::Rif));
+        assert_eq!("Toggle".parse::<InterruptClearMode>(), Ok(InterruptClearMode::Toggle));
+        assert_eq!("DIRECT".parse::<InterruptClearMode>(), Ok(InterruptClearMode::Direct));
+        assert!("auto".parse::<InterruptClearMode>().is_err());
+        assert_eq!(InterruptClearMode::default(), InterruptClearMode::Rif);
+    }
+
+    #[test]
+    fn use_toggle() {
+        use InterruptClr::*;
+        for clear in [Read, Write0, Write1] {
+            assert!(InterruptClearMode::Rif.use_toggle(true, clear));
+            assert!(!InterruptClearMode::Rif.use_toggle(false, clear));
+            assert!(InterruptClearMode::Toggle.use_toggle(false, clear));
+            assert!(InterruptClearMode::Toggle.use_toggle(true, clear));
+            assert!(!InterruptClearMode::Direct.use_toggle(true, clear));
+            assert!(!InterruptClearMode::Direct.use_toggle(false, clear));
+            assert!(!InterruptClearMode::Toggle.unsupported(clear));
+        }
+        // Hardware clear never uses the toggle scheme, and forcing it is flagged
+        for mode in [InterruptClearMode::Rif, InterruptClearMode::Toggle, InterruptClearMode::Direct] {
+            assert!(!mode.use_toggle(true, Hw));
+        }
+        assert!(InterruptClearMode::Toggle.unsupported(Hw));
+        assert!(!InterruptClearMode::Rif.unsupported(Hw));
+        assert!(!InterruptClearMode::Direct.unsupported(Hw));
+    }
+
+    #[test]
+    fn config_file() {
+        let cfg: YarigCfg = "[rtl]\ninterrupt_clear = \"toggle\"\n".parse().unwrap();
+        assert_eq!(cfg.rtl.interrupt_clear, Some(InterruptClearMode::Toggle));
+        let cfg: YarigCfg = "[rtl]\ninterrupt_clear = \"direct\"\n".parse().unwrap();
+        assert_eq!(cfg.rtl.interrupt_clear, Some(InterruptClearMode::Direct));
+        // Not set: default is to follow the RIF
+        let cfg: YarigCfg = "[rtl]\nconst_reg = true\n".parse().unwrap();
+        assert_eq!(cfg.rtl.interrupt_clear, None);
+        assert_eq!(cfg.rtl.interrupt_clear.unwrap_or_default(), InterruptClearMode::Rif);
+        // Invalid value
+        assert!("[rtl]\ninterrupt_clear = \"auto\"\n".parse::<YarigCfg>().is_err());
+    }
+
+    #[test]
+    fn command_line() {
+        let args = RifGenArgs::try_parse_from(["yarig", "--rtl_interrupt_clear", "toggle"]).unwrap();
+        assert_eq!(args.rtl_interrupt_clear, Some(InterruptClearMode::Toggle));
+        assert!(RifGenArgs::try_parse_from(["yarig", "--rtl_interrupt_clear", "auto"]).is_err());
+        // Command line overrides the configuration file
+        let mut cfg: YarigCfg = "[rtl]\ninterrupt_clear = \"direct\"\n".parse().unwrap();
+        cfg.update_with_cli(RifGenArgs::try_parse_from(["yarig", "--rtl_interrupt_clear", "toggle"]).unwrap());
+        assert_eq!(cfg.rtl.interrupt_clear, Some(InterruptClearMode::Toggle));
+        // ... but the file value is kept when the option is not given
+        let mut cfg: YarigCfg = "[rtl]\ninterrupt_clear = \"direct\"\n".parse().unwrap();
+        cfg.update_with_cli(RifGenArgs::try_parse_from(["yarig"]).unwrap());
+        assert_eq!(cfg.rtl.interrupt_clear, Some(InterruptClearMode::Direct));
+    }
 }
