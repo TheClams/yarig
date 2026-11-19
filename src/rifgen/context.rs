@@ -21,6 +21,8 @@ pub enum Context { #[default]
     Interface,
     /// Indicate how RTL packages handles suffixes (true to use it, false to ignore)
     SuffixPkg,
+    /// List of optional outputs of the RIF (property `outputs` of a Rif)
+    Outputs,
     /// Configure the suffix to add to a rif instance
     Suffix,
     /// Include context started with include keyword in a page or register context

@@ -16,7 +16,7 @@ use crate::rifgen::{
     Access, AddressOffset, ClockingInfo, Context, DataWidth, DescBlockKind, EnumDef, EnumKind, ExternalKind,
     Field, FieldHwKind, FieldOverrideProp, FieldPos, FieldProp, FieldSwKind, GenericValues, InstMode, Interface, InterruptClr, InterruptInfo, InterruptInfoField, ItemOptional,
     Lock, OverrideIndex, RegDef, RegDefOrIncl, RegInst, RegOverrideProp, RegProp, RegPulseKind,
-    RegArrayKind, Rif, RifPage, RifProp, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility, Width
+    RegArrayKind, Rif, RifOutputs, RifPage, RifProp, RifType, Rifmux, RifmuxItem, RifmuxTop, Visibility, Width
 };
 use crate::hdl::LogicExpr;
 
@@ -391,6 +391,10 @@ impl RifGenSrc {
                         Context::SuffixPkg => {
                             self.last_rif_mut().suffix_pkg = bool_or_default(l, false)?;
                             self.last_rif_mut().src.prop_lines.insert(RifProp::SuffixPkg, line_num);
+                        }
+                        Context::Outputs => {
+                            self.last_rif_mut().outputs = RifOutputs::parse(l).map_err(|e| RifError::generic(&e))?;
+                            self.last_rif_mut().src.prop_lines.insert(RifProp::Outputs, line_num);
                         }
                         Context::Generics => {
                             self.last_rif_mut().src.generics_header_line = Some(line_num);
@@ -1450,6 +1454,42 @@ pub(crate) mod tests_parsing {
         ] {
             parse_rif("scalar_rst_ok", regs).unwrap_or_else(|e| panic!("{regs}\n=> {e}"));
         }
+    }
+
+    #[test]
+    fn test_rif_outputs() {
+        let regs = "      - reg0 : \"Register\"
+        - fa = 0 3:0 \"Field A\"
+          limit [0:5]
+";
+        // Default: no output
+        let src = parse_rif_with("outputs_none", "", regs).unwrap();
+        assert!(!src.rifs.values().next().unwrap().outputs.reject);
+        // Property with different casing
+        for v in ["reject", "Reject", "REJECT", "  reject  "] {
+            let src = parse_rif_with("outputs_reject", &format!("  outputs: {v}
+"), regs).unwrap();
+            let rif = src.rifs.values().next().unwrap();
+            assert!(rif.outputs.reject, "{v}");
+            assert_eq!(rif.fmt_prop(RifProp::Outputs, ""), Some("outputs: reject".to_owned()));
+        }
+        // Unknown output
+        let err = parse_rif_with("outputs_err", "  outputs: foo
+", regs).expect_err("unknown output should be rejected");
+        assert!(err.txt.contains("foo") && err.txt.contains("reject"), "{}", err.txt);
+        // Nothing serialized when no output is enabled
+        let src = parse_rif_with("outputs_none2", "", regs).unwrap();
+        assert_eq!(src.rifs.values().next().unwrap().fmt_prop(RifProp::Outputs, ""), None);
+    }
+
+    #[test]
+    fn test_rif_outputs_list() {
+        assert_eq!(RifOutputs::parse(""), Ok(RifOutputs::default()));
+        assert_eq!(RifOutputs::parse("reject"), Ok(RifOutputs {reject: true}));
+        assert_eq!(RifOutputs::parse("Reject, reject"), Ok(RifOutputs {reject: true}));
+        assert!(RifOutputs::parse("reject, unknown").is_err());
+        assert!(RifOutputs::default().is_empty());
+        assert_eq!(RifOutputs {reject: true}.to_rif(), "reject");
     }
 
     fn find_reg<'a>(src: &'a RifGenSrc, name: &str) -> &'a crate::rifgen::RegDef {

@@ -189,6 +189,7 @@ pub enum RifProp {
     DataWidth,
     Interface,
     SuffixPkg,
+    Outputs,
     SwClock,
     SwClkEn,
     SwClear,
@@ -199,11 +200,12 @@ pub enum RifProp {
 
 impl RifProp {
     /// All managed properties, in the canonical order they are emitted for a new Rif.
-    pub const ALL: [RifProp; 10] = [
+    pub const ALL: [RifProp; 11] = [
         RifProp::AddrWidth,
         RifProp::DataWidth,
         RifProp::Interface,
         RifProp::SuffixPkg,
+        RifProp::Outputs,
         RifProp::SwClock,
         RifProp::SwClkEn,
         RifProp::SwClear,
@@ -211,6 +213,44 @@ impl RifProp {
         RifProp::HwClkEn,
         RifProp::HwClear,
     ];
+}
+
+/// Optional outputs of a RIF, enabled with the `outputs` property
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RifOutputs {
+    /// Output indicating, for each field limit checked in hardware, that a write was rejected
+    pub reject: bool,
+}
+
+impl RifOutputs {
+    /// Names of the supported outputs
+    pub const NAMES: [&'static str; 1] = ["reject"];
+
+    /// Parse a list of output names separated by comma and/or spaces (case-insensitive)
+    pub fn parse(s: &str) -> Result<Self, String> {
+        let mut outputs = RifOutputs::default();
+        for name in s.split(|c: char| c==',' || c.is_whitespace()).map(str::trim).filter(|n| !n.is_empty()) {
+            match name.to_lowercase().as_str() {
+                "reject" => outputs.reject = true,
+                _ => return Err(format!("Unknown output '{name}': expecting {}", Self::NAMES.join(", "))),
+            }
+        }
+        Ok(outputs)
+    }
+
+    /// True when no output is enabled
+    pub fn is_empty(&self) -> bool {
+        *self == RifOutputs::default()
+    }
+
+    /// Serialize the list of enabled outputs, separated by comma
+    pub fn to_rif(&self) -> String {
+        let mut names : Vec<&str> = Vec::new();
+        if self.reject {
+            names.push("reject");
+        }
+        names.join(", ")
+    }
 }
 
 /// Source-tracking metadata attached to a parsed `Rif` for edition
@@ -253,6 +293,8 @@ pub struct Rif {
     pub interface: Interface,
     /// Suffix also apply on package
     pub suffix_pkg: bool,
+    /// Optional outputs
+    pub outputs: RifOutputs,
     /// Software interface clock definition
     pub sw_clocking: Vec<ClockingInfo>,
     /// Hardware interface clock definition
@@ -279,6 +321,7 @@ impl Rif {
             data_width: DataWidth::default(),
             description: "".into(),
             suffix_pkg: false,
+            outputs: RifOutputs::default(),
             interface: Interface::Default,
             sw_clocking: Vec::new(),
             hw_clocking: Vec::new(),
@@ -434,6 +477,11 @@ impl Rif {
             RifProp::AddrWidth => Some(format!("{indent}addrWidth: {}", self.addr_width)),
             RifProp::DataWidth => Some(format!("{indent}dataWidth: {}", self.data_width.value())),
             RifProp::SuffixPkg => Some(format!("{indent}suffixPkg: {}", self.suffix_pkg)),
+            RifProp::Outputs => if self.outputs.is_empty() {
+                None
+            } else {
+                Some(format!("{indent}outputs: {}", self.outputs.to_rif()))
+            },
             RifProp::Interface => {
                 if self.interface.is_default() {
                     None

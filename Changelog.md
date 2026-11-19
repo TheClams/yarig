@@ -9,9 +9,11 @@
     A field with an explicit `kind` is not affected by the `force_limit` setting.
     * syntax: the bypass signal of a limit is now declared with `bypass=<signal>` (a signal name alone is still accepted for backward compatibility).
     * Config: values of `limit` and `force_limit` are case-insensitive and accept aliases (`hw`, `sim`, `uvm`, `none`, ...) in the configuration file, as already done on the command line.
+  - New RIF property `outputs: reject` adding an output structure (`t_<rif>_reject`, port `rif_reject`) with one bit per field limit checked in hardware, to report a rejected write (silently or with an access error).
 
 ### Fix
   - RTL: `limit = "Disabled"` now really disables the checks (an assertion was generated).
+  - RTL: the limit of the elements of a field array was checked with a signal name which was not declared (e.g. `reg_field__check` instead of `reg_field0__check`).
   - RTL: `force_limit` is now consistently applied to enum fields which also have a `limit` property (unless they define a `kind`): the hardware check was already forced, but the simulation assert/UVM kind came from the `limit` setting.
 
 

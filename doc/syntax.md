@@ -73,6 +73,7 @@ The possible properties, indented by one level compare to the RIF declaration, a
  - `swClear : <clear_name>` : Declare a global clear _clear_name_ active high to clear all software register (no clear by default)
  - `hwClear : <clear_name0> <clear_name1> ...` : Declare global hardware clears _clear_name_ active high to clear all hardware register (no clear by default). There should be as many signal declared as there are hwClock: same name can be repeated and the minus character `-` can be used indicate that there is no clear for the corresponding hwClock.
  - `suffixPkg : <boolean>` : Apply suffix to the generated package file as well (default: false)
+ - `outputs : <output0>[, <output1> ...]` : Enable optional outputs of the RTL module. See [paragraph Outputs](#Outputs). The only output available for now is `reject`.
  - `parameters : `: Start a parameter list. See [paragraph Parameters](#Parameters).
  - `generics : `: Start a generic list. See [paragraph Generics](#Generics).
  - `- pageName : [description]` : Start a page named pageName. See [below](#Page). The name is used only inside the documentation.
@@ -80,6 +81,33 @@ The possible properties, indented by one level compare to the RIF declaration, a
 The only mandatory property is at least one page.
 By default the address is on 16b, the data on 32, the clock is named `clk`,
 the reset is `rst_n` (asynchronous, active low) and used for both hardware and software logic.
+
+
+## Outputs
+
+The `outputs` property of a RIF adds optional outputs to the generated RTL module (nothing is added by default).
+The names are case-insensitive and can be separated by commas.
+
+### reject
+
+`outputs: reject` adds an output structure reporting which field limit rejected a write:
+ - The type is `t_<rifName>_reject`, defined in the RIF package, and the output port is named `rif_reject`.
+   If this name is already used by a register output, the first free name among `rif_wr_reject`, `rif_acc_reject`, `rif_rejected`, `rif_wr_rejected` and `rif_acc_rejected` is used.
+ - The structure contains one bit per field `limit` which is checked in hardware (kind `hardware` or `skip`, see the [limit](#Field) property and the [config](config.md#limit-kind)),
+   named `<register>_<field>_<kind>` where kind is `error` when the rejection raises an access error on the bus and `skip` when it is silent.
+   For array of registers or fields, there is one bit per element (e.g. `regs1_g_error`).
+   A limit which is only checked in simulation (kind `assert` or `uvmerror`) or disabled has no bit.
+ - A bit is high, combinatorially and in the same cycle as the end of the access, when a write to the register is done while the value of the field is out of its limit, unless the bypass signal of the limit is high.
+   As the whole register write is dropped, several bits of the same register can be high: each bit tells which field(s) did not respect its limit.
+   The output belongs to the software clock domain and is a pulse: it must be latched if it is needed later or in another clock domain.
+ - The output is not generated, with a warning, if no limit is checked in hardware.
+   It is not supported for a register defined as an array with a generic size, which generates an error.
+ - On a RIF Mux top-level, the output of each RIF is added to the ports of the instance, using the same prefix as the other outputs of this RIF.
+
+```yaml
+rif: my_rif
+  outputs: reject
+```
 
 
 ## Parameters

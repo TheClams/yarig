@@ -7,7 +7,7 @@ use crate::{
         Access, Address, AddressKind, AddressOffset, ClockingInfo, CounterInfo, DeclLine, DescIdx, Description, EnumDef, EnumDefs, EnumKind,
         ExternalKind, Field, FieldHwKind, FieldPos, FieldSwKind, GenericRange, GenericValues, Interface, InterruptRegKind,
         InterruptSuffixes, InterruptTrigger, Limit, PasswordInfo, RegArrayKind, RegDef, RegDefOrIncl, RegIncludePath, RegInst, RegOverride, RegPulseKind, ResetVal, ResetValOverride, ResetValP,
-        Rif, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SuffixInfo, SuffixTarget, SuffixTargets, Visibility, Width,
+        Rif, RifOutputs, RifPage, RifType, Rifmux, RifmuxGroup, RifmuxTop, SuffixInfo, SuffixTarget, SuffixTargets, Visibility, Width,
         order_dict::{OrderDict, OrderedDictIterV}
     }
 };
@@ -330,6 +330,8 @@ pub struct RifInst {
     pub ports: PortList,
     /// Software interface
     pub interface: Interface,
+    /// Optional outputs
+    pub outputs: RifOutputs,
     /// Suffix information
     pub suffix: Option<SuffixInfo>,
     /// Suffixes used to name registers derived from interrupts
@@ -419,6 +421,7 @@ impl RifInst {
             reg_impl_defs, hw_regs,
             ports,
             interface: rif.interface.clone(),
+            outputs: rif.outputs,
             suffix,
             intr_sfx: intr_sfx.clone(),
             sw_clocking: rif.sw_clocking.clone(),

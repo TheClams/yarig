@@ -1,7 +1,8 @@
 use std::{collections::HashSet, ops::Deref};
 
 use crate::{
-    cfg::{InterruptClearMode, RtlLimit, RtlLimitCfg}, comp::{comp_inst::{Comp, CompInst, FieldWidth, RifFieldInst, RifInst, RifRegInst, RifmuxInst}, reg_impl::FieldImpl}, error::RifGenError, hdl::{CastInfo, ExprId, LogicExpr, ModuleInfo, PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalInfo, SignalKind, SignalRange}, parser::parser_expr::ParamValues, rifgen::{
+    parser::remove_rif,
+    cfg::{InterruptClearMode, RtlLimit, RtlLimitCfg}, comp::{comp_inst::{ArrayIdx, Comp, CompInst, FieldWidth, RifFieldInst, RifInst, RifRegInst, RifmuxInst}, reg_impl::FieldImpl}, error::RifGenError, hdl::{CastInfo, ExprId, LogicExpr, ModuleInfo, PortDir, PortInfo, RifIntfPorts, SignalDecl, SignalDef, SignalInfo, SignalKind, SignalRange}, parser::parser_expr::ParamValues, rifgen::{
         Access, ClkEn, ClockingInfo, EnumEntry, EnumKind, ExternalKind, FieldHwKind, FieldSwKind,
         GenericRange, Interface, InterruptClr, InterruptInfo, InterruptRegKind, InterruptTrigger, LimitValue,
         RegPulseKind, ResetDef, SuffixTarget, order_dict::OrderDict,
@@ -12,6 +13,25 @@ use super::{
     casing::{Casing::{self, Snake}, ToCasing},
     gen_common::{CompInfo, GeneratorBase, RifList}
 };
+
+/// Names tested, in this order, for the output port reporting the rejected writes (the first one not used by a register is selected)
+const REJECT_PORT_NAMES: [&str; 6] = [
+    "rif_reject", "rif_wr_reject", "rif_acc_reject",
+    "rif_rejected", "rif_wr_rejected", "rif_acc_rejected",
+];
+
+/// Limit of a field of a register instance which is checked in hardware (kind Hardware or Skip)
+#[derive(Clone, Debug)]
+pub struct RegLimit {
+    /// Expression high when the written value is valid (limit check, or bypass signal)
+    pub valid: LogicExpr,
+    /// True when an invalid write generates an access error on the bus
+    pub has_err: bool,
+    /// Name of the corresponding field in the reject output
+    pub reject_name: String,
+    /// Description of the corresponding field in the reject output
+    pub reject_desc: String,
+}
 
 /// Flag a field read by software directly from the hardware (or from the external register interface), i.e. without a local register
 fn field_rd_direct(reg: &RifRegInst, field: &RifFieldInst, field_impl: &FieldImpl) -> bool {
@@ -279,6 +299,23 @@ pub trait GeneratorHw : GeneratorBase {
             }
         }
 
+        // Structure of the output reporting the rejected writes
+        if rif.outputs.reject {
+            let fields = self.reject_fields(rif)?;
+            if fields.is_empty() {
+                eprintln!("[WARNING] Output reject of {} is ignored: no field limit is checked in hardware", rif.type_name);
+            } else {
+                let decls : Vec<SignalDecl> = fields.into_iter().map(|(n,d)| SignalDecl::new_bit(n, d)).collect();
+                let type_name = self.reject_type_name(rif);
+                self.write_struct_header(&type_name, &decls);
+                let mut it = decls.iter().peekable();
+                while let Some(f) = it.next() {
+                    self.write_struct_field(f, it.peek().is_none());
+                }
+                self.write_struct_footer(&type_name);
+            }
+        }
+
         let basename_uc = rif.type_name.to_uppercase();
         // Create register constant if enabled
         if self.has_const_reg() {
@@ -350,6 +387,77 @@ pub trait GeneratorHw : GeneratorBase {
             self.write_const(&decl, LogicExpr::ValueI(v as i128, 32));
         }
         self.write("\n");
+    }
+
+    /// Collect the limits of a register instance which are checked in hardware
+    fn reg_limits(&mut self, reg: &RifRegInst) -> Vec<RegLimit> {
+        let limit_cfg = self.limit_cfg();
+        let group_name = self.casing(&reg.group_name());
+        let idx = reg.array.idx_str(false);
+        reg.fields.iter().filter_map(|field| {
+            let kind = limit_cfg.field_limit(field).filter(|k| k.is_hw())?;
+            // Check of an external limit is a member of the external structure
+            let (sep, n) = if field.limit.is_ext() {(".", field.name.to_owned())} else {("_", field.name_flat())};
+            let check : LogicExpr = format!("{group_name}{idx}{sep}{n}__check").into();
+            let valid = if field.limit.bypass.is_empty() {
+                check
+            } else {
+                LogicExpr::or(check, field.limit.bypass.as_str().into())
+            };
+            let has_err = kind.has_bus_error();
+            let reject_name = format!("{group_name}{idx}_{}_{}", field.name_flat(), if has_err {"error"} else {"skip"});
+            let reject_desc = format!("High when a write of {}.{} is rejected{}",
+                reg.name_i(), field.name_flat(),
+                if has_err {" (access error)"} else {" silently"});
+            Some(RegLimit {valid, has_err, reject_name, reject_desc})
+        }).collect()
+    }
+
+    /// List the fields (name, description) of the output reporting rejected writes: one per limit checked in hardware
+    fn reject_fields(&mut self, rif: &RifInst) -> Result<Vec<(String,String)>, RifGenError> {
+        let mut fields = Vec::new();
+        for page in rif.pages.iter().filter(|p| p.external.is_none()) {
+            for reg in page.regs.iter() {
+                let limits = self.reg_limits(reg);
+                if !limits.is_empty() && matches!(reg.array, ArrayIdx::Gen(..)) {
+                    return Err(format!("Output reject is not supported for register {} which is an array with a generic size", reg.group_name).into());
+                }
+                fields.extend(limits.into_iter().map(|l| (l.reject_name, l.reject_desc)));
+            }
+        }
+        Ok(fields)
+    }
+
+    /// Name of the type used by the output reporting rejected writes
+    fn reject_type_name(&mut self, rif: &RifInst) -> String {
+        let type_name = remove_rif(&rif.type_name);
+        format!("t_{}_reject", self.casing(type_name))
+    }
+
+    /// Output port reporting the rejected writes, if enabled and at least one limit is checked in hardware
+    fn reject_port(&mut self, rif: &RifInst) -> Result<Option<PortInfo>, RifGenError> {
+        if !rif.outputs.reject || self.reject_fields(rif)?.is_empty() {
+            return Ok(None);
+        }
+        // Use the first name which does not collide with a register port
+        let mut used : Vec<String> = Vec::new();
+        for p in rif.ports.regs.iter().chain(rif.ports.irqs.iter()) {
+            used.push(self.casing(p.name()));
+        }
+        let mut name = None;
+        for n in REJECT_PORT_NAMES {
+            let n = self.casing(n);
+            if !used.contains(&n) {
+                name = Some(n);
+                break;
+            }
+        }
+        let Some(name) = name else {
+            return Err("Unable to find a name for the reject output which does not collide with a register".to_owned().into());
+        };
+        let pkg_name = format!("{}_pkg", self.casing(&rif.name_for(SuffixTarget::RtlPkg)));
+        let kind = SignalKind::Custom((Some(pkg_name), self.reject_type_name(rif)));
+        Ok(Some(PortInfo::new_basic(name, kind, PortDir::Out, "Pulse high on the field limit of a rejected write".to_owned())))
     }
 
     /// Generate RIF module
@@ -440,6 +548,12 @@ pub trait GeneratorHw : GeneratorBase {
                 format!("rif_{name}_irq"),
                 format!("High when one interrupt field of {name} is asserted"));
             self.write_port_decl(&port_irq, None, false);
+        }
+
+        // Output reporting the rejected writes
+        let reject_port = self.reject_port(rif)?;
+        if let Some(port) = &reject_port {
+            self.write_port_decl(port, None, false);
         }
 
         // Add interface to external pages and collect them for later
@@ -765,6 +879,16 @@ pub trait GeneratorHw : GeneratorBase {
                 self.write_assign_comb(2, name.into(), LogicExpr::ValueU(0, 1));
             }
         }
+        // Set the reject output default value
+        if let Some(port) = &reject_port {
+            for page in rif.pages.iter().filter(|p| p.external.is_none()) {
+                for reg in page.regs.iter() {
+                    for l in self.reg_limits(reg) {
+                        self.write_assign_comb(2, format!("{}.{}", port.name(), l.reject_name).into(), LogicExpr::ValueU(0, 1));
+                    }
+                }
+            }
+        }
         // Decode address
         self.write_match_header("rif_addr_l");
         let addr_l_w = rif.addr_width as usize - addr_shift as usize ;
@@ -776,26 +900,14 @@ pub trait GeneratorHw : GeneratorBase {
                 self.write_match_case_header(LogicExpr::ValueU(addr, addr_l_w));
                 // Set the decode signal high when matching address
                 // and the register contains no field with limit or all limit check pass
-                // Each limit is a tuple (field name, bypass signal, is external, generate access error)
                 // Fields with a limit of kind Skip gate the write like the Hardware ones but never raise an error
-                let field_limit: Vec<(String, String, bool, bool)> = reg
-                    .fields
-                    .iter()
-                    .filter(|field| field.has_hw_limit(limit_cfg))
-                    .map(|field| (field.name.to_owned(), field.limit.bypass.to_owned(), field.limit.is_ext(), field.has_limit_error(limit_cfg)))
-                    .collect();
+                let field_limit: Vec<RegLimit> = self.reg_limits(reg);
                 // Expression list of all limit checks, optionally restricted to the ones generating an error
                 let limit_checks = |only_err: bool| -> Vec<LogicExpr> {
-                    field_limit.iter().filter(|l| !only_err || l.3).map(|(n, bypass, is_ext, _)| {
-                        let idx = reg.array.idx_str(false);
-                        let sep = if *is_ext {"."} else {"_"};
-                        let check : LogicExpr = format!("{group_name}{idx}{sep}{n}__check").into();
-                        if bypass.is_empty() {check}
-                        else {LogicExpr::or(check, bypass.as_str().into())}
-                    }).collect()
+                    field_limit.iter().filter(|l| !only_err || l.has_err).map(|l| l.valid.clone()).collect()
                 };
                 // Access error due to limit: none when all limits are skipped
-                let nb_limit_err = field_limit.iter().filter(|l| l.3).count();
+                let nb_limit_err = field_limit.iter().filter(|l| l.has_err).count();
                 let limit_err : Option<LogicExpr> =
                     if nb_limit_err == 0 {
                         None
@@ -825,6 +937,13 @@ pub trait GeneratorHw : GeneratorBase {
                         has_decode_expr = true;
                     }
                     self.write_assign_comb(4, decode.clone(), value);
+                }
+                // Report a write rejected due to a limit
+                if let Some(port) = &reject_port {
+                    for l in field_limit.iter() {
+                        let rejected = LogicExpr::And(vec![rif_en.clone(), LogicExpr::not(rd_wrn.clone()), LogicExpr::not(l.valid.clone())]);
+                        self.write_assign_comb(4, format!("{}.{}", port.name(), l.reject_name).into(), rejected);
+                    }
                 }
                 // Copy corresponding read_data signal
                 self.write_assign_comb(4, "rif_read_data_l ".into(), format!("{name_flat}__read_data").into());
@@ -2369,6 +2488,9 @@ pub trait GeneratorHw : GeneratorBase {
             for port in rif.ports.irqs.iter() {
                 self.write_port_decl(port, prefix, false);
             }
+            if let Some(port) = self.reject_port(rif)? {
+                self.write_port_decl(&port, prefix, false);
+            }
         }
         // Control interface
         self.write_comment(1, "Control interface");
@@ -2443,6 +2565,10 @@ pub trait GeneratorHw : GeneratorBase {
             let ports = rif.ports.regs.iter().filter(|p| p.dir.is_out())
                 .chain(rif.ports.irqs.iter());
             for port in ports {
+                let name_base = port.name().strip_prefix("rif_").unwrap_or(port.name());
+                self.write_port_bind(port.name(), &format!("rif_{prefix}{name_base}"), false);
+            }
+            if let Some(port) = self.reject_port(rif)? {
                 let name_base = port.name().strip_prefix("rif_").unwrap_or(port.name());
                 self.write_port_bind(port.name(), &format!("rif_{prefix}{name_base}"), false);
             }

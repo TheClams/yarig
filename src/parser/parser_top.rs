@@ -28,37 +28,38 @@ pub fn decl_top<'a>(input: &mut &'a str) -> Res<'a, (Context, &'a str)> {
 
 pub fn rif_properties<'a>(input: &mut &'a str) -> Res<'a, Context> {
   terminated(
-  	alt((
+    alt((
       alt((
         alt((
-        	ws("description").value(Context::Description),
-        	ws("desc"       ).value(Context::Description),
-        	ws("parameters" ).value(Context::Parameters ),
+          ws("description").value(Context::Description),
+          ws("desc"       ).value(Context::Description),
+          ws("parameters" ).value(Context::Parameters ),
           ws("generics"   ).value(Context::Generics   ),
-        	ws("info"       ).value(Context::Info       ),
+          ws("info"       ).value(Context::Info       ),
+          ws("outputs"    ).value(Context::Outputs    ),
         )),
         alt((
-        	ws("interface"  ).value(Context::Interface  ),
-        	ws("addrWidth"  ).value(Context::AddrWidth  ),
-        	ws("dataWidth"  ).value(Context::DataWidth  ),
-        	ws("swClock"    ).value(Context::SwClock    ),
-        	ws("hwClock"    ).value(Context::HwClock    ),
-        	ws("swClkEn"    ).value(Context::SwClkEn    ),
-        	ws("hwClkEn"    ).value(Context::HwClkEn    ),
+          ws("interface"  ).value(Context::Interface  ),
+          ws("addrWidth"  ).value(Context::AddrWidth  ),
+          ws("dataWidth"  ).value(Context::DataWidth  ),
+          ws("swClock"    ).value(Context::SwClock    ),
+          ws("hwClock"    ).value(Context::HwClock    ),
+          ws("swClkEn"    ).value(Context::SwClkEn    ),
+          ws("hwClkEn"    ).value(Context::HwClkEn    ),
         )),
         alt((
-        	ws("swReset"    ).value(Context::SwReset    ),
-        	ws("hwReset"    ).value(Context::HwReset    ),
-        	ws("hwClear"    ).value(Context::HwClear    ),
-        	ws("swClear"    ).value(Context::SwClear    ),
+          ws("swReset"    ).value(Context::SwReset    ),
+          ws("hwReset"    ).value(Context::HwReset    ),
+          ws("hwClear"    ).value(Context::HwClear    ),
+          ws("swClear"    ).value(Context::SwClear    ),
         )),
       )),
       alt((
         ws("suffixPkg"),
         ws("suffix_pkg")
       )).value(Context::SuffixPkg),
-    	item_cntxt,
-  	)),
+      item_cntxt,
+    )),
     ws(":")
   ).context(StrContext::Label("rif property"))
   .parse_next(input)
@@ -82,10 +83,10 @@ pub fn reset_def(input: &str) -> ResF<'_, ResetDef> {
   (
     ws(identifier),
     opt(
-    	preceded(
-    		opt(ws("active")),
-    		alt((ws(Caseless("Low")),ws(Caseless("High"))))
-    	)),
+      preceded(
+        opt(ws("active")),
+        alt((ws(Caseless("Low")),ws(Caseless("High"))))
+      )),
     opt(alt((ws("async"),ws("sync")))),
   ).context(StrContext::Label("reset definition"))
   .parse(input)
@@ -128,7 +129,7 @@ pub fn generic_def(input: &str) -> ResF<'_, (&str, GenericRange)> {
 #[cfg(test)]
 mod tests_parsing {
 
-	use super::*;
+  use super::*;
 
   #[test]
   fn test_parse_top() {
