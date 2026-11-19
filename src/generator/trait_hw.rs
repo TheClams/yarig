@@ -530,10 +530,10 @@ pub trait GeneratorHw : GeneratorBase {
                     pkg_name.clone(), group_type_sw.clone(), hw_reg.dim.clone()).into());
             }
             // Add signal to handle out-of-limit check
-            if limit_cfg.0 == RtlLimit::Hardware {
-                for limit in hw_reg.limits.iter().filter_map(|l| if !l.1 {Some(&l.0)} else {None}) {
-                    self.write_signal_decl(&SignalDef::new_bit(format!("{limit}__check")).into());
-                }
+            for limit in hw_reg.limits.iter().filter(|l|
+                !l.is_ext && limit_cfg.resolve(true, l.kind, l.forceable).is_some_and(|k| k.is_hw())
+            ) {
+                self.write_signal_decl(&SignalDef::new_bit(format!("{}__check", limit.name)).into());
             }
             for idx_u16 in 0..reg_dim.max(1) {
                 let idx = if reg_dim > 0 {format!("{idx_u16}")} else {"".to_owned()};
@@ -660,7 +660,7 @@ pub trait GeneratorHw : GeneratorBase {
                         sig_kind.set_width(f.width()+1);
                     }
                     // Check if force limit is enabled and the register did not have yet a limit
-                    let has_forced_limit = limit_cfg.1 == RtlLimit::Hardware && f.enum_kind.is_type() && f.limit.is_none() && f.is_sw_write();
+                    let has_forced_limit = limit_cfg.1.is_hw() && f.enum_kind.is_type() && f.limit.is_none() && f.is_sw_write();
                     let f_depth = f.array.value();
                     if f_depth > 0 {
                         if has_forced_limit {
@@ -776,12 +776,37 @@ pub trait GeneratorHw : GeneratorBase {
                 self.write_match_case_header(LogicExpr::ValueU(addr, addr_l_w));
                 // Set the decode signal high when matching address
                 // and the register contains no field with limit or all limit check pass
-                let field_limit: Vec<(String, String, bool)> = reg
+                // Each limit is a tuple (field name, bypass signal, is external, generate access error)
+                // Fields with a limit of kind Skip gate the write like the Hardware ones but never raise an error
+                let field_limit: Vec<(String, String, bool, bool)> = reg
                     .fields
                     .iter()
                     .filter(|field| field.has_hw_limit(limit_cfg))
-                    .map(|field| (field.name.to_owned(), field.limit.bypass.to_owned(), field.limit.is_ext()))
+                    .map(|field| (field.name.to_owned(), field.limit.bypass.to_owned(), field.limit.is_ext(), field.has_limit_error(limit_cfg)))
                     .collect();
+                // Expression list of all limit checks, optionally restricted to the ones generating an error
+                let limit_checks = |only_err: bool| -> Vec<LogicExpr> {
+                    field_limit.iter().filter(|l| !only_err || l.3).map(|(n, bypass, is_ext, _)| {
+                        let idx = reg.array.idx_str(false);
+                        let sep = if *is_ext {"."} else {"_"};
+                        let check : LogicExpr = format!("{group_name}{idx}{sep}{n}__check").into();
+                        if bypass.is_empty() {check}
+                        else {LogicExpr::or(check, bypass.as_str().into())}
+                    }).collect()
+                };
+                // Access error due to limit: none when all limits are skipped
+                let nb_limit_err = field_limit.iter().filter(|l| l.3).count();
+                let limit_err : Option<LogicExpr> =
+                    if nb_limit_err == 0 {
+                        None
+                    } else if nb_limit_err == field_limit.len() {
+                        Some(LogicExpr::not(format!("{name_flat}__decode").into()))
+                    } else {
+                        let expr = LogicExpr::or(rd_wrn.clone(), LogicExpr::And(limit_checks(true)));
+                        Some(LogicExpr::not(
+                            if let Some((opt,_)) = &reg.optional {LogicExpr::and(opt.clone(), expr)} else {expr}
+                        ))
+                    };
                 let decode : ExprId = self.casing(&format!("{}__decode", reg.name())).into();
                 let mut has_decode_expr = false;
                 if reg.has_decode() {
@@ -789,14 +814,7 @@ pub trait GeneratorHw : GeneratorBase {
                         if field_limit.is_empty() {
                             reg.optional.as_ref().map(|r| &r.0).unwrap_or(&LogicExpr::ValueU(1, 1)).to_owned()
                         } else {
-                            let checks : Vec<LogicExpr> = field_limit.iter().map(|(n, bypass, is_ext)| {
-                                let idx = reg.array.idx_str(false);
-                                let sep = if *is_ext {"."} else {"_"};
-                                let check : LogicExpr = format!("{group_name}{idx}{sep}{n}__check").into();
-                                if bypass.is_empty() {check}
-                                else {LogicExpr::or(check, bypass.as_str().into())}
-                            }).collect();
-                            let expr = LogicExpr::or(rd_wrn.clone(), LogicExpr::And(checks));
+                            let expr = LogicExpr::or(rd_wrn.clone(), LogicExpr::And(limit_checks(false)));
                             if let Some((opt,_)) = &reg.optional {
                                 LogicExpr::and(opt.clone(), expr)
                             } else {
@@ -818,23 +836,19 @@ pub trait GeneratorHw : GeneratorBase {
                 };
                 self.write_assign_comb(4, "rif_err_addr_l  ".into(), err_addr);
                 // Access error when writing a read-only field, reading a write only field,
-                //  or writing one field outside its set value (when limits are defined)
+                //  or writing one field outside its set value (when limits are defined and not skipped)
                 let err_acc_base = match reg.sw_access {
                     Access::RO => LogicExpr::not(rd_wrn.clone()),
                     Access::WO => {
-                        if field_limit.is_empty() {
-                            rd_wrn.clone()
+                        if let Some(err) = &limit_err {
+                            LogicExpr::or(rd_wrn.clone(), err.clone())
                         } else {
-                            LogicExpr::or(rd_wrn.clone(), LogicExpr::not(format!("{name_flat}__decode").into()))
+                            rd_wrn.clone()
                         }
                     }
                     Access::NA => LogicExpr::ValueU(1, 1),
                     Access::RW => {
-                        if field_limit.is_empty() {
-                            LogicExpr::ValueU(0, 1)
-                        } else {
-                            LogicExpr::not(format!("{name_flat}__decode").into())
-                        }
+                        limit_err.clone().unwrap_or(LogicExpr::ValueU(0, 1))
                     }
                 };
                 // Optional field can still avoid generating error for some specified access
@@ -1049,7 +1063,8 @@ pub trait GeneratorHw : GeneratorBase {
 
                     let w = field.width() as u8;
                     // Add logic for field with limit
-                    if (field.has_limit() || (field.enum_kind.is_type() && limit_cfg.has_force() && field.is_sw_write())) && !field.limit.is_ext() {
+                    let field_limit_kind = limit_cfg.field_limit(field).filter(|l| *l != RtlLimit::Disabled);
+                    if let Some(limit_kind) = field_limit_kind && !field.limit.is_ext() {
                         let check_sig : ExprId = format!("{reg_field_name}__check").into();
                         let limit_value = if field.has_limit() {&field.limit.value} else {&LimitValue::Enum};
                         let check_expr = match limit_value {
@@ -1085,13 +1100,12 @@ pub trait GeneratorHw : GeneratorBase {
                             LimitValue::External => unreachable!(),
                             LimitValue::None => unreachable!(),
                         };
-                        if field.has_hw_limit(limit_cfg) {
+                        if limit_kind.is_hw() {
                             gen_else.push((check_sig.clone(), LogicExpr::ValueU(1, 1)));
                             self.write_assign(check_sig, check_expr);
                         } else {
-                            let l = limit_cfg.get(field);
                             let check_expr_assert = LogicExpr::And(vec![rif_en.clone(), decode.clone(), LogicExpr::not(rd_wrn.clone()), LogicExpr::not(check_expr)]);
-                            self.write_assert(&reg_field_name, check_expr_assert, format!("Value out-of-range for {reg_name_i}.{field_name}"), l==RtlLimit::UvmError);
+                            self.write_assert(&reg_field_name, check_expr_assert, format!("Value out-of-range for {reg_name_i}.{field_name}"), limit_kind==RtlLimit::UvmError);
                         }
                     }
 

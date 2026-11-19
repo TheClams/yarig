@@ -310,10 +310,10 @@ const_field = true
 # Add one pipe level to generate the invalid address in a Rifmux when no RIF is selected
 rifmux_pipe_invalid = true
 
-# Configure how limit are generated: options are Hardware, Assert or UvmError
-limit = Hardware
-# Force limit on all enum definition
-force_limit = UvmError
+# Configure how limits are generated (case-insensitive, see below): Hardware, Skip, Assert or UvmError
+limit = "Hardware"
+# Force limit on all enum fields which have no `kind` set in their limit (same options as above, default: no forced limit)
+force_limit = "UvmError"
 
 # Optional: how software-cleared interrupts are implemented (default: "rif")
 #  - "rif"    : follow the `toggle` property of each interrupt in the RIF
@@ -321,6 +321,32 @@ force_limit = UvmError
 #  - "direct" : force the direct scheme, ignoring any `toggle` in the RIF
 interrupt_clear = "rif"
 ```
+
+#### Limit kind
+
+The `limit` option selects how the `limit` property of the fields (see [syntax](syntax.md#field)) is implemented in RTL,
+and `force_limit` how the limit on the value of all enum fields is implemented (restricting the value to the enumerated ones when the field has no `limit` property).
+The values are case-insensitive and have some aliases:
+
+| Value                    | Behavior                                                                                                  |
+|--------------------------|-----------------------------------------------------------------------------------------------------------|
+| `Hardware` (`hw`)        | Checked in hardware: an invalid write is dropped and an access error is raised on the bus (default for `limit`) |
+| `Skip`                   | Checked in hardware: an invalid write is dropped silently, with no access error                           |
+| `Assert` (`sim`)         | Checked in simulation only with an assertion: the register is updated                                     |
+| `UvmError` (`uvm`)       | Checked in simulation only with `uvm_report_error`: the register is updated                               |
+| `Disabled` (`none`, `off`) | Not checked (default for `force_limit`)                                                                 |
+
+The same values are accepted on the command line with `--rtl_limit` and `--rtl_force_limit`.
+
+A field can override these settings with the `kind` option of its limit, e.g. `limit [0:7] kind=skip`.
+The resolution is then:
+ - field with a limit and a `kind`: the field `kind`
+ - enum field (software-writable) without `kind`: the `force_limit` option, even if the field has its own `limit`
+ - other field with a limit and no `kind`: the `limit` option
+
+With `Hardware` and `Skip` the write of the whole register is dropped as soon as one of its fields is invalid.
+When both kinds are mixed in a register, the access error is generated only if an invalid field uses `Hardware`.
+As no error is returned to the bus master, a testbench (like an UVM register model) will consider the write as done: the expected value of a skipped field must be handled by the user.
 
 #### Interrupt clear scheme
 

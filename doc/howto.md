@@ -417,7 +417,19 @@ A: Use the `limit` property:
     limit enum  # Automatically limit to enum values
 ```
 
-Invalid writes will not update the register and raise an access error.
+By default an invalid write will not update the register and raises an access error.
+
+**Q: How to avoid the access error and silently ignore an invalid write?**
+
+A: Use `kind=skip` on the limit (or set `limit = "skip"` in the RTL [configuration](config.md) to apply it to all limits):
+
+```yaml
+  - mode = 0 3:0 rw "Mode selection"
+    limit [0:7] kind=skip  # Invalid write is ignored, no error on the bus
+```
+
+The `kind` option overrides, for this field only, the `limit` and `force_limit` settings of the generator.
+Note that the whole register write is dropped, not only the offending field.
 
 ---
 

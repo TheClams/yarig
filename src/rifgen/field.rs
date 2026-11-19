@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Display, ops::{Add, Sub}};
 
-use crate::{error::RifError, parser::parser_expr::{ExprTokens, ParamValues}, rifgen::GenericValues};
+use crate::{cfg::RtlLimit, error::RifError, parser::parser_expr::{ExprTokens, ParamValues}, rifgen::GenericValues};
 use crate::hdl::LogicExpr;
 
 use super::{Context, Description, InterruptClr, InterruptDesc, InterruptInfoField, InterruptRegKind, InterruptTrigger, DeclLine, DescBlockKind, PropBlocks, PropLines};
@@ -859,12 +859,15 @@ pub enum LimitValue {
 pub struct LimitP {
     pub value: LimitValueP,
     pub bypass: String,
+    /// Optional override of how the limit is implemented in RTL (default to the generator settings)
+    pub kind: Option<RtlLimit>,
 }
 impl Default for LimitP {
     fn default() -> Self {
         LimitP {
             value: LimitValueP::None,
             bypass: "".to_owned(),
+            kind: None,
         }
     }
 }
@@ -872,10 +875,10 @@ impl Default for LimitP {
 impl LimitP {
     pub fn compile(&self, signed: bool, nb_frac: isize, params: &ParamValues, enum_def: Option<&EnumDef>) -> Result<Limit,String> {
         let value = self.value.compile(signed, nb_frac, params, enum_def)?;
-        Ok(Limit{value, bypass:self.bypass.to_owned()})
+        Ok(Limit{value, bypass:self.bypass.to_owned(), kind: self.kind})
     }
 
-    /// Serialize the limit to `.rif` source (without the `limit` keyword): `<spec> [bypass]`.
+    /// Serialize the limit to `.rif` source (without the `limit` keyword): `<spec> [bypass=<signal>] [kind=<kind>]`.
     /// Return `None` when no limit is set.
     pub fn to_rif(&self) -> Option<String> {
         let spec = match &self.value {
@@ -887,7 +890,21 @@ impl LimitP {
             LimitValueP::Enum => "enum".to_owned(),
             LimitValueP::External => "external".to_owned(),
         };
-        Some(if self.bypass.is_empty() { spec } else { format!("{spec} {}", self.bypass) })
+        let mut s = spec;
+        if !self.bypass.is_empty() {
+            s.push_str(" bypass=");
+            s.push_str(&self.bypass);
+        }
+        if let Some(kind) = self.kind {
+            s.push_str(match kind {
+                RtlLimit::Disabled => " kind=disabled",
+                RtlLimit::Hardware => " kind=hardware",
+                RtlLimit::Skip     => " kind=skip",
+                RtlLimit::Assert   => " kind=assert",
+                RtlLimit::UvmError => " kind=uvmerror",
+            });
+        }
+        Some(s)
     }
 }
 
@@ -895,12 +912,15 @@ impl LimitP {
 pub struct Limit {
     pub value: LimitValue,
     pub bypass: String,
+    /// Optional override of how the limit is implemented in RTL (default to the generator settings)
+    pub kind: Option<RtlLimit>,
 }
 impl Default for Limit {
     fn default() -> Self {
         Limit {
             value: LimitValue::None,
             bypass: "".to_owned(),
+            kind: None,
         }
     }
 }

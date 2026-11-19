@@ -261,11 +261,19 @@ The optional properties of a field, indented by one level compare to the field d
  - `partial <lsb_pos>` : Indicates that this field is larger than the register and that the LSB correspond to the bit _lsb_pos_ of a larger field. The field name must be identical in each register definition.
  - `interrupt high|low|rising|falling|edge [en=<val_enable>] [mask=<val_mask>] [rclr|wclr|w0clr|w1clr|hwclr] [toggle|notoggle]` : override default interrupt settings.
   `toggle` and `notoggle` respectively enable or disable the [toggle clear](#register) mechanism for this field, whatever the register setting.
- - `limit ([<min>:<max>]|{<v0>,<v1>,<...>}|enum|external) [<bypass_signal>]` : Limit valid write value for a field.
+ - `limit ([<min>:<max>]|{<v0>,<v1>,<...>}|enum|external) [bypass=<signal>] [kind=<kind>]` : Limit valid write value for a field.
     The limit can be a range in the form of `[min:max]` (min & max included, one can be omitted), a set of value with `{v0,v1,v2}`, an external logic (keyword `external`)
     or, when the field is an enum using the keyword `enum` will automatically limit the value to the enumerated values.
     When writing an invalid value, the register will not be updated and an access error will be raised on the control bus.
-    If a bypass signal is provided, when the signal is high the limit is ignored.
+    If a bypass signal is provided with `bypass=<signal>`, when the signal is high the limit is ignored.
+    The optional `kind` overrides for this field how the limit is implemented in RTL, instead of using the generator settings (`limit` and `force_limit`, see [config](config.md)).
+    It is case-insensitive and can be one of:
+      - `hardware` (or `hw`): invalid write is dropped and an access error is raised on the bus (default).
+      - `skip`: invalid write is dropped silently, no access error is generated.
+        Since the check is done on the whole register write, the other fields of the register are not updated either.
+      - `assert` (or `sim`): limit is only checked in simulation with an assertion, the register is updated.
+      - `uvmerror` (or `uvm`): limit is only checked in simulation with a `uvm_report_error`, the register is updated.
+      - `disabled` (or `none`): limit is not checked.
  - `nb_frac [value]` : Number of fractional bits for fixed-point representation. This can be used in description with `$f` to display the format of the field:
     for example `s7.4` or `u8.10` for respectively a signed 7 bits wide field  with 4 fractional bits (range [-4:3.9375] with a precision of 1/16)
     or an unsigned 8 bits wide field with 12 fractional bits (range [0:0.249] with a precision of 1/1024).

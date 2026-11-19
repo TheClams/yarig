@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use crate::{
-    cfg::{RtlLimit, RtlLimitCfg}, hdl::ExprId,
+    cfg::RtlLimitCfg, hdl::ExprId,
     parser::{RifGenSrc, RifGenTop, get_rif, parser_expr::{ExprError, ExprValue, ParamValues}},
     rifgen::{
         Access, Address, AddressKind, AddressOffset, ClockingInfo, CounterInfo, DeclLine, DescIdx, Description, EnumDef, EnumDefs, EnumKind,
@@ -1710,10 +1710,15 @@ impl RifFieldInst {
         !self.limit.is_none()
     }
 
-    /// Flag when a field has a limit constraint
+    /// Flag when a field has a limit checked in hardware (kind Hardware or Skip):
+    /// an invalid write must not update the register
     pub fn has_hw_limit(&self, limit_cfg: RtlLimitCfg) -> bool {
-        (limit_cfg.0==RtlLimit::Hardware && !self.limit.is_none()) ||
-        (limit_cfg.1==RtlLimit::Hardware && self.enum_kind.is_type()) && self.is_sw_write()
+        limit_cfg.field_limit(self).is_some_and(|l| l.is_hw())
+    }
+
+    /// Flag when a field has a limit which generates a bus error on invalid write
+    pub fn has_limit_error(&self, limit_cfg: RtlLimitCfg) -> bool {
+        limit_cfg.field_limit(self).is_some_and(|l| l.has_bus_error())
     }
 
     /// Flag when a field is a counter

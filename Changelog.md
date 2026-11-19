@@ -1,5 +1,20 @@
 # Change Log
 
+## [0.27.1]
+
+### Added
+  - New limit kind: "Skip"
+    * an invalid write is dropped without raising an access error on the bus.
+    * syntax: a field limit accepts the option `kind=<hardware|skip|assert|uvmerror|disabled>` to override per field how the limit is implemented in RTL.
+    A field with an explicit `kind` is not affected by the `force_limit` setting.
+    * syntax: the bypass signal of a limit is now declared with `bypass=<signal>` (a signal name alone is still accepted for backward compatibility).
+    * Config: values of `limit` and `force_limit` are case-insensitive and accept aliases (`hw`, `sim`, `uvm`, `none`, ...) in the configuration file, as already done on the command line.
+
+### Fix
+  - RTL: `limit = "Disabled"` now really disables the checks (an assertion was generated).
+  - RTL: `force_limit` is now consistently applied to enum fields which also have a `limit` property (unless they define a `kind`): the hardware check was already forced, but the simulation assert/UVM kind came from the `limit` setting.
+
+
 ## [0.27.0]
 
 ### Added

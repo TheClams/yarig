@@ -1,9 +1,9 @@
-use crate::{parser::comment, rifgen::{
+use crate::{cfg::RtlLimit, parser::comment, rifgen::{
     Access, ClkEn, Context, CounterInfo, CounterKind, DeclLine, EnumEntry, Field, FieldPos, FieldSwKind, InterruptInfoField, LimitP, LimitValueP, PasswordInfo, ResetValP, Width
 }};
 
 use winnow::{
-    Parser, ascii::{Caseless, multispace0, space0}, combinator::{alt, delimited, opt, preceded, repeat_till, separated, separated_pair, terminated, unordered_seq}, error::{ContextError, ErrMode, StrContext}
+    Parser, ascii::{Caseless, multispace0, space0}, combinator::{alt, cut_err, delimited, opt, preceded, repeat, repeat_till, separated, separated_pair, terminated, unordered_seq}, error::{ContextError, ErrMode, StrContext}
 };
 
 use super::{
@@ -327,7 +327,29 @@ pub fn counter_def(input: &str) -> ResF<'_, CounterInfo> {
     counter_def_.parse(input)
 }
 
-// limit ([min:max]|{v0,v1,..}|enum) [bypass_signal]
+/// Optional parameter of a limit: bypass signal or implementation kind
+enum LimitOpt<'a> {
+    Bypass(&'a str),
+    Kind(RtlLimit),
+}
+
+// kind=<hardware|skip|assert|uvmerror|disabled> or bypass=<signal>
+// A signal name alone is also accepted as bypass (legacy syntax)
+fn limit_opt<'a>(input: &mut &'a str) -> Res<'a, LimitOpt<'a>> {
+    alt((
+        preceded(
+            (ws(Caseless("kind")), ws("=")),
+            cut_err(ws(identifier).verify_map(|s| s.parse::<RtlLimit>().ok())),
+        ).map(LimitOpt::Kind),
+        preceded(
+            (ws(Caseless("bypass")), ws("=")),
+            cut_err(ws(signal_name)),
+        ).map(LimitOpt::Bypass),
+        ws(signal_name).map(LimitOpt::Bypass),
+    )).context(StrContext::Label("limit option")).parse_next(input)
+}
+
+// limit ([min:max]|{v0,v1,..}|enum|external) [bypass=<signal>] [kind=<kind>]
 pub fn limit_def(input: &str) -> ResF<'_, LimitP> {
     (
         alt((
@@ -345,13 +367,26 @@ pub fn limit_def(input: &str) -> ResF<'_, LimitP> {
             ws("external").value(LimitValueP::External),
             ws("ext").value(LimitValueP::External),
         )),
-        opt(ws(signal_name)),
+        repeat(0..=2, limit_opt),
     ).context(StrContext::Label("limit definition"))
-        .parse(input)
-        .map(|v| LimitP {
-            value: v.0,
-            bypass: v.1.unwrap_or_default().to_owned(),
+        .verify_map(|(value, opts): (LimitValueP, Vec<LimitOpt>)| {
+            let mut bypass : Option<&str> = None;
+            let mut kind : Option<RtlLimit> = None;
+            for o in opts {
+                match o {
+                    LimitOpt::Bypass(b) if bypass.is_none() => bypass = Some(b),
+                    LimitOpt::Kind(k) if kind.is_none() => kind = Some(k),
+                    // Only one bypass and one kind allowed
+                    _ => return None,
+                }
+            }
+            Some(LimitP {
+                value,
+                bypass: bypass.unwrap_or_default().to_owned(),
+                kind,
+            })
         })
+        .parse(input)
 }
 
 // password [once=<val>] [hold=<val>] [protect]
@@ -643,28 +678,31 @@ mod tests_parsing {
         );
     }
 
-    // limit ([min:max]|{v0,v1,..}|enum) [bypass_signal]
+    // limit ([min:max]|{v0,v1,..}|enum) [bypass=<signal>]
     #[test]
     fn test_limit() {
         assert_eq!(
             limit_def("[0:7] bypass"),
             Ok(LimitP {
                 value: LimitValueP::MinMax(ResetValP::Unsigned(0), ResetValP::Unsigned(7)),
-                bypass: "bypass".to_string()
+                bypass: "bypass".to_string(),
+                kind: None,
             })
         );
         assert_eq!(
             limit_def("[:5]"),
             Ok(LimitP {
                 value: LimitValueP::Max(ResetValP::Unsigned(5)),
-                bypass: "".to_string()
+                bypass: "".to_string(),
+                kind: None,
             })
         );
         assert_eq!(
             limit_def("[3:]"),
             Ok(LimitP {
                 value: LimitValueP::Min(ResetValP::Unsigned(3)),
-                bypass: "".to_string()
+                bypass: "".to_string(),
+                kind: None,
             })
         );
         assert_eq!(
@@ -675,30 +713,95 @@ mod tests_parsing {
                     ResetValP::Unsigned(5),
                     ResetValP::Unsigned(9)
                 ]),
-                bypass: "allow".to_string()
+                bypass: "allow".to_string(),
+                kind: None,
             })
         );
         assert_eq!(
             limit_def("enum"),
             Ok(LimitP {
                 value: LimitValueP::Enum,
-                bypass: "".to_string()
+                bypass: "".to_string(),
+                kind: None,
             })
         );
         assert_eq!(
             limit_def("ext"),
             Ok(LimitP {
                 value: LimitValueP::External,
-                bypass: "".to_string()
+                bypass: "".to_string(),
+                kind: None,
             })
         );
         assert_eq!(
             limit_def("external"),
             Ok(LimitP {
                 value: LimitValueP::External,
-                bypass: "".to_string()
+                bypass: "".to_string(),
+                kind: None,
             })
         );
+    }
+
+    #[test]
+    fn test_limit_bypass() {
+        let range = LimitValueP::MinMax(ResetValP::Unsigned(0), ResetValP::Unsigned(7));
+        assert_eq!(
+            limit_def("[0:7] bypass=allow"),
+            Ok(LimitP {value: range.clone(), bypass: "allow".to_string(), kind: None})
+        );
+        assert_eq!(
+            limit_def("[0:7] bypass = ext.allow"),
+            Ok(LimitP {value: range.clone(), bypass: "ext.allow".to_string(), kind: None})
+        );
+        assert_eq!(
+            limit_def("{1,2} Bypass=allow kind=skip"),
+            Ok(LimitP {
+                value: LimitValueP::List(vec![ResetValP::Unsigned(1), ResetValP::Unsigned(2)]),
+                bypass: "allow".to_string(), kind: Some(RtlLimit::Skip)})
+        );
+        assert_eq!(
+            limit_def("enum kind=skip bypass=allow"),
+            Ok(LimitP {value: LimitValueP::Enum, bypass: "allow".to_string(), kind: Some(RtlLimit::Skip)})
+        );
+        // Legacy syntax: signal name alone, even when named bypass
+        assert_eq!(
+            limit_def("[0:7] bypass"),
+            Ok(LimitP {value: range.clone(), bypass: "bypass".to_string(), kind: None})
+        );
+        // Only one bypass, with a signal name
+        assert!(limit_def("[0:7] bypass=").is_err());
+        assert!(limit_def("[0:7] bypass=a a").is_err());
+        assert!(limit_def("[0:7] bypass=a bypass=b").is_err());
+    }
+
+    #[test]
+    fn test_limit_kind() {
+        let range = LimitValueP::MinMax(ResetValP::Unsigned(0), ResetValP::Unsigned(7));
+        assert_eq!(
+            limit_def("[0:7] kind=skip"),
+            Ok(LimitP {value: range.clone(), bypass: "".to_string(), kind: Some(RtlLimit::Skip)})
+        );
+        assert_eq!(
+            limit_def("[0:7] bypass kind=HW"),
+            Ok(LimitP {value: range.clone(), bypass: "bypass".to_string(), kind: Some(RtlLimit::Hardware)})
+        );
+        assert_eq!(
+            limit_def("[0:7] Kind = uvm bypass"),
+            Ok(LimitP {value: range.clone(), bypass: "bypass".to_string(), kind: Some(RtlLimit::UvmError)})
+        );
+        assert_eq!(
+            limit_def("enum kind=Assert"),
+            Ok(LimitP {value: LimitValueP::Enum, bypass: "".to_string(), kind: Some(RtlLimit::Assert)})
+        );
+        // A signal starting with kind is still a valid bypass
+        assert_eq!(
+            limit_def("[0:7] kind_en"),
+            Ok(LimitP {value: range.clone(), bypass: "kind_en".to_string(), kind: None})
+        );
+        assert!(limit_def("[0:7] kind=unknown").is_err());
+        assert!(limit_def("[0:7] kind=skip kind=hw").is_err());
+        assert!(limit_def("[0:7] a b").is_err());
     }
 
     // password [once=<val>] [hold=<val>] [protect]

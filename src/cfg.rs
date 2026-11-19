@@ -189,12 +189,14 @@ impl RifGenTarget {
 }
 
 /// Controls how field limits are used
-#[derive(Deserialize, Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum RtlLimit {
     /// Limit is ignored
     Disabled,
     /// Limit is check at hardware level and generate a bus error
     Hardware,
+    /// Limit is check at hardware level but an invalid write is silently dropped (no bus error)
+    Skip,
     /// Limit is checked only in simulation with standard assert
     Assert,
     /// Limit is checked only in simulation and use uvm_report_error()
@@ -204,14 +206,37 @@ pub enum RtlLimit {
 impl FromStr for RtlLimit {
     type Err = String;
 
+    /// Case-insensitive parsing, with aliases
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s_lc = s.to_lowercase();
+        let s_lc = s.trim().to_lowercase();
         match s_lc.as_ref() {
             "hw" | "hardware" => Ok(RtlLimit::Hardware),
+            "skip" | "silent" => Ok(RtlLimit::Skip),
             "sim" | "assert" => Ok(RtlLimit::Assert),
             "uvm" | "uvmerror" | "uvm_error" => Ok(RtlLimit::UvmError),
-            _ => Err(format!("Illegal rtl_limit '{s}': expecting hw, sim or uvm"))
+            "none" | "off" | "disable" | "disabled" => Ok(RtlLimit::Disabled),
+            _ => Err(format!("Illegal limit kind '{s}': expecting hardware (hw), skip, assert (sim), uvmerror (uvm) or disabled (none, off)"))
         }
+    }
+}
+
+// Deserialize through FromStr to be as tolerant in the config file as on the command line
+impl<'de> serde::Deserialize<'de> for RtlLimit {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = <String as serde::Deserialize>::deserialize(deserializer)?;
+        s.parse().map_err(serde::de::Error::custom)
+    }
+}
+
+impl RtlLimit {
+    /// True when the limit is checked in hardware, i.e. an invalid write does not update the register
+    pub fn is_hw(&self) -> bool {
+        matches!(self, RtlLimit::Hardware | RtlLimit::Skip)
+    }
+
+    /// True when an invalid write generates an access error on the bus
+    pub fn has_bus_error(&self) -> bool {
+        *self == RtlLimit::Hardware
     }
 }
 
@@ -236,10 +261,22 @@ impl RtlLimitCfg {
         self.1 != RtlLimit::Disabled
     }
 
-    /// Return the appropriate limit based on the field definition
-    pub fn get(&self, field: &RifFieldInst) -> RtlLimit {
-        if field.has_limit() {self.0}
-        else {self.1}
+    /// Resolve the limit applied on a field, or None if the field has no limit to check:
+    ///  - a field with a limit and an explicit `kind` uses this kind
+    ///  - otherwise a field which can be forced (software-writable enum) uses the forced limit, if any, even when it has its own limit
+    ///  - otherwise a field with a limit uses the base limit
+    pub fn resolve(&self, has_limit: bool, kind: Option<RtlLimit>, forceable: bool) -> Option<RtlLimit> {
+        match (has_limit, kind) {
+            (true, Some(k)) => Some(k),
+            _ if forceable && self.has_force() => Some(self.1),
+            (true, None) => Some(self.0),
+            (false, _) => None,
+        }
+    }
+
+    /// Return the limit applied on a field, or None if the field has no limit to check
+    pub fn field_limit(&self, field: &RifFieldInst) -> Option<RtlLimit> {
+        self.resolve(field.has_limit(), field.limit.kind, field.enum_kind.is_type() && field.is_sw_write())
     }
 
     /// True when one of the limit is set to UVM
@@ -1105,5 +1142,85 @@ mod tests_interrupt_clear {
         let mut cfg: YarigCfg = "[rtl]\ninterrupt_clear = \"direct\"\n".parse().unwrap();
         cfg.update_with_cli(RifGenArgs::try_parse_from(["yarig"]).unwrap());
         assert_eq!(cfg.rtl.interrupt_clear, Some(InterruptClearMode::Direct));
+    }
+}
+
+#[cfg(test)]
+mod tests_rtl_limit {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn parse_kind() {
+        assert_eq!("Hardware".parse::<RtlLimit>(), Ok(RtlLimit::Hardware));
+        assert_eq!("HW".parse::<RtlLimit>(), Ok(RtlLimit::Hardware));
+        assert_eq!("skip".parse::<RtlLimit>(), Ok(RtlLimit::Skip));
+        assert_eq!("SKIP".parse::<RtlLimit>(), Ok(RtlLimit::Skip));
+        assert_eq!("sim".parse::<RtlLimit>(), Ok(RtlLimit::Assert));
+        assert_eq!("Assert".parse::<RtlLimit>(), Ok(RtlLimit::Assert));
+        assert_eq!("uvm".parse::<RtlLimit>(), Ok(RtlLimit::UvmError));
+        assert_eq!("UvmError".parse::<RtlLimit>(), Ok(RtlLimit::UvmError));
+        assert_eq!("uvm_error".parse::<RtlLimit>(), Ok(RtlLimit::UvmError));
+        assert_eq!("Disabled".parse::<RtlLimit>(), Ok(RtlLimit::Disabled));
+        assert_eq!("off".parse::<RtlLimit>(), Ok(RtlLimit::Disabled));
+        assert!("unknown".parse::<RtlLimit>().is_err());
+    }
+
+    #[test]
+    fn kind_properties() {
+        assert!(RtlLimit::Hardware.is_hw() && RtlLimit::Hardware.has_bus_error());
+        assert!(RtlLimit::Skip.is_hw() && !RtlLimit::Skip.has_bus_error());
+        for k in [RtlLimit::Assert, RtlLimit::UvmError, RtlLimit::Disabled] {
+            assert!(!k.is_hw() && !k.has_bus_error());
+        }
+    }
+
+    #[test]
+    fn config_file() {
+        // Tolerant parsing: case-insensitive and aliases
+        let cfg: YarigCfg = "[rtl]\nlimit = \"hw\"\nforce_limit = \"Skip\"\n".parse().unwrap();
+        assert_eq!(cfg.rtl.limit, Some(RtlLimit::Hardware));
+        assert_eq!(cfg.rtl.force_limit, Some(RtlLimit::Skip));
+        let cfg: YarigCfg = "[rtl]\nlimit = \"UVM\"\n".parse().unwrap();
+        assert_eq!(cfg.rtl.limit, Some(RtlLimit::UvmError));
+        let cfg: YarigCfg = "[rtl]\nlimit = \"UvmError\"\n".parse().unwrap();
+        assert_eq!(cfg.rtl.limit, Some(RtlLimit::UvmError));
+        assert!("[rtl]\nlimit = \"unknown\"\n".parse::<YarigCfg>().is_err());
+    }
+
+    #[test]
+    fn command_line() {
+        let args = RifGenArgs::try_parse_from(["yarig", "--rtl_limit", "Skip", "--rtl_force_limit", "uvm"]).unwrap();
+        assert_eq!(args.rtl_limit, Some(RtlLimit::Skip));
+        assert_eq!(args.rtl_force_limit, Some(RtlLimit::UvmError));
+    }
+
+    #[test]
+    fn resolve() {
+        use RtlLimit::*;
+        let cfg = RtlLimitCfg::new(Some(Assert), Some(Skip));
+        // (has_limit, kind, forceable)
+        // Explicit kind always wins
+        assert_eq!(cfg.resolve(true, Some(Hardware), true), Some(Hardware));
+        assert_eq!(cfg.resolve(true, Some(Hardware), false), Some(Hardware));
+        // Forced limit applies to enum fields, with or without limit
+        assert_eq!(cfg.resolve(true, None, true), Some(Skip));
+        assert_eq!(cfg.resolve(false, None, true), Some(Skip));
+        // Field with a limit which can not be forced uses the base limit
+        assert_eq!(cfg.resolve(true, None, false), Some(Assert));
+        // No limit
+        assert_eq!(cfg.resolve(false, None, false), None);
+        // Without force, only the base limit applies
+        let cfg = RtlLimitCfg::new(Some(Skip), None);
+        assert_eq!(cfg.resolve(true, None, true), Some(Skip));
+        assert_eq!(cfg.resolve(false, None, true), None);
+    }
+
+    #[test]
+    fn default_cfg() {
+        let cfg = RtlLimitCfg::new(None, None);
+        assert_eq!(cfg, RtlLimitCfg(RtlLimit::Hardware, RtlLimit::Disabled));
+        assert!(!cfg.has_force());
+        assert!(RtlLimitCfg::new(Some(RtlLimit::Skip), Some(RtlLimit::Skip)).has_force());
     }
 }

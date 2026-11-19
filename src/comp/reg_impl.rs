@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate::{
+    cfg::RtlLimit,
     parser::get_rif,
     rifgen::{
         order_dict::{OrderDict, OrderedDictIterV},
@@ -674,12 +675,25 @@ pub struct HwRegInst {
     /// Missing fields
     pub missing_fields: BTreeMap<String, MissingFieldInfo>,
     /// Fields with limit: usefull to collect
-    pub limits: Vec<(String,bool)>
+    pub limits: Vec<HwLimit>
+}
+
+/// Field with a limit in a register instance
+#[derive(Clone, Debug)]
+pub struct HwLimit {
+    /// Name of the field (flat, prefixed with the register group) used to name the check signal
+    pub name: String,
+    /// Limit is checked by an external logic
+    pub is_ext: bool,
+    /// Optional override of the limit kind in the field definition
+    pub kind: Option<RtlLimit>,
+    /// Field can be targeted by the forced limit (software-writable enum)
+    pub forceable: bool,
 }
 
 impl HwRegInst {
     // pub fn new(group: String, array_idx: &ArrayIdx, port: RegPortKind, intr_derived: bool, missing_fields: BTreeMap<String, MissingFieldInfo>, limits: Vec<String>) -> Self {
-    pub fn new(reg: &RifRegInst, port: RegPortKind, missing_fields: BTreeMap<String, MissingFieldInfo>, limits: Vec<(String,bool)>) -> Self {
+    pub fn new(reg: &RifRegInst, port: RegPortKind, missing_fields: BTreeMap<String, MissingFieldInfo>, limits: Vec<HwLimit>) -> Self {
         let group = reg.group_type.to_owned();
         let intr_derived = reg.intr_info.0.is_derived();
         let dim = match &reg.array {
@@ -691,7 +705,7 @@ impl HwRegInst {
     }
 
     pub fn has_ext_limit(&self) -> bool {
-        self.limits.iter().any(|(_,is_ext)| *is_ext)
+        self.limits.iter().any(|l| l.is_ext)
     }
 }
 
@@ -766,7 +780,12 @@ impl HwRegs {
                             .filter(|f| f.has_limit())
                             .map(|f| {
                                 let n = format!("{}{}_{}", reg.group_name, reg.array.idx_str(false), f.name_flat());
-                                (n,f.limit.is_ext())
+                                HwLimit {
+                                    name: n,
+                                    is_ext: f.limit.is_ext(),
+                                    kind: f.limit.kind,
+                                    forceable: f.enum_kind.is_type() && f.is_sw_write(),
+                                }
                             })
                     );
                 }
